@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>地圖 v3.8.11</title>
+  <title>地圖 v3.8.13</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
     html, body {
@@ -98,11 +98,11 @@
     .nav-button {
       background: white;
       border: 1px solid #888;
-      border-radius: 6px;
-      padding: 4px 6px;
+      border-radius: 4px;
+      padding: 2px 4px;
       font-size: 12px;
       line-height: 1.2;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+      box-shadow: 0 1px 4px rgba(0,0,0,0.2);
       white-space: nowrap;
       text-align: center;
       cursor: pointer;
@@ -134,22 +134,24 @@
     function clearMarkers() {
       markers.forEach(m => map.removeLayer(m));
       markers = [];
+      if (navButton) {
+        map.removeLayer(navButton);
+        navButton = null;
+      }
     }
 
     function createNavButton(latlng, name) {
-      if (navButton) map.removeLayer(navButton);
-      const button = L.divIcon({
+      if (navButton) {
+        map.removeLayer(navButton);
+      }
+      const buttonHtml = `<div class="nav-button" onclick="window.open('https://www.google.com/maps/dir/?api=1&destination=${latlng.lat},${latlng.lng}', '_blank')">${name}<br>導航</div>`;
+      const icon = L.divIcon({
         className: '',
-        html: `<div class="nav-button" onclick="window.open('https://www.google.com/maps/dir/?api=1&destination=${latlng.lat},${latlng.lng}', '_blank')">
-          ${name}<br>導航
-        </div>`,
-        iconSize: [80, 40],
-        iconAnchor: [-10, 20],
+        html: buttonHtml,
+        iconSize: [70, 30],
+        iconAnchor: [-10, 10]
       });
-      navButton = L.marker([latlng.lat, latlng.lng], {
-        icon: button,
-        interactive: false
-      }).addTo(map);
+      navButton = L.marker(latlng, { icon: icon, interactive: true }).addTo(map);
     }
 
     function addMarkers(features) {
@@ -160,7 +162,7 @@
           const latlng = L.latLng(lat, lon);
 
           const marker = L.circleMarker(latlng, {
-            radius: 5.6, // 原 7 縮小 20%
+            radius: 4.5, // 縮小 20%
             color: '#000',
             fillColor: '#000',
             fillOpacity: 1,
@@ -179,7 +181,8 @@
 
           marker.on('click', () => {
             map.setView(latlng, 16);
-            createNavButton(latlng, name);
+            const offset = L.latLng(latlng.lat, latlng.lng + 0.0005); // 右方一點
+            createNavButton(offset, name);
             currentLatLng = latlng;
           });
 
@@ -234,7 +237,8 @@
         item.addEventListener('click', () => {
           const latlng = L.latLng(lat, lon);
           map.setView(latlng, 16);
-          createNavButton(latlng, name);
+          const offset = L.latLng(lat, lon + 0.0005);
+          createNavButton(offset, name);
           currentLatLng = latlng;
           resultsBox.style.display = 'none';
           document.getElementById('searchBox').value = '';
