@@ -3,8 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>地圖 v3.8.13</title>
+  <title>地圖 v3.8.24</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
   <style>
     html, body {
       margin: 0;
@@ -17,30 +18,65 @@
       flex-direction: column;
       height: 100vh;
     }
+    #title {
+      text-align: center;
+      padding: 10px;
+      font-size: 20px;
+      font-weight: bold;
+      background: #f4f4f4;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
     #controls {
       padding: 10px;
       background: #fff;
-      z-index: 1000;
       box-shadow: 0 2px 6px rgba(0,0,0,0.15);
       display: flex;
       flex-direction: column;
       gap: 6px;
       position: relative;
+      z-index: 1000;
     }
-    #kmlInput, #searchBox {
+    #kmlInput {
       padding: 8px;
       font-size: 14px;
       border-radius: 6px;
       border: 1px solid #ccc;
     }
+    /* 搜尋框容器樣式 */
+    #searchContainer {
+      display: flex;
+      align-items: center;
+      gap: 5px; /* 圖示與搜尋框之間的間距 */
+      border: 1px solid #ccc; /* 統一邊框 */
+      border-radius: 6px; /* 統一圓角 */
+      padding: 0 8px; /* 內邊距 */
+      background-color: #fff;
+    }
+    /* Material Symbols 圖示樣式 */
+    .material-symbols-outlined {
+      font-variation-settings:
+        'FILL' 0,
+        'wght' 400,
+        'GRAD' 0,
+        'opsz' 24; /* 保持您提供的 opsz 24 */
+      font-size: 24px; /* 設定圖示的視覺大小，與 opsz 配合 */
+      color: #333; /* 設定圖示顏色為深色，使其可見 */
+      flex-shrink: 0;
+      vertical-align: middle;
+    }
     #searchBox {
-      width: 100%;
+      flex-grow: 1;
+      padding: 8px 0;
+      font-size: 14px;
+      border: none;
+      outline: none;
+      background: transparent;
       box-sizing: border-box;
       height: 36px;
     }
     #searchResults {
       position: absolute;
-      top: 100%;
+      top: calc(100% + 2px);
       left: 0;
       right: 0;
       max-height: 250px;
@@ -66,7 +102,6 @@
       background: #f9f9f9;
       cursor: pointer;
       user-select: none;
-      box-shadow: 0 1px 3px rgb(0 0 0 / 0.1);
       text-align: center;
       font-weight: 500;
       white-space: nowrap;
@@ -79,41 +114,69 @@
     #map {
       flex-grow: 1;
     }
+    /* 圖徵名稱標籤樣式 */
     .marker-label {
       background: none !important;
       color: rgba(0, 0, 0, 0.85);
       font-weight: 600;
-      font-size: 12px;
+      font-size: 24px;
       text-shadow:
         -1px -1px 0 #fff,
         1px -1px 0 #fff,
         -1px 1px 0 #fff,
         1px 1px 0 #fff;
       padding: 0;
-      transform: translate(10px, -10px);
+      transform: translate(-50%, -50%);
       pointer-events: none;
-      user-select: none;
       white-space: nowrap;
+      display: block;
     }
-    .nav-button {
-      background: white;
-      border: 1px solid #888;
-      border-radius: 4px;
-      padding: 2px 4px;
-      font-size: 12px;
-      line-height: 1.2;
-      box-shadow: 0 1px 4px rgba(0,0,0,0.2);
-      white-space: nowrap;
-      text-align: center;
+    /* 導航按鈕的 L.divIcon 外層容器樣式 */
+    .nav-button-icon {
+        pointer-events: auto;
+        background: none;
+        border: none;
+        box-shadow: none;
+        padding: 0;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        transform: translate(-50%, -50%);
+    }
+    /* 實際的導航按鈕內容樣式 (圖片) */
+    .nav-button-content img {
+      width: 40px;
+      height: 40px;
       cursor: pointer;
-      font-weight: 500;
+      display: block;
+    }
+
+    /* 自定義圖徵黑點樣式 */
+    .custom-dot-icon {
+        background-color: black;
+        border-radius: 50%;
+        width: 16px;
+        height: 16px;
+        pointer-events: auto;
+        display: block;
+        margin-left: -8px;
+        margin-top: -8px;
+    }
+
+    /* 調整 Leaflet 縮放按鈕位置 */
+    .leaflet-control-zoom {
+        margin-bottom: 30px;
     }
   </style>
 </head>
 <body>
+  <div id="title">我的地圖系統</div>
   <div id="controls">
     <input type="file" id="kmlInput" accept=".kml" />
-    <input type="text" id="searchBox" placeholder="搜尋地點..." autocomplete="off" />
+    <div id="searchContainer">
+        <span class="material-symbols-outlined">search</span>
+        <input type="text" id="searchBox" placeholder="搜尋地點..." autocomplete="off" />
+    </div>
     <div id="searchResults"></div>
   </div>
   <div id="map"></div>
@@ -121,37 +184,59 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://unpkg.com/togeojson"></script>
   <script>
-    const map = L.map('map').setView([23.5, 121], 8);
+    const map = L.map('map', {
+      renderer: L.canvas({ tolerance: 10 }),
+      zoomControl: false
+    }).setView([23.5, 121], 8);
+
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '&copy; OpenStreetMap 貢獻者'
+      attribution: '© OpenStreetMap 貢獻者'
+    }).addTo(map);
+
+    L.control.zoom({
+        position: 'bottomleft'
     }).addTo(map);
 
     let markers = [];
     let features = [];
-    let navButton;
-    let currentLatLng;
+    let navButton = null;
 
-    function clearMarkers() {
-      markers.forEach(m => map.removeLayer(m));
-      markers = [];
+    map.on('click', () => {
       if (navButton) {
         map.removeLayer(navButton);
         navButton = null;
       }
+    });
+
+    function clearMarkers() {
+      markers.forEach(m => map.removeLayer(m));
+      markers = [];
     }
 
     function createNavButton(latlng, name) {
       if (navButton) {
         map.removeLayer(navButton);
       }
-      const buttonHtml = `<div class="nav-button" onclick="window.open('https://www.google.com/maps/dir/?api=1&destination=${latlng.lat},${latlng.lng}', '_blank')">${name}<br>導航</div>`;
-      const icon = L.divIcon({
-        className: '',
+
+      const navLatLng = L.latLng(latlng.lat + 0.0003, latlng.lng); 
+
+      const buttonHtml = `
+        <div class="nav-button-content" onclick="window.open('https://www.google.com/maps/search/?api=1&query=${latlng.lat},${latlng.lng}', '_blank'); event.stopPropagation();">
+          <img src="https://i0.wp.com/canadasafetycouncil.org/wp-content/uploads/2018/08/offroad.png" alt="導航" />
+        </div>
+      `;
+
+      const buttonIcon = L.divIcon({
+        className: 'nav-button-icon',
         html: buttonHtml,
-        iconSize: [70, 30],
-        iconAnchor: [-10, 10]
+        iconSize: [50, 50],
+        iconAnchor: [25, 25]
       });
-      navButton = L.marker(latlng, { icon: icon, interactive: true }).addTo(map);
+
+      navButton = L.marker(navLatLng, {
+        icon: buttonIcon,
+        interactive: true
+      }).addTo(map);
     }
 
     function addMarkers(features) {
@@ -159,35 +244,36 @@
         if (f.geometry.type === 'Point') {
           const [lon, lat] = f.geometry.coordinates;
           const name = f.properties.name || '未命名';
-          const latlng = L.latLng(lat, lon);
+          
+          const labelLatLng = L.latLng(lat, lon + 0.00015); 
 
-          const marker = L.circleMarker(latlng, {
-            radius: 4.5, // 縮小 20%
-            color: '#000',
-            fillColor: '#000',
-            fillOpacity: 1,
-            weight: 1,
+          const dotIcon = L.divIcon({
+              className: 'custom-dot-icon',
+              iconSize: [16, 16],
+              iconAnchor: [8, 8]
+          });
+
+          const customDotMarker = L.marker(L.latLng(lat, lon), {
+              icon: dotIcon,
+              interactive: true
           }).addTo(map);
 
-          const label = L.marker(latlng, {
+          const label = L.marker(labelLatLng, {
             icon: L.divIcon({
               className: 'marker-label',
-              html: name,
-              iconSize: [100, 20],
-              iconAnchor: [-10, 10],
+              html: `<span>${name}</span>`,
+              iconSize: [null, null],
+              iconAnchor: [0, 0],
             }),
             interactive: false
           }).addTo(map);
 
-          marker.on('click', () => {
-            map.setView(latlng, 16);
-            const offset = L.latLng(latlng.lat, latlng.lng + 0.0005); // 右方一點
-            createNavButton(offset, name);
-            currentLatLng = latlng;
+          customDotMarker.on('click', (e) => {
+            L.DomEvent.stopPropagation(e);
+            createNavButton(L.latLng(lat, lon), name);
           });
 
-          markers.push(marker);
-          markers.push(label);
+          markers.push(customDotMarker, label);
         }
       });
     }
@@ -209,6 +295,10 @@
         }
         document.getElementById('searchResults').style.display = 'none';
         document.getElementById('searchBox').value = '';
+        if (navButton) {
+          map.removeLayer(navButton);
+          navButton = null;
+        }
       };
       reader.readAsText(file);
     });
@@ -235,11 +325,9 @@
         item.textContent = name;
         item.title = name;
         item.addEventListener('click', () => {
-          const latlng = L.latLng(lat, lon);
-          map.setView(latlng, 16);
-          const offset = L.latLng(lat, lon + 0.0005);
-          createNavButton(offset, name);
-          currentLatLng = latlng;
+          const originalLatLng = L.latLng(lat, lon);
+          map.setView(originalLatLng, 16);
+          createNavButton(originalLatLng, name);
           resultsBox.style.display = 'none';
           document.getElementById('searchBox').value = '';
         });
