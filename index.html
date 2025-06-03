@@ -1022,14 +1022,17 @@
                     console.log("註冊條件全部滿足，嘗試創建用戶文件。");
                     console.log("User UID for creation:", user.uid);
                     console.log("Target Firestore path for user document:", `users/${user.uid}`);
+                    const userDataToSet = {
+                        email: user.email,
+                        name: user.displayName || user.email,
+                        role: 'editor', // 預設為 editor 角色
+                        createdAt: serverTimestamp()
+                    };
+                    console.log("Data to be written to Firestore:", userDataToSet);
+
                     try {
                         // 在 Firestore 中建立使用者文件並設定為 'editor' 角色
-                        await setDoc(doc(db, 'users', user.uid), {
-                            email: user.email,
-                            name: user.displayName || user.email,
-                            role: 'editor', // 預設為 editor 角色
-                            createdAt: serverTimestamp()
-                        });
+                        await setDoc(doc(db, 'users', user.uid), userDataToSet);
                         console.log("User document creation successful.");
 
                         // 註冊成功後，先隱藏註冊碼彈窗
