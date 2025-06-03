@@ -315,7 +315,7 @@
         display: flex;
         justify-content: center;
         align-items: center;
-        z-index: 2000;
+        z-index: 2002; /* Changed from 2000 to 2002 */
         opacity: 0;
         visibility: hidden;
         transition: opacity 0.3s ease, visibility 0.3s ease;
@@ -826,11 +826,6 @@
         }, { once: true }); // 使用 once: true 確保事件只執行一次
     }
 
-    // 移除原有的全局 messageBoxCloseBtn 監聽器，因為現在由 showMessageBox 內部管理
-    // messageBoxCloseBtn.addEventListener('click', () => {
-    //     messageBoxOverlay.classList.remove('visible');
-    // });
-
     // --- UI Control Functions ---
     function toggleKMLControls(user, role) {
         const isAuthenticated = user !== null;
@@ -1045,12 +1040,14 @@
                         }, { merge: true });
                         console.log("一次性註冊已關閉。");
 
-                        // 註冊成功後，先隱藏註冊碼彈窗，再顯示成功訊息
+                        // 註冊成功後，先隱藏註冊碼彈窗
                         registrationCodeModalOverlay.classList.remove('visible');
-                        // 呼叫 showMessageBox 並傳入一個回調函數，當訊息框關閉時執行
-                        showMessageBox('註冊成功', `歡迎您，${user.displayName || user.email}！您的帳號已成功創建並設定為編輯者。註冊碼已失效。`, () => {
-                            authSection.style.display = 'none'; // 在用戶關閉訊息框後隱藏 authSection
-                        });
+                        // 增加一個小延遲，確保註冊碼彈窗完全隱藏後再顯示成功訊息
+                        setTimeout(() => {
+                            showMessageBox('註冊成功', `歡迎您，${user.displayName || user.email}！您的帳號已成功創建並設定為編輯者。註冊碼已失效。`, () => {
+                                authSection.style.display = 'none'; // 在用戶關閉訊息框後隱藏 authSection
+                            });
+                        }, 350); // 略長於 CSS transition 時間 (0.3s)
                     } catch (error) {
                         console.error("建立使用者文件或關閉註冊失敗:", error);
                         showMessageBox('註冊失敗', `建立帳號時發生錯誤：${error.message} (請檢查 Firestore 權限規則)`);
