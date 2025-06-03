@@ -742,6 +742,7 @@
     let currentLayerFeatures = [];
     let firebaseInitialized = false;
     let currentRegistrationSettings = null; // 重新引入：儲存當前註冊設定
+    let countdownInterval = null; // Global variable to store the interval ID
 
     // UI elements
     const editButton = document.getElementById('editButton');
@@ -963,6 +964,7 @@
 
     // 顯示註冊碼輸入彈窗
     function showRegistrationCodeModal(user) {
+        console.log("顯示註冊碼輸入彈窗...");
         modalRegistrationCodeInput.value = ''; // 清空輸入框
         registrationCodeModalOverlay.classList.add('visible');
 
@@ -972,22 +974,30 @@
         modalRegistrationCodeInput.onkeydown = null;
 
         const handleConfirm = async () => {
+            console.log("確認註冊碼按鈕被點擊。");
             const enteredCode = modalRegistrationCodeInput.value.trim().toUpperCase();
+            console.log("輸入的註冊碼:", enteredCode);
+
             if (!enteredCode) {
                 showMessageBox('錯誤', '請輸入註冊碼。');
                 return;
             }
 
             // 獲取最新的註冊設定
+            console.log("正在獲取註冊設定...");
             const settingsSnap = await getDoc(registrationSettingsDocRef);
             const settings = settingsSnap.exists() ? settingsSnap.data() : null;
+            console.log("獲取到的註冊設定:", settings);
 
             const now = new Date();
             const isRegistrationOpen = settings?.isRegistrationOpen === true;
             const correctCode = settings?.registrationCode;
             const isExpired = settings?.expiresAt && settings.expiresAt.toDate() <= now;
 
+            console.log(`isRegistrationOpen: ${isRegistrationOpen}, correctCode: ${correctCode}, isExpired: ${isExpired}`);
+
             if (isRegistrationOpen && enteredCode === correctCode && !isExpired) {
+                console.log("註冊碼正確且功能開放，嘗試創建用戶文件。");
                 // 註冊碼正確且功能開放
                 try {
                     // 在 Firestore 中建立使用者文件並設定為 'editor' 角色
@@ -997,19 +1007,22 @@
                         role: 'editor', // 預設為 editor 角色
                         createdAt: serverTimestamp()
                     });
+                    console.log("用戶文件創建成功。");
 
                     // 立即關閉註冊 (一次性使用)
+                    console.log("嘗試關閉一次性註冊。");
                     await setDoc(registrationSettingsDocRef, {
                         isRegistrationOpen: false,
                         registrationCode: null,
                         expiresAt: null
                     }, { merge: true });
+                    console.log("一次性註冊已關閉。");
 
                     showMessageBox('註冊成功', `歡迎您，${user.displayName || user.email}！您的帳號已成功創建並設定為編輯者。註冊碼已失效。`);
                     registrationCodeModalOverlay.classList.remove('visible');
                     authSection.style.display = 'none'; // 隱藏登入面板
                 } catch (error) {
-                    console.error("建立使用者文件失敗:", error);
+                    console.error("建立使用者文件或關閉註冊失敗:", error);
                     showMessageBox('註冊失敗', `建立帳號時發生錯誤：${error.message}`);
                     signOut(auth); // 建立失敗，強制登出
                 }
@@ -1018,12 +1031,14 @@
                 if (isExpired) {
                     errorMessage = '註冊碼已過期。';
                 }
+                console.warn("註冊失敗條件未滿足:", errorMessage);
                 showMessageBox('註冊失敗', errorMessage);
                 signOut(auth); // 驗證失敗，強制登出
             }
         };
 
         const handleCancel = () => {
+            console.log("註冊碼輸入彈窗已取消。");
             registrationCodeModalOverlay.classList.remove('visible');
             signOut(auth); // 取消註冊，強制登出
             showMessageBox('註冊取消', '您已取消註冊。');
@@ -1431,6 +1446,8 @@
             registrationExpiryDisplay.style.display = 'none';
             openOneTimeRegistrationBtn.disabled = true;
             closeRegistrationBtn.style.display = 'none';
+            clearInterval(countdownInterval); // Clear any existing interval
+            countdownInterval = null;
             return;
         }
 
@@ -1444,11 +1461,38 @@
             registrationCodeDisplay.textContent = `註冊碼: ${registrationCode}`;
             registrationCodeDisplay.style.display = 'block';
             
-            const expiryTime = expiresAt.toDate();
-            const timeDiff = Math.max(0, Math.floor((expiryTime.getTime() - now.getTime()) / 1000));
-            registrationExpiryDisplay.textContent = `剩餘時間: ${timeDiff} 秒`;
-            registrationExpiryDisplay.style.display = 'block';
+            // Start or continue countdown
+            if (countdownInterval === null) { // Only start if not already running
+                const updateCountdown = () => {
+                    const remainingTimeMs = expiresAt.toDate().getTime() - new Date().getTime();
+                    const timeDiff = Math.max(0, Math.floor(remainingTimeMs / 1000));
+                    
+                    if (timeDiff <= 0) {
+                        registrationExpiryDisplay.textContent = `剩餘時間: 已過期`;
+                        clearInterval(countdownInterval);
+                        countdownInterval = null;
+                        // Optionally, trigger an update to Firestore to reflect expired state if it hasn't already
+                        if (userRole === 'owner') { // Only owner can write
+                            setDoc(registrationSettingsDocRef, {
+                                isRegistrationOpen: false,
+                                registrationCode: null,
+                                expiresAt: null
+                            }, { merge: true }).then(() => {
+                                console.log("Expired registration automatically closed by owner (from countdown).");
+                            }).catch(err => {
+                                console.error("Failed to auto-close expired registration from countdown:", err);
+                            });
+                        }
+                    } else {
+                        registrationExpiryDisplay.textContent = `剩餘時間: ${timeDiff} 秒`;
+                    }
+                    registrationExpiryDisplay.style.display = 'block';
+                };
 
+                updateCountdown(); // Initial update
+                countdownInterval = setInterval(updateCountdown, 1000); // Update every second
+            }
+            
             openOneTimeRegistrationBtn.disabled = true; // 開啟後禁用開啟按鈕
             closeRegistrationBtn.style.display = 'block'; // 顯示關閉按鈕
         } else {
@@ -1460,6 +1504,8 @@
             registrationExpiryDisplay.textContent = '';
             openOneTimeRegistrationBtn.disabled = false; // 關閉後啟用開啟按鈕
             closeRegistrationBtn.style.display = 'none'; // 隱藏關閉按鈕
+            clearInterval(countdownInterval); // Clear any existing interval
+            countdownInterval = null;
         }
     }
 
@@ -1671,7 +1717,7 @@
       }
       const navLatLng = L.latLng(latlng.lat + 0.0003, latlng.lng);
       // 更正 Google Maps URL 格式
-      const googleMapsUrl = `http://maps.google.com/maps?q=$${latlng.lat},${latlng.lng}`; 
+      const googleMapsUrl = `https://www.google.com/maps/search/?api=1&query=${latlng.lat},${latlng.lng}`; 
       const buttonHtml = `
         <div class="nav-button-content" onclick="window.open('${googleMapsUrl}', '_blank'); event.stopPropagation();">
           <img src="https://i0.wp.com/canadasafetycouncil.org/wp-content/uploads/2018/08/offroad.png" alt="導航" />
