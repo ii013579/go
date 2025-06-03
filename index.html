@@ -1020,16 +1020,17 @@
 
                 if (isRegistrationOpen && enteredCode === correctCode && !isExpired) {
                     console.log("註冊條件全部滿足，嘗試創建用戶文件。");
+                    console.log("User UID for creation:", user.uid);
+                    console.log("Target Firestore path for user document:", `users/${user.uid}`);
                     try {
                         // 在 Firestore 中建立使用者文件並設定為 'editor' 角色
-                        console.log(`嘗試在 Firestore 中為用戶 ${user.uid} 創建文件，角色為 'editor'。`);
                         await setDoc(doc(db, 'users', user.uid), {
                             email: user.email,
                             name: user.displayName || user.email,
                             role: 'editor', // 預設為 editor 角色
                             createdAt: serverTimestamp()
                         });
-                        console.log("用戶文件創建成功。");
+                        console.log("User document creation successful.");
 
                         // 註冊成功後，先隱藏註冊碼彈窗
                         registrationCodeModalOverlay.classList.remove('visible');
