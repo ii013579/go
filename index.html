@@ -809,16 +809,27 @@
 
 
     // --- Message Box Functions ---
-    function showMessageBox(title, message) {
+    // 修改 showMessageBox，接受一個可選的回調函數
+    function showMessageBox(title, message, onCloseCallback = null) {
         console.log(`Message Box: ${title} - ${message}`); 
         messageBoxTitle.textContent = title;
         messageBoxMessage.textContent = message;
         messageBoxOverlay.classList.add('visible');
+
+        // 移除舊的事件監聽器，避免重複執行
+        messageBoxCloseBtn.onclick = null; 
+        messageBoxCloseBtn.addEventListener('click', () => {
+            messageBoxOverlay.classList.remove('visible');
+            if (onCloseCallback && typeof onCloseCallback === 'function') {
+                onCloseCallback(); // 執行回調函數
+            }
+        }, { once: true }); // 使用 once: true 確保事件只執行一次
     }
 
-    messageBoxCloseBtn.addEventListener('click', () => {
-        messageBoxOverlay.classList.remove('visible');
-    });
+    // 移除原有的全局 messageBoxCloseBtn 監聽器，因為現在由 showMessageBox 內部管理
+    // messageBoxCloseBtn.addEventListener('click', () => {
+    //     messageBoxOverlay.classList.remove('visible');
+    // });
 
     // --- UI Control Functions ---
     function toggleKMLControls(user, role) {
@@ -1036,8 +1047,10 @@
 
                         // 註冊成功後，先隱藏註冊碼彈窗，再顯示成功訊息
                         registrationCodeModalOverlay.classList.remove('visible');
-                        showMessageBox('註冊成功', `歡迎您，${user.displayName || user.email}！您的帳號已成功創建並設定為編輯者。註冊碼已失效。`);
-                        // authSection 的隱藏會由 onAuthStateChanged 處理
+                        // 呼叫 showMessageBox 並傳入一個回調函數，當訊息框關閉時執行
+                        showMessageBox('註冊成功', `歡迎您，${user.displayName || user.email}！您的帳號已成功創建並設定為編輯者。註冊碼已失效。`, () => {
+                            authSection.style.display = 'none'; // 在用戶關閉訊息框後隱藏 authSection
+                        });
                     } catch (error) {
                         console.error("建立使用者文件或關閉註冊失敗:", error);
                         showMessageBox('註冊失敗', `建立帳號時發生錯誤：${error.message} (請檢查 Firestore 權限規則)`);
@@ -1612,7 +1625,7 @@
                 }, { merge: true }).then(() => {
                     console.log("Expired registration automatically closed by owner.");
                 }).catch(err => {
-                    console.error("Failed to auto-close expired registration:", err);
+                    console.error("Failed to auto-close expired registration from countdown:", err);
                 });
             }
         } else {
