@@ -765,7 +765,7 @@
     const deleteKmlSubmitBtnDashboard = document.getElementById('deleteKmlSubmitBtnDashboard'); 
 
     const kmlControls = document.getElementById('kmlControls'); 
-    const kmlLayerSelect = document = document.getElementById('kmlLayerSelect'); 
+    const kmlLayerSelect = document.getElementById('kmlLayerSelect'); 
     const searchBox = document.getElementById('searchBox');
     const searchResults = document.getElementById('searchResults');
 
@@ -1034,13 +1034,10 @@
                         }, { merge: true });
                         console.log("一次性註冊已關閉。");
 
-                        // 顯示成功訊息，然後延遲關閉彈窗
+                        // 註冊成功後，先隱藏註冊碼彈窗，再顯示成功訊息
+                        registrationCodeModalOverlay.classList.remove('visible');
                         showMessageBox('註冊成功', `歡迎您，${user.displayName || user.email}！您的帳號已成功創建並設定為編輯者。註冊碼已失效。`);
-                        setTimeout(() => {
-                            registrationCodeModalOverlay.classList.remove('visible');
-                            authSection.style.display = 'none'; // 隱藏登入面板
-                        }, 500); // 延遲 500 毫秒 (0.5 秒)
-
+                        // authSection 的隱藏會由 onAuthStateChanged 處理
                     } catch (error) {
                         console.error("建立使用者文件或關閉註冊失敗:", error);
                         showMessageBox('註冊失敗', `建立帳號時發生錯誤：${error.message} (請檢查 Firestore 權限規則)`);
