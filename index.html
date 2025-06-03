@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>地圖 v4.0.25 (恢復一次性註冊碼)</title>
+  <title>地圖 v4.0.25 (修正註冊權限錯誤)</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -1031,15 +1031,6 @@
                         });
                         console.log("用戶文件創建成功。");
 
-                        // 立即關閉註冊 (一次性使用)
-                        console.log("嘗試關閉一次性註冊 (更新 settings/registration 文檔)。");
-                        await setDoc(registrationSettingsDocRef, {
-                            isRegistrationOpen: false,
-                            registrationCode: null,
-                            expiresAt: null
-                        }, { merge: true });
-                        console.log("一次性註冊已關閉。");
-
                         // 註冊成功後，先隱藏註冊碼彈窗
                         registrationCodeModalOverlay.classList.remove('visible');
                         // 增加一個小延遲，確保註冊碼彈窗完全隱藏後再顯示成功訊息
@@ -1049,7 +1040,7 @@
                             });
                         }, 350); // 略長於 CSS transition 時間 (0.3s)
                     } catch (error) {
-                        console.error("建立使用者文件或關閉註冊失敗:", error);
+                        console.error("建立使用者文件失敗:", error); // 錯誤訊息更精確
                         showMessageBox('註冊失敗', `建立帳號時發生錯誤：${error.message} (請檢查 Firestore 權限規則)`);
                         signOut(auth); // 建立失敗，強制登出
                     }
