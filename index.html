@@ -1751,9 +1751,8 @@
       if (navButton) {
         map.removeLayer(navButton);
       }
-      const navLatLng = L.latLng(latlng.lat + 0.0003, latlng.lng);
-      // 更正 Google Maps URL 格式
-      const googleMapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${latlng.lat},${latlng.lng}`; 
+      // Correct Google Maps URL format for navigation (using query parameter 'q' for coordinates)
+      const googleMapsUrl = `https://www.google.com/maps/search/?api=1&query=${latlng.lat},${latlng.lng}`; 
       const buttonHtml = `
         <div class="nav-button-content" onclick="window.open('${googleMapsUrl}', '_blank'); event.stopPropagation();">
           <img src="https://i0.wp.com/canadasafetycouncil.org/wp-content/uploads/2018/08/offroad.png" alt="導航" />
@@ -1765,11 +1764,11 @@
         iconSize: [50, 50],
         iconAnchor: [25, 25]
       });
-      navButton = L.marker(navLatLng, {
+      navButton = L.marker(latlng, { // Attach to the actual point, not offset
         icon: buttonIcon,
         interactive: true
       }).addTo(map);
-      console.log(`Nav button created for ${name} at ${latlng.lat}, ${latlng.lng}`);
+      console.log(`Nav button created for ${name} at ${latlng.lat}, ${latlng.lng}. Google Maps URL: ${googleMapsUrl}`);
     }
 
     function addMarkers(featuresToDisplay) {
