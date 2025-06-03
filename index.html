@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>地圖 v4.0.42 (修正登入錯誤並允許匿名讀取)</title>
+  <title>地圖 v4.0.42 (修正註冊成功訊息顯示)</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -765,7 +765,7 @@
     const deleteKmlSubmitBtnDashboard = document.getElementById('deleteKmlSubmitBtnDashboard'); 
 
     const kmlControls = document.getElementById('kmlControls'); 
-    const kmlLayerSelect = document.getElementById('kmlLayerSelect'); 
+    const kmlLayerSelect = document = document.getElementById('kmlLayerSelect'); 
     const searchBox = document.getElementById('searchBox');
     const searchResults = document.getElementById('searchResults');
 
@@ -1034,9 +1034,13 @@
                         }, { merge: true });
                         console.log("一次性註冊已關閉。");
 
+                        // 顯示成功訊息，然後延遲關閉彈窗
                         showMessageBox('註冊成功', `歡迎您，${user.displayName || user.email}！您的帳號已成功創建並設定為編輯者。註冊碼已失效。`);
-                        registrationCodeModalOverlay.classList.remove('visible');
-                        authSection.style.display = 'none'; // 隱藏登入面板
+                        setTimeout(() => {
+                            registrationCodeModalOverlay.classList.remove('visible');
+                            authSection.style.display = 'none'; // 隱藏登入面板
+                        }, 500); // 延遲 500 毫秒 (0.5 秒)
+
                     } catch (error) {
                         console.error("建立使用者文件或關閉註冊失敗:", error);
                         showMessageBox('註冊失敗', `建立帳號時發生錯誤：${error.message} (請檢查 Firestore 權限規則)`);
@@ -1752,6 +1756,8 @@
         map.removeLayer(navButton);
       }
       // Correct Google Maps URL format for navigation (using query parameter 'q' for coordinates)
+      // For directions, use: `https://www.google.com/maps/dir/?api=1&destination=${latlng.lat},${latlng.lng}`
+      // For just showing a point: `https://www.google.com/maps/search/?api=1&query=${latlng.lat},${latlng.lng}`
       const googleMapsUrl = `https://www.google.com/maps/search/?api=1&query=${latlng.lat},${latlng.lng}`; 
       const buttonHtml = `
         <div class="nav-button-content" onclick="window.open('${googleMapsUrl}', '_blank'); event.stopPropagation();">
