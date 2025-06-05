@@ -1023,11 +1023,11 @@
                     console.log("User UID for creation:", user.uid);
                     console.log("Target Firestore path for user document:", `users/${user.uid}`);
                     const userDataToSet = {
-                        email: auth.currentUser.email,
-                        name: auth.currentUser.displayName || auth.currentUser.email,
+                        email: user.email,
+                        name: user.displayName || user.email,
                         role: 'editor', // 預設為 editor 角色
                         createdAt: serverTimestamp()
-                    }, { merge: true });
+                    };
                     console.log("Data to be written to Firestore:", userDataToSet);
 
                     try {
