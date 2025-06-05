@@ -1,255 +1,158 @@
-// js/map-app.js
+// 注意：以下是 map-app.js 的內容，其中假設 `db`, `showMessage`
+// 已經在 `firebase-init.js` 中定義並可全局訪問。
+// 在實際的模組化開發中，您會使用 ES Modules (import/export) 來明確依賴關係。
 
-// 假設 auth 和 db 已經在 firebase-init.js 中初始化並成為全域變數
+let map;
+let currentKmlLayer = null; // 用於儲存當前載入的 KML 圖層
+let markers = L.featureGroup(); // 用於儲存所有標記以便管理
+let navButtons = L.featureGroup(); // 用於儲存導航按鈕
 
-const searchBox = document.getElementById('searchBox');
-const searchResults = document.getElementById('searchResults');
-const kmlInput = document.getElementById('kmlInput');
-const importButton = document.getElementById('importButton');
-const exportButton = document.getElementById('exportButton');
-const map = L.map('map', {
-  center: [23.6, 120.9], // 台灣中心點大概緯度
-  zoom: 8,
-  minZoom: 8,
-  maxZoom: 18,
-  maxBounds: [[-90, -180], [90, 180]] // 全球範圍
-});
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-  attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-}).addTo(map);
+document.addEventListener('DOMContentLoaded', () => {
+    // 初始化地圖
+    map = L.map('map').setView([23.6, 120.9], 8); // 台灣中心經緯度
 
-let kmlFeatures = L.featureGroup().addTo(map);
-let allKmlData = []; // 儲存所有 KML 資料，以便搜尋
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    }).addTo(map);
 
-// 定位控制項
-L.control.locate({
-  setView: true,
-  drawCircle: false,
-  strings: {
-    title: "顯示我的位置"
-  }
-}).addTo(map);
+    // 添加定位控制項
+    L.control.locate({
+        position: 'topleft',
+        strings: {
+            title: "顯示我的位置"
+        },
+        locateOptions: {
+            enableHighAccuracy: true,
+            maxZoom: 16 // 定位後縮放級別
+        },
+        markerStyle: {
+            className: 'user-location-dot' // 自定義用戶位置標記樣式
+        },
+        circleStyle: {
+            color: '#1a73e8', // 藍色圈
+            fillColor: '#1a73e8',
+            fillOpacity: 0.15
+        },
+        // 添加自定義按鈕類別
+        icon: 'material-symbols-outlined',
+        iconLoading: 'material-symbols-outlined'
+    }).addTo(map);
 
-// 搜尋 KML 資料
-searchBox.addEventListener('input', (event) => {
-  const query = event.target.value.toLowerCase();
-  searchResults.innerHTML = ''; // 清空先前的搜尋結果
+    // 將 markers 和 navButtons 添加到地圖
+    markers.addTo(map);
+    navButtons.addTo(map);
 
-  if (query.length > 0) {
-    const results = allKmlData.filter(item =>
-      item.name.toLowerCase().includes(query)
-    );
-
-    // 調整搜尋結果框的位置和大小
-    const searchBoxRect = searchBox.getBoundingClientRect();
-    searchResults.style.top = `${searchBoxRect.bottom}px`; // 緊貼搜尋框底部
-    searchResults.style.left = `${searchBoxRect.left}px`;
-    searchResults.style.width = `${searchBoxRect.width}px`; // 與搜尋框寬度一致
-
-    searchResults.style.display = 'grid';
-    console.log(`Found ${results.length} search results.`);
-
-    results.forEach(f => {
-      const name = f.name || '未命名';
-      // 確保 f.geometry.coordinates 是有效的陣列且至少有兩個元素
-      const [lon, lat] = f.geometry.coordinates;
-      if (typeof lat === 'number' && typeof lon === 'number') {
-          const item = document.createElement('div');
-          item.className = 'result-item';
-          item.textContent = name;
-          item.title = name;
-          item.addEventListener('click', () => {
-            const originalLatLng = L.latLng(lat, lon);
-            map.setView(originalLatLng, 16);
-            createNavButton(originalLatLng, name);
-            searchResults.style.display = 'none';
-            searchBox.value = '';
-            console.log(`Clicked search result: ${name}, zooming to map.`);
-          });
-          searchResults.appendChild(item);
-      } else {
-          console.warn(`Invalid coordinates for feature: ${name}`, f.geometry.coordinates);
-      }
-    });
-  } else {
-    searchResults.style.display = 'none';
-  }
-});
-
-// 點擊搜尋結果框外部時隱藏搜尋結果
-document.addEventListener('click', (event) => {
-    if (!searchResults.contains(event.target) && event.target !== searchBox) {
-        searchResults.style.display = 'none';
-    }
-});
-// 監聽 ESC 鍵以隱藏搜尋結果
-document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape') {
-        searchResults.style.display = 'none';
-    }
-});
-
-
-// 導航按鈕創建邏輯
-function createNavButton(latLng, name) {
-    const container = document.querySelector('.nav-buttons-container');
-    // 檢查是否已有相同目標的導航按鈕
-    if (container.querySelector(`[data-lat="${latLng.lat}"][data-lng="${latLng.lng}"]`)) {
-        console.log('導航按鈕已存在。');
-        return;
-    }
-
-    const button = document.createElement('button');
-    button.className = 'nav-button';
-    button.dataset.lat = latLng.lat;
-    button.dataset.lng = latLng.lng;
-    button.innerHTML = `<span class="material-symbols-outlined">near_me</span> ${name} 導航`;
-    button.addEventListener('click', () => {
-        // 使用 Google Maps 導航 URL
-        const url = `https://www.google.com/maps/dir/?api=1&destination=${latLng.lat},${latLng.lng}&travelmode=driving`;
-        window.open(url, '_blank');
-        console.log(`Navigating to: ${name} at ${latLng.lat}, ${latLng.lng}`);
-    });
-
-    const closeButton = document.createElement('span');
-    closeButton.className = 'material-symbols-outlined';
-    closeButton.textContent = 'close';
-    closeButton.style.cursor = 'pointer';
-    closeButton.style.marginLeft = '10px';
-    closeButton.addEventListener('click', (event) => {
-        event.stopPropagation(); // 防止點擊關閉按鈕觸發導航按鈕的點擊事件
-        button.remove();
-        console.log('導航按鈕已移除。');
-    });
-    button.appendChild(closeButton);
-
-    container.appendChild(button);
-    console.log(`Created navigation button for ${name}.`);
-}
-
-
-// KML 匯入匯出功能
-importButton.addEventListener('click', () => kmlInput.click()); // 點擊按鈕觸發文件輸入
-
-kmlInput.addEventListener('change', (event) => {
-  const file = event.target.files[0];
-  if (file) {
-    const reader = new FileReader();
-    reader.onload = async (e) => {
-      try {
-        const kmlString = e.target.result;
-        // 檢查用戶權限：只有 editor 或 owner 可以匯入 KML
-        const currentUser = auth.currentUser;
-        if (!currentUser) {
-            alert('請先登入才能匯入 KML。');
-            return;
-        }
-        const userDoc = await db.collection('users').doc(currentUser.uid).get();
-        if (!userDoc.exists || !['editor', 'owner'].includes(userDoc.data().role)) {
-            alert('您沒有權限匯入 KML。');
+    // 全局函數：載入 KML 圖層
+    window.loadKmlLayerFromFirestore = async function(kmlId) {
+        if (!kmlId) {
+            console.log("未提供 KML ID，不載入。");
+            clearAllKmlLayers();
             return;
         }
 
-        const kmlId = db.collection('kml').doc().id; // 生成新的 KML 文檔 ID
-        await db.collection('kml').doc(kmlId).set({
-            kmlString: kmlString,
-            uploadedBy: currentUser.uid,
-            uploadedAt: firebase.firestore.FieldValue.serverTimestamp()
-        });
-        alert('KML 檔案已成功匯入！');
-        loadKMLFromFirestore(); // 重新載入以顯示新匯入的 KML
-      } catch (error) {
-        console.error('匯入 KML 失敗:', error);
-        alert('匯入 KML 失敗：' + error.message);
-      }
-    };
-    reader.readAsText(file);
-  }
-});
+        // 移除現有 KML 圖層和所有標記
+        clearAllKmlLayers();
 
-exportButton.addEventListener('click', async () => {
-  try {
-    const currentUser = auth.currentUser;
-    if (!currentUser) {
-        alert('請先登入才能匯出 KML。');
-        return;
-    }
-    const userDoc = await db.collection('users').doc(currentUser.uid).get();
-    if (!userDoc.exists || !['editor', 'owner'].includes(userDoc.data().role)) {
-        alert('您沒有權限匯出 KML。');
-        return;
-    }
-
-    // 獲取所有 KML 文檔
-    const snapshot = await db.collection('kml').get();
-    let combinedKmlStrings = '<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2">\n  <Document>\n    <name>Exported KML Data</name>\n';
-
-    snapshot.forEach(doc => {
-      const data = doc.data();
-      if (data.kmlString) {
-        // 只添加 <Placemark> 內的內容，如果整個 KML 文件都被存儲
-        // 這需要更精確的KML解析來提取Placemark
-        // 簡單處理：假設每個 Firestore 文檔的 kmlString 都是一個完整的 KML 或包含 Placemark
-        // 如果您的 KML 字串已經是完整的 KML 文件，您需要調整此處的合併邏輯
-        combinedKmlStrings += data.kmlString.replace(/<\?xml[^>]*>/, '').replace(/<kml[^>]*>/, '').replace(/<\/kml>/, '').replace(/<Document[^>]*>/, '').replace(/<\/Document>/, '');
-      }
-    });
-
-    combinedKmlStrings += '  </Document>\n</kml>';
-
-    if (snapshot.size > 0) {
-        const blob = new Blob([combinedKmlStrings], { type: 'application/vnd.google-earth.kml+xml' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'exported_map_data.kml';
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        alert('KML 檔案已成功匯出！');
-    } else {
-        alert('沒有可匯出的 KML 資料。');
-    }
-  } catch (error) {
-    console.error('匯出 KML 失敗:', error);
-    alert('匯出 KML 失敗：' + error.message);
-  }
-});
-
-
-// KML 資料載入函數
-async function loadKMLFromFirestore() {
-    kmlFeatures.clearLayers(); // 清除現有地圖上的 KML 層
-    allKmlData = []; // 清空搜尋資料
-
-    try {
-        // KML 集合的讀取權限在 rules 中設定為 'if request.auth != null'
-        const snapshot = await db.collection('kml').get();
-        snapshot.forEach(doc => {
-            const data = doc.data();
-            if (data.kmlString) {
-                // 將 KML 字串添加到地圖
-                const geojson = omnivore.kml.parse(data.kmlString);
-                geojson.eachLayer(layer => {
-                    kmlFeatures.addLayer(layer);
-                    // 為搜尋儲存 KML 特徵的名稱和幾何資訊
-                    if (layer.feature && layer.feature.properties && layer.feature.geometry) {
-                        allKmlData.push({
-                            name: layer.feature.properties.name || '未命名地標',
-                            geometry: layer.feature.geometry
-                        });
-                    }
-                });
+        try {
+            // 從 Firestore 獲取 KML 文件的 URL
+            const doc = await db.collection('kml').doc(kmlId).get();
+            if (!doc.exists) {
+                showMessage('錯誤', '找不到指定的 KML 圖層資料。');
+                return;
             }
-        });
-        console.log('KML 資料從 Firestore 載入成功。');
-    } catch (error) {
-        console.error('從 Firestore 載入 KML 資料失敗:', error);
-        alert('載入 KML 資料失敗：' + error.message);
-    }
-}
+            const kmlData = doc.data();
+            const kmlUrl = kmlData.url;
 
-// 首次載入頁面時嘗試載入 KML (即使未登入，只讀取公開 KML)
-// 但因為 rules 設定為 'if request.auth != null'，所以必須登入才能看到 KML
-// 真正的 KML 載入會在地圖 v4.1.0 的 onAuthStateChanged 監聽器中觸發
+            console.log(`載入 KML: ${kmlUrl}`);
+            showMessage('載入中', '正在載入 KML 圖層，請稍候...');
+
+            // 使用 Leaflet Omnivore 載入 KML
+            currentKmlLayer = omnivore.kml(kmlUrl)
+                .on('ready', function() {
+                    map.fitBounds(this.getBounds()); // 縮放地圖以適應 KML 圖層
+                    this.eachLayer(function(layer) {
+                        // 為每個圖層創建標記和導航按鈕
+                        if (layer.feature && layer.feature.geometry.type === 'Point') {
+                            const name = layer.feature.properties.name || '未知地點';
+                            createMarkerWithLabel(layer.getLatLng(), name);
+                            createNavButton(layer.getLatLng(), name);
+                        }
+                    });
+                    showMessage('成功', `KML 圖層 "${kmlData.name}" 載入完成！`);
+                })
+                .on('error', function(error) {
+                    console.error("載入 KML 時出錯:", error);
+                    showMessage('錯誤', `載入 KML 失敗: ${error.message}`);
+                })
+                .addTo(map);
+
+        } catch (error) {
+            console.error("獲取 KML URL 或載入 KML 時出錯:", error);
+            showMessage('錯誤', `無法載入 KML 圖層: ${error.message}`);
+        }
+    };
+
+    // 全局函數：清除所有 KML 圖層、標記和導航按鈕
+    window.clearAllKmlLayers = function() {
+        if (currentKmlLayer) {
+            map.removeLayer(currentKmlLayer);
+            currentKmlLayer = null;
+        }
+        markers.clearLayers(); // 清除所有標記
+        navButtons.clearLayers(); // 清除所有導航按鈕
+        console.log("所有 KML 圖層、標記和導航按鈕已清除。");
+    };
+
+    // 全局函數：創建帶有標籤的標記
+    window.createMarkerWithLabel = function(latlng, labelText) {
+        const customIcon = L.divIcon({
+            className: 'custom-dot-icon', // 使用自定義圓點樣式
+            iconSize: [18, 18],
+            iconAnchor: [9, 9]
+        });
+
+        const marker = L.marker(latlng, { icon: customIcon }).addTo(markers); // 添加到 markers FeatureGroup
+        marker.bindTooltip(labelText, {
+            permanent: true,
+            direction: 'bottom',
+            className: 'marker-label', // 使用自定義標籤樣式
+            offset: [0, 10]
+        }).openTooltip();
+        return marker;
+    };
+
+    // 全局函數：創建導航按鈕
+    window.createNavButton = function(latlng, name) {
+        // 創建一個自定義圖標，其中包含圖片
+        const navIcon = L.divIcon({
+            className: 'nav-button-icon', // 容器樣式
+            html: `<div class="nav-button-content"><img src="image_ac684c.jpg" alt="導航" title="導航到 ${name}"></div>`,
+            iconSize: [48, 48], // 圖標大小
+            iconAnchor: [24, 24] // 圖標中心點
+        });
+
+        const navMarker = L.marker(latlng, { icon: navIcon }).addTo(navButtons); // 添加到 navButtons FeatureGroup
+
+        // 為導航按鈕添加點擊事件
+        navMarker.on('click', () => {
+            const googleMapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${latlng.lat},${latlng.lng}`;
+            window.open(googleMapsUrl, '_blank');
+        });
+        return navMarker;
+    };
+
+    // 處理地圖上的點擊事件，隱藏搜尋結果
+    map.on('click', () => {
+        const searchResults = document.getElementById('searchResults');
+        if (searchResults) {
+            searchResults.style.display = 'none';
+        }
+        const searchBox = document.getElementById('searchBox');
+        if (searchBox) {
+            searchBox.value = '';
+        }
+    });
+
+    // 初始化時載入預設 KML 或第一層 KML (如果有的話)
+    // 這部分邏輯會由 auth.js 中的 updateKmlLayerSelects 觸發
+});
