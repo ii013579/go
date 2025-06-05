@@ -1,8 +1,7 @@
 // js/map-app.js
 
-// (假設 auth 和 db 已經在 firebase-init.js 中初始化並成為全域變數)
+// 假設 auth 和 db 已經在 firebase-init.js 中初始化並成為全域變數
 
-// 從地圖 v4.0.40.txt 複製的原始程式碼
 const searchBox = document.getElementById('searchBox');
 const searchResults = document.getElementById('searchResults');
 const kmlInput = document.getElementById('kmlInput');
@@ -16,206 +15,241 @@ const map = L.map('map', {
   maxBounds: [[-90, -180], [90, 180]] // 全球範圍
 });
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+  attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
 }).addTo(map);
 
 let kmlFeatures = L.featureGroup().addTo(map);
 let allKmlData = []; // 儲存所有 KML 資料，以便搜尋
 
-// ... (省略地圖 v4.0.40.txt 中原有的所有地圖相關邏輯，例如搜尋、KML 處理、導航按鈕等) ...
-// 請將您地圖 v4.0.40.txt 中所有 JavaScript 複製到這裡，並確保變數名稱和元素 ID 一致。
+// 定位控制項
+L.control.locate({
+  setView: true,
+  drawCircle: false,
+  strings: {
+    title: "顯示我的位置"
+  }
+}).addTo(map);
 
-// --- 身份驗證和 Owner 管理面板邏輯 ---
+// 搜尋 KML 資料
+searchBox.addEventListener('input', (event) => {
+  const query = event.target.value.toLowerCase();
+  searchResults.innerHTML = ''; // 清空先前的搜尋結果
 
-const userStatusElement = document.getElementById('user-status');
-const authButton = document.getElementById('auth-button');
-const logoutButton = document.getElementById('logout-button');
-const ownerPanel = document.getElementById('ownerPanel');
-const openRegistrationCodeButton = document.getElementById('openRegistrationCodeButton'); // 新增
-const registrationCodeStatus = document.getElementById('registrationCodeStatus');       // 新增
-const refreshPendingUsersButton = document.getElementById('refreshPendingUsersButton');
-const pendingUsersList = document.getElementById('pendingUsersList');
-const messageDisplayOwner = document.getElementById('messageDisplayOwner'); // Owner面板的訊息顯示區
+  if (query.length > 0) {
+    const results = allKmlData.filter(item =>
+      item.name.toLowerCase().includes(query)
+    );
 
-// Firestore 中的設定文檔參考
-const settingsDocRef = db.collection('settings').doc('registration');
+    // 調整搜尋結果框的位置和大小
+    const searchBoxRect = searchBox.getBoundingClientRect();
+    searchResults.style.top = `${searchBoxRect.bottom}px`; // 緊貼搜尋框底部
+    searchResults.style.left = `${searchBoxRect.left}px`;
+    searchResults.style.width = `${searchBoxRect.width}px`; // 與搜尋框寬度一致
 
+    searchResults.style.display = 'grid';
+    console.log(`Found ${results.length} search results.`);
 
-// 檢查註冊碼狀態並更新 UI
-async function checkRegistrationStatus() {
-    try {
-        const doc = await settingsDocRef.get();
-        if (doc.exists && doc.data().isRegistrationOpen) {
-            const expiresAt = doc.data().expiresAt ? doc.data().expiresAt.toDate() : null;
-            const code = doc.data().registrationCode;
-            if (expiresAt && expiresAt > new Date()) {
-                registrationCodeStatus.textContent = `註冊碼已啟用：${code} (將於 ${expiresAt.toLocaleTimeString()} 失效)`;
-                registrationCodeStatus.style.color = 'green';
-            } else {
-                registrationCodeStatus.textContent = '註冊碼已過期或未啟用。';
-                registrationCodeStatus.style.color = 'orange';
-            }
-        } else {
-            registrationCodeStatus.textContent = '目前註冊碼未啟用。';
-            registrationCodeStatus.style.color = 'orange';
-        }
-    } catch (error) {
-        console.error("檢查註冊碼狀態失敗:", error);
-        registrationCodeStatus.textContent = '無法檢查註冊碼狀態，請稍後再試。';
-        registrationCodeStatus.style.color = 'red';
+    results.forEach(f => {
+      const name = f.name || '未命名';
+      // 確保 f.geometry.coordinates 是有效的陣列且至少有兩個元素
+      const [lon, lat] = f.geometry.coordinates;
+      if (typeof lat === 'number' && typeof lon === 'number') {
+          const item = document.createElement('div');
+          item.className = 'result-item';
+          item.textContent = name;
+          item.title = name;
+          item.addEventListener('click', () => {
+            const originalLatLng = L.latLng(lat, lon);
+            map.setView(originalLatLng, 16);
+            createNavButton(originalLatLng, name);
+            searchResults.style.display = 'none';
+            searchBox.value = '';
+            console.log(`Clicked search result: ${name}, zooming to map.`);
+          });
+          searchResults.appendChild(item);
+      } else {
+          console.warn(`Invalid coordinates for feature: ${name}`, f.geometry.coordinates);
+      }
+    });
+  } else {
+    searchResults.style.display = 'none';
+  }
+});
+
+// 點擊搜尋結果框外部時隱藏搜尋結果
+document.addEventListener('click', (event) => {
+    if (!searchResults.contains(event.target) && event.target !== searchBox) {
+        searchResults.style.display = 'none';
     }
-}
+});
+// 監聽 ESC 鍵以隱藏搜尋結果
+document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+        searchResults.style.display = 'none';
+    }
+});
 
 
-// 處理「開啟註冊碼」按鈕點擊事件 (僅限 Owner 執行)
-openRegistrationCodeButton.addEventListener('click', async () => {
-    setLoading('openRegistrationCodeButton', 'loadingSpinnerOwner', true); // 使用 Owner 面板的 spinner
-    showMessage('messageDisplayOwner', '', false); // 清除舊訊息
-
-    const currentAuthUser = auth.currentUser;
-    if (!currentAuthUser) {
-        showMessage('messageDisplayOwner', '請先登入 Owner 帳號才能開啟註冊碼。');
-        setLoading('openRegistrationCodeButton', 'loadingSpinnerOwner', false);
+// 導航按鈕創建邏輯
+function createNavButton(latLng, name) {
+    const container = document.querySelector('.nav-buttons-container');
+    // 檢查是否已有相同目標的導航按鈕
+    if (container.querySelector(`[data-lat="${latLng.lat}"][data-lng="${latLng.lng}"]`)) {
+        console.log('導航按鈕已存在。');
         return;
     }
 
-    try {
-        // 規則已在 Firestore 確保只有 owner 能寫入 settings
-        const newCode = Math.random().toString(36).substring(2, 8).toUpperCase();
-        const expiresAt = new Date(Date.now() + 30 * 1000); // 30 秒後過期
+    const button = document.createElement('button');
+    button.className = 'nav-button';
+    button.dataset.lat = latLng.lat;
+    button.dataset.lng = latLng.lng;
+    button.innerHTML = `<span class="material-symbols-outlined">near_me</span> ${name} 導航`;
+    button.addEventListener('click', () => {
+        // 使用 Google Maps 導航 URL
+        const url = `https://www.google.com/maps/dir/?api=1&destination=${latLng.lat},${latLng.lng}&travelmode=driving`;
+        window.open(url, '_blank');
+        console.log(`Navigating to: ${name} at ${latLng.lat}, ${latLng.lng}`);
+    });
 
-        await settingsDocRef.set({
-            isRegistrationOpen: true,
-            registrationCode: newCode,
-            expiresAt: firebase.firestore.Timestamp.fromDate(expiresAt)
-        }, { merge: true });
+    const closeButton = document.createElement('span');
+    closeButton.className = 'material-symbols-outlined';
+    closeButton.textContent = 'close';
+    closeButton.style.cursor = 'pointer';
+    closeButton.style.marginLeft = '10px';
+    closeButton.addEventListener('click', (event) => {
+        event.stopPropagation(); // 防止點擊關閉按鈕觸發導航按鈕的點擊事件
+        button.remove();
+        console.log('導航按鈕已移除。');
+    });
+    button.appendChild(closeButton);
 
-        showMessage('messageDisplayOwner', `註冊碼已成功開啟：${newCode} (30秒內有效)。`, false);
-        checkRegistrationStatus(); // 更新 UI 狀態
-    } catch (error) {
-        console.error("開啟註冊碼失敗:", error);
-        showMessage('messageDisplayOwner', '開啟註冊碼失敗，請檢查權限或網路。' + error.message);
-    } finally {
-        setLoading('openRegistrationCodeButton', 'loadingSpinnerOwner', false);
-    }
-});
-
-
-// 載入並顯示待處理用戶列表
-async function fetchPendingUsers() {
-    pendingUsersList.innerHTML = '<p>載入中...</p>';
-    try {
-        const usersSnapshot = await db.collection('users').get();
-        const pending = [];
-
-        usersSnapshot.forEach(doc => {
-            const userData = doc.data();
-            // 判斷條件：沒有 role 字段 或者 role 字段為空字串/null
-            if (!userData.role || userData.role === '' || userData.role === null) {
-                pending.push({ id: doc.id, ...userData });
-            }
-        });
-
-        if (pending.length === 0) {
-            pendingUsersList.innerHTML = '<p>沒有待處理的註冊。</p>';
-        } else {
-            pendingUsersList.innerHTML = ''; // 清空列表
-            pending.forEach(user => {
-                const userItem = document.createElement('div');
-                userItem.className = 'pending-user-item';
-                userItem.style.cssText = 'border-bottom: 1px solid #eee; padding: 8px 0; display: flex; justify-content: space-between; align-items: center;';
-                userItem.innerHTML = `
-                    <span>${user.name} (${user.email})</span>
-                    <button data-uid="${user.id}" class="assign-editor-btn" style="background-color: #007bff; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer;">賦予 Editor</button>
-                `;
-                pendingUsersList.appendChild(userItem);
-            });
-
-            // 為每個「賦予 Editor」按鈕添加事件監聽器
-            document.querySelectorAll('.assign-editor-btn').forEach(button => {
-                button.addEventListener('click', async (event) => {
-                    const userId = event.target.dataset.uid;
-                    event.target.disabled = true;
-                    event.target.textContent = '處理中...';
-                    try {
-                        await db.collection('users').doc(userId).update({ role: 'editor' });
-                        alert(`已成功將 ${user.name} (${user.email}) 設置為 editor。`);
-                        fetchPendingUsers(); // 重新整理列表
-                    } catch (error) {
-                        console.error("賦予 editor 權限失敗:", error);
-                        alert(`賦予權限失敗: ${error.message}`);
-                        event.target.disabled = false;
-                        event.target.textContent = '賦予 Editor';
-                    }
-                });
-            });
-        }
-
-    } catch (error) {
-        console.error("載入待處理用戶失敗:", error);
-        pendingUsersList.innerHTML = `<p style="color: red;">載入失敗: ${error.message}</p>`;
-    }
+    container.appendChild(button);
+    console.log(`Created navigation button for ${name}.`);
 }
 
 
-// --- 監聽 Firebase 認證狀態變化 (主要邏輯) ---
-firebase.auth().onAuthStateChanged(async (user) => {
-    if (user) {
-        userStatusElement.textContent = `載入用戶資料...`;
-        authButton.style.display = 'none';
-        logoutButton.style.display = 'block';
+// KML 匯入匯出功能
+importButton.addEventListener('click', () => kmlInput.click()); // 點擊按鈕觸發文件輸入
 
-        try {
-            const userDoc = await db.collection('users').doc(user.uid).get();
-            if (userDoc.exists) {
-                const userData = userDoc.data();
-                const userRole = userData.role || '未設定';
-                userStatusElement.textContent = `歡迎, ${userData.name || user.email} (角色: ${userRole})`;
-
-                // 如果是 owner，則顯示 Owner 管理面板並載入待處理用戶
-                if (userRole === 'owner') {
-                    ownerPanel.style.display = 'block';
-                    checkRegistrationStatus(); // 檢查註冊碼狀態
-                    fetchPendingUsers(); // 載入待處理用戶列表
-                } else {
-                    ownerPanel.style.display = 'none'; // 隱藏面板
-                }
-            } else {
-                userStatusElement.textContent = `歡迎, ${user.email} (角色未設定)`;
-                ownerPanel.style.display = 'none'; // 隱藏面板
-            }
-        } catch (error) {
-            console.error("讀取用戶角色失敗:", error);
-            userStatusElement.textContent = `歡迎, ${user.email} (讀取角色失敗)`;
-            ownerPanel.style.display = 'none'; // 隱藏面板
+kmlInput.addEventListener('change', (event) => {
+  const file = event.target.files[0];
+  if (file) {
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
+        const kmlString = e.target.result;
+        // 檢查用戶權限：只有 editor 或 owner 可以匯入 KML
+        const currentUser = auth.currentUser;
+        if (!currentUser) {
+            alert('請先登入才能匯入 KML。');
+            return;
+        }
+        const userDoc = await db.collection('users').doc(currentUser.uid).get();
+        if (!userDoc.exists || !['editor', 'owner'].includes(userDoc.data().role)) {
+            alert('您沒有權限匯入 KML。');
+            return;
         }
 
+        const kmlId = db.collection('kml').doc().id; // 生成新的 KML 文檔 ID
+        await db.collection('kml').doc(kmlId).set({
+            kmlString: kmlString,
+            uploadedBy: currentUser.uid,
+            uploadedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        alert('KML 檔案已成功匯入！');
+        loadKMLFromFirestore(); // 重新載入以顯示新匯入的 KML
+      } catch (error) {
+        console.error('匯入 KML 失敗:', error);
+        alert('匯入 KML 失敗：' + error.message);
+      }
+    };
+    reader.readAsText(file);
+  }
+});
+
+exportButton.addEventListener('click', async () => {
+  try {
+    const currentUser = auth.currentUser;
+    if (!currentUser) {
+        alert('請先登入才能匯出 KML。');
+        return;
+    }
+    const userDoc = await db.collection('users').doc(currentUser.uid).get();
+    if (!userDoc.exists || !['editor', 'owner'].includes(userDoc.data().role)) {
+        alert('您沒有權限匯出 KML。');
+        return;
+    }
+
+    // 獲取所有 KML 文檔
+    const snapshot = await db.collection('kml').get();
+    let combinedKmlStrings = '<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2">\n  <Document>\n    <name>Exported KML Data</name>\n';
+
+    snapshot.forEach(doc => {
+      const data = doc.data();
+      if (data.kmlString) {
+        // 只添加 <Placemark> 內的內容，如果整個 KML 文件都被存儲
+        // 這需要更精確的KML解析來提取Placemark
+        // 簡單處理：假設每個 Firestore 文檔的 kmlString 都是一個完整的 KML 或包含 Placemark
+        // 如果您的 KML 字串已經是完整的 KML 文件，您需要調整此處的合併邏輯
+        combinedKmlStrings += data.kmlString.replace(/<\?xml[^>]*>/, '').replace(/<kml[^>]*>/, '').replace(/<\/kml>/, '').replace(/<Document[^>]*>/, '').replace(/<\/Document>/, '');
+      }
+    });
+
+    combinedKmlStrings += '  </Document>\n</kml>';
+
+    if (snapshot.size > 0) {
+        const blob = new Blob([combinedKmlStrings], { type: 'application/vnd.google-earth.kml+xml' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'exported_map_data.kml';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        alert('KML 檔案已成功匯出！');
     } else {
-        // 用戶未登入
-        userStatusElement.textContent = '您尚未登入。';
-        authButton.textContent = '登入 / 註冊';
-        authButton.style.display = 'block';
-        logoutButton.style.display = 'none';
-        ownerPanel.style.display = 'none'; // 未登入也隱藏面板
+        alert('沒有可匯出的 KML 資料。');
     }
+  } catch (error) {
+    console.error('匯出 KML 失敗:', error);
+    alert('匯出 KML 失敗：' + error.message);
+  }
 });
 
-// 登入/註冊按鈕點擊事件 (如果點擊，導向到登入頁面，登入頁面可以連結到註冊頁面)
-authButton.addEventListener('click', () => {
-    window.location.href = '登入 v4.1.0.html';
-});
 
-// 登出按鈕點擊事件
-logoutButton.addEventListener('click', async () => {
+// KML 資料載入函數
+async function loadKMLFromFirestore() {
+    kmlFeatures.clearLayers(); // 清除現有地圖上的 KML 層
+    allKmlData = []; // 清空搜尋資料
+
     try {
-        await firebase.auth().signOut();
-        alert('您已登出。');
-        // 登出後頁面會自動刷新，onAuthStateChanged 會處理未登入狀態
+        // KML 集合的讀取權限在 rules 中設定為 'if request.auth != null'
+        const snapshot = await db.collection('kml').get();
+        snapshot.forEach(doc => {
+            const data = doc.data();
+            if (data.kmlString) {
+                // 將 KML 字串添加到地圖
+                const geojson = omnivore.kml.parse(data.kmlString);
+                geojson.eachLayer(layer => {
+                    kmlFeatures.addLayer(layer);
+                    // 為搜尋儲存 KML 特徵的名稱和幾何資訊
+                    if (layer.feature && layer.feature.properties && layer.feature.geometry) {
+                        allKmlData.push({
+                            name: layer.feature.properties.name || '未命名地標',
+                            geometry: layer.feature.geometry
+                        });
+                    }
+                });
+            }
+        });
+        console.log('KML 資料從 Firestore 載入成功。');
     } catch (error) {
-        console.error("登出失敗:", error);
-        alert('登出失敗: ' + error.message);
+        console.error('從 Firestore 載入 KML 資料失敗:', error);
+        alert('載入 KML 資料失敗：' + error.message);
     }
-});
+}
 
-// 添加重新整理按鈕的事件監聽器
-refreshPendingUsersButton.addEventListener('click', fetchPendingUsers);
+// 首次載入頁面時嘗試載入 KML (即使未登入，只讀取公開 KML)
+// 但因為 rules 設定為 'if request.auth != null'，所以必須登入才能看到 KML
+// 真正的 KML 載入會在地圖 v4.1.0 的 onAuthStateChanged 監聽器中觸發

@@ -1,13 +1,14 @@
 // js/firebase-init.js
 
-// 您的 Firebase 配置 (請替換成您自己的配置)
+// 您的 Firebase 配置 (已帶入您提供的資訊)
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_PROJECT_ID.appspot.com",
-  messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-  appId: "YOUR_APP_ID"
+  apiKey: "AIzaSyC-uaCnvgtYacPf_7BtwbwdDUw-WMx4d8s",
+  authDomain: "kmldata-d22fb.firebaseapp.com",
+  projectId: "kmldata-d22fb",
+  storageBucket: "kmldata-d22fb.firebasestorage.app",
+  messagingSenderId: "6673236901",
+  appId: "1:6673236901:web:5aac773cbb512a14b8de4c",
+  measurementId: "G-TJFH5SXNJX"
 };
 
 // 初始化 Firebase
@@ -16,7 +17,7 @@ firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.firestore();
 
-// 輔助函數：顯示訊息 (通用)
+// 輔助函數：在指定元素中顯示訊息
 function showMessage(elementId, msg, isError = true) {
   const messageDisplay = document.getElementById(elementId);
   if (messageDisplay) {
@@ -25,15 +26,10 @@ function showMessage(elementId, msg, isError = true) {
   }
 }
 
-// 輔助函數：顯示/隱藏載入中狀態 (通用)
+// 輔助函數：控制按鈕的載入狀態和旋轉圖示
 function setLoading(buttonId, spinnerId, isLoading) {
   const button = document.getElementById(buttonId);
   const spinner = document.getElementById(spinnerId);
   if (button) button.disabled = isLoading;
   if (spinner) spinner.style.display = isLoading ? 'block' : 'none';
 }
-
-// 將 auth 和 db 導出，以便其他模組可以使用
-// (在非模組化環境下，它們將是全域變數，但在嚴謹的 ES 模組中會使用 export)
-// 由於這是簡單的 HTML script 標籤引用，這些會是全域變數。
-// 所以其他 JS 文件可以直接使用 auth 和 db
