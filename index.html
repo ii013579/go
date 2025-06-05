@@ -3,11 +3,12 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>地圖 v4.1.0</title>
+  <title>地圖 v4.0.40</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
+    /* 從 style.txt 整合過來的 CSS 規則 */
     html, body {
       margin: 0;
       padding: 0;
@@ -31,7 +32,8 @@
       box-shadow: 0 4px 8px rgba(0,0,0,0.15);
       border-bottom-left-radius: 12px;
       border-bottom-right-radius: 12px;
-      position: relative;
+      position: relative; /* 保持相對定位 */
+      flex-shrink: 0;
     }
     #editButton {
       position: absolute;
@@ -54,17 +56,19 @@
       transform: translateY(-50%) scale(1.03);
       box-shadow: 0 4px 8px rgba(0,0,0,0.25);
     }
-    /* 認證面板樣式 */
+
+    /* authSection 樣式調整: 移除浮動視窗相關定位 */
     #authSection {
       background: #fff;
-      padding: 15px 20px;
+      padding: 15px; /* 給予內邊距 */
+      margin: 15px; /* 與地圖和標題留白 */
+      border-radius: 12px;
       box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-      border-bottom: 1px solid #eee;
-      display: none; /* 初始狀態為隱藏 */
-      flex-direction: column;
-      gap: 15px;
-      position: relative;
-      z-index: 1001;
+      /* 移除 position, top, left, width, height, overflow, z-index 等浮動視窗屬性 */
+      display: none; /* 初始隱藏，由 JS 控制顯示 */
+      flex-direction: column; /* 內部 flex 佈局 */
+      gap: 15px; /* 內部元素間距 */
+      flex-shrink: 0; /* 防止被壓縮 */
     }
     #authSection h3 {
       margin: 0;
@@ -90,26 +94,29 @@
         color: #2193b0;
         margin-bottom: 5px;
     }
+
+    /* controls 區塊 - 移除其本身定位，讓它在流中 */
     #controls {
-      padding: 15px;
-      background: #fff;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-      position: relative;
-      z-index: 1000;
-      display: flex;
+        background: none; /* 移除背景 */
+        padding: 0; /* 移除內邊距 */
+        box-shadow: none; /* 移除陰影 */
+        /* 移除 position, top, left, z-index */
+        margin: 15px; /* 與 authSection 或地圖留白 */
+        border-radius: 12px; /* 保持圓角 */
+        overflow: hidden; /* 保持溢出隱藏 */
+        display: flex; /* 內部 flex 佈局 */
+        flex-direction: column; /* 內部垂直堆疊 */
+        gap: 15px; /* 內部元素間距 */
+        flex-shrink: 0; /* 防止被壓縮 */
     }
-    /* KML 控制項預設是隱藏的，由 JS 控制顯示 */
-    #kmlControls {
+    #kmlControls { /* 保持原樣，因為它在 controls 內部 */
       display: flex;
       flex-direction: column;
       gap: 10px;
     }
     /* 上傳 KML 區塊，預設隱藏 (JS控制) */
     #uploadKmlSectionDashboard {
-        display: none;
+        display: flex; /* 預設為 flex 佈局 */
         flex-direction: row; /* Flex for horizontal layout */
         align-items: center;
         gap: 8px;
@@ -128,12 +135,10 @@
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
-        /* 新增邊框樣式 */
         border: 1px solid #dcdcdc;
         padding: 10px 12px;
         border-radius: 8px;
         background-color: #f9f9f9;
-        /* 保持一致的過渡效果 */
         transition: border-color 0.3s, box-shadow 0.3s;
         box-sizing: border-box; /* 確保 padding 和 border 不會增加元素總寬度 */
         height: 40px; /* 與 select 保持一致的高度 */
@@ -142,7 +147,7 @@
     }
     /* 刪除 KML 區塊，預設隱藏 (JS控制) */
     #deleteKmlSectionDashboard {
-        display: none;
+        display: flex; /* 預設為 flex 佈局 */
         flex-direction: row; /* Flex for horizontal layout */
         align-items: center;
         gap: 8px;
@@ -154,19 +159,21 @@
         flex-shrink: 0;
     }
 
-    #kmlInput, #searchBox, #kmlLayerSelect, #kmlLayerSelectDashboard { /* 新增 #kmlLayerSelectDashboard */
+    #kmlInput, #searchBox, #kmlLayerSelect, #kmlLayerSelectDashboard {
       padding: 10px 12px;
       font-size: 15px;
       border-radius: 8px;
       border: 1px solid #dcdcdc;
       transition: border-color 0.3s, box-shadow 0.3s;
       height: 40px; /* 確保 select 也有相同高度 */
+      box-sizing: border-box;
     }
-    #kmlInput:focus, #searchBox:focus, #kmlLayerSelect:focus, #kmlLayerSelectDashboard:focus { /* 新增 #kmlLayerSelectDashboard */
+    #kmlInput:focus, #searchBox:focus, #kmlLayerSelect:focus, #kmlLayerSelectDashboard:focus {
       border-color: #4a90e2;
       box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.2);
       outline: none;
     }
+    /* searchContainer 樣式調整: 移除絕對定位 */
     #searchContainer {
       display: flex;
       align-items: center;
@@ -176,6 +183,10 @@
       padding: 0 12px;
       background-color: #fff;
       box-shadow: inset 0 1px 3px rgba(0,0,0,0.05);
+      position: relative; /* 為了 searchResults 的絕對定位 */
+      margin: 0; /* 移除額外邊距，讓它緊隨 kmlControls */
+      width: 100%; /* 佔滿父容器寬度 */
+      box-sizing: border-box;
     }
     .material-symbols-outlined {
       font-variation-settings:
@@ -199,7 +210,10 @@
     }
     /* 調整 #searchResults 的樣式 */
     #searchResults {
-      position: fixed; /* 固定定位，使其浮動在頁面內容之上 */
+      position: absolute; /* 相對於 #searchContainer 定位 */
+      top: 100%; /* 緊貼搜尋框底部 */
+      left: 0;
+      width: 100%; /* 與搜尋框寬度一致 */
       max-height: 300px;
       background: rgba(255, 255, 255, 0.98);
       overflow-y: auto;
@@ -213,10 +227,10 @@
       font-size: 15px;
       display: none;
       z-index: 2000; /* 確保它疊在地圖和 Leaflet 控制項之上 */
-      /* 恢復為三欄佈局 */
       grid-template-columns: repeat(3, 1fr); /* 這裡改為三欄 */
       gap: 8px;
       padding: 10px;
+      box-sizing: border-box; /* 確保 padding 不會增加寬度 */
     }
     .result-item {
       padding: 10px 12px;
@@ -300,27 +314,21 @@
         margin-top: -9px;
         box-shadow: 0 2px 5px rgba(0,0,0,0.2);
     }
-    /* Message Box Styles */
-    .message-box-overlay {
+    /* Message Box Styles - 這些將被強制隱藏 */
+    #messageBoxOverlay, #registrationCodeModalOverlay {
+        display: none !important; /* 強制隱藏浮動視窗 */
+        /* 保留其他樣式以防止錯誤，但 display: none 優先 */
         position: fixed;
         top: 0;
         left: 0;
         width: 100%;
         height: 100%;
         background: rgba(0, 0, 0, 0.5);
-        display: flex;
         justify-content: center;
         align-items: center;
-        z-index: 2002; /* Changed from 2000 to 2002 */
-        opacity: 0;
-        visibility: hidden;
-        transition: opacity 0.3s ease, visibility 0.3s ease;
+        z-index: 2002;
     }
-    .message-box-overlay.visible {
-        opacity: 1;
-        visibility: visible;
-    }
-    .message-box-content {
+    .message-box-content, .registration-modal-content {
         background: #fff;
         padding: 30px;
         border-radius: 12px;
@@ -328,38 +336,6 @@
         text-align: center;
         max-width: 400px;
         width: 90%;
-        transform: translateY(-20px);
-        transition: transform 0.3s ease;
-    }
-    .message-box-overlay.visible .message-box-content {
-        transform: translateY(0);
-    }
-    .message-box-content h3 {
-        margin-top: 0;
-        color: #333;
-        font-size: 22px;
-        margin-bottom: 15px;
-    }
-    .message-box-content p {
-        color: #555;
-        font-size: 16px;
-        line-height: 1.6;
-        margin-bottom: 25px;
-    }
-    .message-box-content button {
-        background-color: #4a90e2;
-        color: white;
-        border: none;
-        padding: 12px 25px;
-        border-radius: 8px;
-        cursor: pointer;
-        font-size: 16px;
-        font-weight: 600;
-        transition: background-color 0.2s, transform 0.2s;
-    }
-    .message-box-content button:hover {
-        background-color: #357ABD;
-        transform: translateY(-1px);
     }
     /* Action Buttons */
     .action-buttons {
@@ -412,7 +388,7 @@
     .admin-option-button.delete-kml-dashboard-btn:hover {
         background-color: #c82333;
     }
-    .admin-option-button.add-user-dashboard-btn { /* 這個類別現在可能會用於其他管理按鈕 */
+    .admin-option-button.add-user-dashboard-btn {
         background-color: #17a2b8;
     }
     .admin-option-button.add-user-dashboard-btn:hover {
@@ -461,9 +437,9 @@
         border-radius: 8px;
         text-align: center;
         margin-bottom: 10px;
-        word-break: break-all; /* 避免長代碼溢出 */
+        word-break: break-all;
     }
-    #registrationExpiryDisplay { /* 新增樣式 */
+    #registrationExpiryDisplay {
         font-size: 14px;
         color: #888;
         text-align: center;
@@ -475,24 +451,23 @@
         display: flex;
         justify-content: center;
         align-items: center;
-        margin-top: 10px; /* Add some margin below the zoom controls */
+        margin-top: 10px;
         cursor: pointer;
-        /* Inherits other styles like background, border-radius, shadow from leaflet-bar */
     }
     .leaflet-control-custom-locate span {
-        color: #4a90e2; /* Blue color for the icon */
+        color: #4a90e2;
     }
     .leaflet-control-custom-locate:hover {
         background-color: #f4f4f4;
     }
     /* Style for the user's current location dot marker */
     .user-location-dot {
-        background-color: #1a73e8; /* Google Blue */
+        background-color: #1a73e8;
         border: 2px solid white;
         border-radius: 50%;
         width: 16px;
         height: 16px;
-        box-shadow: 0 0 0 3px rgba(26, 115, 232, 0.4); /* Pulsing effect */
+        box-shadow: 0 0 0 3px rgba(26, 115, 232, 0.4);
         animation: pulse 1.5s infinite ease-out;
     }
     @keyframes pulse {
@@ -508,7 +483,7 @@
     }
     /* Google Sign-In Button Style */
     #googleSignInBtn {
-        background-color: #4285F4; /* Google Blue */
+        background-color: #4285F4;
         color: white;
         display: flex;
         align-items: center;
@@ -531,194 +506,119 @@
         width: 24px;
         height: 24px;
     }
-    /* Registration Code Modal Styles */
-    #registrationCodeModalOverlay {
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: rgba(0, 0, 0, 0.6);
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        z-index: 2001; /* 比 messageBoxOverlay 高 */
-        opacity: 0;
-        visibility: hidden;
-        transition: opacity 0.3s ease, visibility 0.3s ease;
-    }
-    #registrationCodeModalOverlay.visible {
-        opacity: 1;
-        visibility: visible;
-    }
-    .registration-modal-content {
-        background: #fff;
-        padding: 30px;
-        border-radius: 12px;
-        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
-        text-align: center;
-        max-width: 450px;
-        width: 90%;
-        transform: translateY(-30px);
-        transition: transform 0.3s ease;
-    }
-    #registrationCodeModalOverlay.visible .registration-modal-content {
-        transform: translateY(0);
-    }
-    .registration-modal-content h3 {
-        margin-top: 0;
-        color: #333;
-        font-size: 24px;
-        margin-bottom: 20px;
-    }
-    .registration-modal-content p {
-        color: #555;
-        font-size: 16px;
-        line-height: 1.6;
-        margin-bottom: 20px;
-    }
-    .registration-modal-content input[type="text"] {
-        padding: 12px 15px;
-        font-size: 18px;
-        border-radius: 8px;
-        border: 1px solid #dcdcdc;
-        width: calc(100% - 30px); /* 考慮 padding */
-        box-sizing: border-box;
-        margin-bottom: 20px;
-        text-align: center;
-    }
-    .registration-modal-content .button-group {
-        display: flex;
-        justify-content: center;
-        gap: 15px;
-    }
-    .registration-modal-content button {
-        padding: 12px 25px;
-        border-radius: 8px;
-        cursor: pointer;
-        font-size: 16px;
-        font-weight: 600;
-        transition: background-color 0.2s, transform 0.2s;
-        border: none;
-    }
-    .registration-modal-content button.confirm-btn {
-        background-color: #28a745;
-        color: white;
-    }
-    .registration-modal-content button.confirm-btn:hover {
-        background-color: #218838;
-        transform: translateY(-1px);
-    }
-    .registration-modal-content button.cancel-btn {
-        background-color: #6c757d;
-        color: white;
-    }
-    .registration-modal-content button.cancel-btn:hover {
-        background-color: #5a6268;
-        transform: translateY(-1px);
-    }
   </style>
 </head>
 <body>
-  <div id="title">地圖 v4.1.0</div>
+  <div id="title">
+    我的地圖系統
+    <button id="editButton">編輯</button>
+  </div>
 
-  <div id="authSection">
+  <div id="authSection" style="display: none;">
     <div id="loginForm">
-        <h3>用戶登入</h3>
-        <div class="input-group">
-            <input type="email" id="loginEmail" placeholder="Email" required>
-        </div>
-        <div class="input-group">
-            <input type="password" id="loginPassword" placeholder="密碼" required>
-        </div>
-        <button id="emailLoginBtn" class="action-buttons">Email 登入</button>
-        <button id="googleSignInBtn" class="action-buttons">
-            <img src="https://img.icons8.com/color/24/000000/google-logo.png" alt="Google icon">
-            使用 Google 登入
-        </button>
-        <button id="showRegisterFormBtn" class="action-buttons" style="background-color: #17a2b8;">註冊新帳號</button>
-        <p id="loginMessage" style="color: red;"></p>
+      <h3>請登入</h3>
+      <div class="input-group">
+          <input type="email" id="loginEmail" placeholder="Email" required>
+      </div>
+      <div class="input-group">
+          <input type="password" id="loginPassword" placeholder="密碼" required>
+      </div>
+      <button id="emailLoginBtn" class="action-buttons">Email 登入</button>
+      <button id="googleSignInBtn">
+        <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google icon" />
+        使用 Google 登入
+      </button>
+      <button id="showRegisterFormBtn" class="action-buttons" style="background-color: #17a2b8;">註冊新帳號</button>
+      <p id="loginMessage" style="color: red;"></p>
     </div>
 
     <div id="loggedInDashboard" style="display: none;">
-        <h3>歡迎使用</h3>
-        <p id="userEmailDisplay"></p>
-        <p>您的角色: <span id="userRoleDisplay"></span></p>
+      <h3 id="userEmailDisplay" style="display:none;"></h3>
+      <p>您已登入，現在可以管理 KML 圖層。</p>
+      <p>您的角色: <span id="userRoleDisplay"></span></p>
 
-        <div id="kmlControls" style="display: none;">
-            <h4>KML 資料管理</h4>
-            <div id="uploadKmlSectionDashboard">
-                <label for="kmlFileInputDashboard">上傳 KML:</label>
-                <input type="file" id="kmlFileInputDashboard" accept=".kml" style="display: none;" />
-                <span id="selectedKmlFileNameDashboard">未選擇檔案</span>
-                <button id="selectKmlFileBtn" class="action-buttons upload-btn">選擇檔案</button>
-                <button id="uploadKmlBtn" class="action-buttons upload-btn">上傳</button>
-            </div>
-            <div id="deleteKmlSectionDashboard">
-                <label for="kmlLayerSelectDashboard">刪除 KML:</label>
-                <select id="kmlLayerSelectDashboard">
-                    <option value="">-- 選擇要刪除的 KML --</option>
-                </select>
-                <button id="deleteSelectedKmlBtn" class="action-buttons delete-btn">刪除</button>
-            </div>
-        </div>
+      <div id="kmlControls">
+          <h4>KML 資料管理</h4>
+          <div id="uploadKmlSectionDashboard">
+              <label for="hiddenKmlFileInput" style="white-space: nowrap;">上傳 KML:</label>
+              <input type="file" id="hiddenKmlFileInput" accept=".kml" style="display: none;" />
+              <span id="selectedKmlFileNameDashboard" style="flex-grow: 1; text-align: left;">尚未選擇檔案</span>
+              <button id="uploadKmlSubmitBtnDashboard" class="action-buttons upload-btn" disabled>上傳</button>
+          </div>
+          <div id="deleteKmlSectionDashboard">
+              <label for="kmlLayerSelectDashboard" style="white-space: nowrap;">刪除 KML:</label>
+              <select id="kmlLayerSelectDashboard" style="flex-grow: 1;" disabled>
+                  <option value="">-- 請選擇 KML 圖層 --</option>
+              </select>
+              <button id="deleteSelectedKmlBtn" class="action-buttons delete-btn">刪除</button>
+          </div>
+      </div>
 
-        <div id="registrationSettingsSection" style="display: none;">
-            <h4>註冊設定</h4>
-            <button id="generateRegistrationCodeBtn" class="admin-option-button">產生一次性註冊碼</button>
-            <p id="registrationCodeDisplay" style="display: none;"></p>
-            <p id="registrationExpiryDisplay" style="display: none;"></p>
-            <label>
-                <input type="checkbox" id="allowDirectRegistration" disabled> 允許直接註冊 (非一次性)
-            </label>
-        </div>
+      <div id="registrationSettingsSection" style="display: none;">
+          <h4>註冊設定</h4>
+          <button id="generateRegistrationCodeBtn" class="admin-option-button">產生一次性註冊碼</button>
+          <p id="registrationCodeDisplay" style="display: none;"></p>
+          <p id="registrationExpiryDisplay" style="display: none;"></p>
+          <label>
+              <input type="checkbox" id="allowDirectRegistration" disabled> 允許直接註冊 (非一次性)
+          </label>
+      </div>
 
-        <div id="userManagementSection" style="display: none;">
-            <h4>用戶管理</h4>
-            <button id="refreshUsersBtn" class="admin-option-button add-user-dashboard-btn">重新整理用戶列表</button>
-            <div id="userList" style="margin-top: 10px;">
-                </div>
-        </div>
+      <div id="userManagementSection" style="display: none;">
+          <h4>用戶管理</h4>
+          <button id="refreshUsersBtn" class="admin-option-button add-user-dashboard-btn">重新整理用戶列表</button>
+          <div id="userList" style="margin-top: 10px;">
+              </div>
+      </div>
+      
+      <button id="logoutBtn" style="background-color: #f44336; margin-top: 20px;">登出</button>
+    </div>
+  </div>
 
-        <button id="logoutBtn" class="action-buttons delete-btn">登出</button>
+  <div id="controls">
+    <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 15px;">
+        <label for="kmlLayerSelect" style="font-size: 15px; font-weight: 500; white-space: nowrap;">選擇資料庫圖層:</label>
+        <select id="kmlLayerSelect" style="flex-grow: 1;">
+            <option value="">-- 請選擇 KML 圖層 --</option>
+        </select>
+    </div>
+    <div id="searchContainer">
+        <span class="material-symbols-outlined">search</span>
+        <input type="text" id="searchBox" placeholder="搜尋地點..." autocomplete="off" />
     </div>
   </div>
 
   <div id="map"></div>
 
-  <div class="search-container" style="top: 100px; /* 調整以避開 authSection */">
-    <input type="text" id="searchBox" placeholder="搜尋地標..." />
-    <div id="searchResults"></div>
-  </div>
-
-  <div class="nav-buttons-container">
-    </div>
+  <div id="searchResults"></div>
 
   <div id="messageBoxOverlay" class="message-box-overlay">
     <div class="message-box-content">
-        <h3 id="messageBoxTitle"></h3>
-        <p id="messageBoxContent"></p>
-        <button id="messageBoxCloseBtn">關閉</button>
+      <h3 id="messageBoxTitle"></h3>
+      <p id="messageBoxMessage"></p>
+      <button id="messageBoxCloseBtn">確定</button>
     </div>
   </div>
 
-  <div id="registrationCodeModalOverlay" class="registration-modal-overlay">
+  <div id="registrationCodeModalOverlay">
     <div class="registration-modal-content">
-        <h3>輸入註冊碼</h3>
-        <p>請輸入管理員提供的一次性註冊碼。</p>
-        <input type="text" id="registrationCodeInput" placeholder="註冊碼" />
-        <p id="registrationModalMessage" style="color: red; font-size: 14px;"></p>
-        <div class="button-group">
-            <button id="confirmRegistrationCodeBtn" class="confirm-btn">確認</button>
-            <button id="cancelRegistrationCodeBtn" class="cancel-btn">取消</button>
-        </div>
+      <h3>輸入註冊碼</h3>
+      <p>請輸入管理員提供的一次性註冊碼。</p>
+      <input type="text" id="registrationCodeInput" placeholder="註冊碼" />
+      <p id="registrationModalMessage" style="color: red; font-size: 14px;"></p>
+      <div class="button-group">
+          <button id="confirmRegistrationCodeBtn" class="confirm-btn">確認</button>
+          <button id="cancelRegistrationCodeBtn" class="cancel-btn">取消</button>
+      </div>
     </div>
   </div>
 
   <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-storage.js"></script> <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-storage.js"></script>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet-omnivore/0.3.4/leaflet-omnivore.min.js"></script>
   <script src="https://unpkg.com/leaflet.locatecontrol/dist/L.Control.Locate.min.js" charset="utf-8"></script>
   <link rel="stylesheet" href="https://unpkg.com/leaflet.locatecontrol/dist/L.Control.Locate.min.css" />
@@ -726,6 +626,58 @@
   <script src="js/firebase-init.js"></script>
   <script src="js/map-app.js"></script>
   <script src="js/auth.js"></script>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const editButton = document.getElementById('editButton');
+      const authSection = document.getElementById('authSection');
+      const searchBox = document.getElementById('searchBox');
+      const searchResults = document.getElementById('searchResults');
+      const controlsDiv = document.getElementById('controls'); // 獲取 controls div
+
+      // 確保 authSection 初始是隱藏的
+      if (authSection) {
+        authSection.style.display = 'none'; 
+      }
+
+      // 編輯按鈕點擊事件：切換 authSection 的顯示狀態
+      if (editButton && authSection) {
+        editButton.addEventListener('click', () => {
+          if (authSection.style.display === 'flex') { // 使用 flex 佈局
+            authSection.style.display = 'none';
+          } else {
+            authSection.style.display = 'flex';
+          }
+        });
+      } else {
+        console.error('Error: editButton or authSection not found.');
+      }
+
+      // 搜尋功能相關的 JavaScript
+      if (searchBox && searchResults && controlsDiv) {
+        // 從 v4.0.40.txt 複製的搜尋結果定位邏輯
+        // 因為 searchResults 仍然是相對於 #searchContainer 定位的
+        // 所以這裡不需要修改太多，只需要確保 #searchContainer 的定位是 relative
+        // 且其父元素 #controls 是正常的流式佈局。
+        // 這段邏輯通常會在您的 map-app.js 中實現，這裡僅為示範。
+        
+        // 點擊搜尋結果框外部時隱藏搜尋結果
+        document.addEventListener('click', (event) => {
+            if (!searchResults.contains(event.target) && event.target !== searchBox) {
+                searchResults.style.display = 'none';
+            }
+        });
+
+        // 監聽 ESC 鍵以隱藏搜尋結果
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') {
+                searchResults.style.display = 'none';
+                searchBox.value = ''; // 清空搜尋框
+            }
+        });
+      }
+    });
+  </script>
 
 </body>
 </html>
