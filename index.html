@@ -8,8 +8,6 @@
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
-    /* 此處的 CSS 樣式是直接從您提供的 `地圖 v4.0.40.txt` 中【完全複製】而來，
-       並僅針對新增的 `ownerPanel` 元素添加了必要的佈局和視覺樣式，以保持整體一致性。*/
     html, body {
       margin: 0;
       padding: 0;
@@ -27,278 +25,668 @@
       text-align: center;
       padding: 12px;
       font-size: 24px;
-      font-weight: 600;
-      background-color: #4CAF50;
+      font-weight: 700;
+      background: linear-gradient(135deg, #6dd5ed, #2193b0);
       color: white;
-      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-      position: relative; /* For user-info positioning */
-      z-index: 1001; /* Ensure title is above map and other elements */
+      box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+      border-bottom-left-radius: 12px;
+      border-bottom-right-radius: 12px;
+      position: relative;
+    }
+    #editButton {
+      position: absolute;
+      top: 50%;
+      right: 15px;
+      transform: translateY(-50%);
+      background-color: #f0f0f0;
+      color: #333;
+      padding: 8px 15px;
+      border: none;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background-color 0.3s, transform 0.2s, box-shadow 0.2s;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    }
+    #editButton:hover {
+      background-color: #e0e0e0;
+      transform: translateY(-50%) scale(1.03);
+      box-shadow: 0 4px 8px rgba(0,0,0,0.25);
+    }
+    /* 認證面板樣式 */
+    #authSection {
+      background: #fff;
+      padding: 15px 20px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      border-bottom: 1px solid #eee;
+      display: none; /* 初始狀態為隱藏 */
+      flex-direction: column;
+      gap: 15px;
+      position: relative;
+      z-index: 1001;
+    }
+    #authSection h3 {
+      margin: 0;
+      font-size: 22px;
+      color: #333;
+      text-align: center;
+    }
+    #loginForm, #loggedInDashboard {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+    #loggedInDashboard {
+        text-align: center;
+    }
+    #loggedInDashboard p {
+        margin: 0;
+        color: #555;
+    }
+    #userEmailDisplay {
+        font-size: 18px;
+        font-weight: 600;
+        color: #2193b0;
+        margin-bottom: 5px;
+    }
+    #controls {
+      padding: 15px;
+      background: #fff;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      position: relative;
+      z-index: 1000;
+      display: flex;
+    }
+    /* KML 控制項預設是隱藏的，由 JS 控制顯示 */
+    #kmlControls {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    /* 上傳 KML 區塊，預設隱藏 (JS控制) */
+    #uploadKmlSectionDashboard {
+        display: none;
+        flex-direction: row; /* Flex for horizontal layout */
+        align-items: center;
+        gap: 8px;
+    }
+    #uploadKmlSectionDashboard label {
+        font-size: 15px;
+        font-weight: 500;
+        white-space: nowrap;
+        flex-shrink: 0; /* Prevent label from shrinking */
+    }
+    /* 修改後的 selectedKmlFileNameDashboard 樣式 */
+    #selectedKmlFileNameDashboard {
+        flex-grow: 1; /* Allow file name to take available space */
+        font-size: 15px;
+        color: #555;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        /* 新增邊框樣式 */
+        border: 1px solid #dcdcdc;
+        padding: 10px 12px;
+        border-radius: 8px;
+        background-color: #f9f9f9;
+        /* 保持一致的過渡效果 */
+        transition: border-color 0.3s, box-shadow 0.3s;
+        box-sizing: border-box; /* 確保 padding 和 border 不會增加元素總寬度 */
+        height: 40px; /* 與 select 保持一致的高度 */
+        display: flex; /* 讓內容居中 */
+        align-items: center; /* 讓內容垂直居中 */
+    }
+    /* 刪除 KML 區塊，預設隱藏 (JS控制) */
+    #deleteKmlSectionDashboard {
+        display: none;
+        flex-direction: row; /* Flex for horizontal layout */
+        align-items: center;
+        gap: 8px;
+    }
+    #deleteKmlSectionDashboard label {
+        font-size: 15px;
+        font-weight: 500;
+        white-space: nowrap;
+        flex-shrink: 0;
+    }
+
+    #kmlInput, #searchBox, #kmlLayerSelect, #kmlLayerSelectDashboard { /* 新增 #kmlLayerSelectDashboard */
+      padding: 10px 12px;
+      font-size: 15px;
+      border-radius: 8px;
+      border: 1px solid #dcdcdc;
+      transition: border-color 0.3s, box-shadow 0.3s;
+      height: 40px; /* 確保 select 也有相同高度 */
+    }
+    #kmlInput:focus, #searchBox:focus, #kmlLayerSelect:focus, #kmlLayerSelectDashboard:focus { /* 新增 #kmlLayerSelectDashboard */
+      border-color: #4a90e2;
+      box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.2);
+      outline: none;
+    }
+    #searchContainer {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      border: 1px solid #dcdcdc;
+      border-radius: 8px;
+      padding: 0 12px;
+      background-color: #fff;
+      box-shadow: inset 0 1px 3px rgba(0,0,0,0.05);
+    }
+    .material-symbols-outlined {
+      font-variation-settings:
+        'FILL' 0,
+        'wght' 400,
+        'GRAD' 0,
+        'opsz' 24;
+      font-size: 24px;
+      color: #777;
+      flex-shrink: 0;
+      vertical-align: middle;
+    }
+    #searchBox {
+      flex-grow: 1;
+      padding: 10px 0;
+      border: none;
+      outline: none;
+      background: transparent;
+      box-sizing: border-box;
+      height: 44px;
+    }
+    /* 調整 #searchResults 的樣式 */
+    #searchResults {
+      position: fixed; /* 固定定位，使其浮動在頁面內容之上 */
+      max-height: 300px;
+      background: rgba(255, 255, 255, 0.98);
+      overflow-y: auto;
+      border: 1px solid #ddd;
+      border-top: none; /* 移除頂部邊框，與搜尋框視覺連結 */
+      border-bottom-left-radius: 8px;
+      border-bottom-right-radius: 8px;
+      border-top-left-radius: 0; /* 移除頂部左圓角 */
+      border-top-right-radius: 0; /* 移除頂部右圓角 */
+      box-shadow: 0 6px 16px rgba(0,0,0,0.18);
+      font-size: 15px;
+      display: none;
+      z-index: 2000; /* 確保它疊在地圖和 Leaflet 控制項之上 */
+      /* 恢復為三欄佈局 */
+      grid-template-columns: repeat(3, 1fr); /* 這裡改為三欄 */
+      gap: 8px;
+      padding: 10px;
+    }
+    .result-item {
+      padding: 10px 12px;
+      border: 1px solid #e0e0e0;
+      border-radius: 8px;
+      background: #fdfdfd;
+      cursor: pointer;
+      user-select: none;
+      text-align: center;
+      font-weight: 500;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      transition: background-color 0.2s, transform 0.2s;
+    }
+    .result-item:hover {
+      background-color: #e6f0ff;
+      transform: translateY(-2px);
     }
     #map {
       flex-grow: 1;
-      width: 100%;
-      height: 100%; /* Take remaining height */
-      z-index: 1;
+      border-radius: 12px;
+      overflow: hidden;
+      margin: 15px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
     }
-    .leaflet-control-locate a {
-        font-size: 2em !important; /* 使圖標變大 */
+    /* Marker Label Styles */
+    .marker-label {
+      background: none !important;
+      color: rgba(0, 0, 0, 0.88);
+      font-weight: 700;
+      font-size: 26px;
+      text-shadow:
+        -1.5px -1.5px 0 #fff,
+        1.5px -1.5px 0 #fff,
+        -1.5px 1.5px 0 #fff,
+        1.5px 1.5px 0 #fff,
+        0 0 5px rgba(0,0,0,0.1);
+      padding: 0;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      white-space: nowrap;
+      display: block;
     }
-    .leaflet-control-layers-toggle {
-        width: 36px !important;
-        height: 36px !important;
-        line-height: 36px !important;
-        text-align: center;
-        background-position: center center !important; /* 確保圖標居中 */
-    }
-    .search-container {
-      position: absolute;
-      top: 15px;
-      left: 15px;
-      z-index: 1000;
-      display: flex;
-      flex-direction: column;
-      width: 280px;
-      box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-      border-radius: 8px;
-    }
-    #searchBox {
-      padding: 12px 15px;
-      border: 1px solid #ddd;
-      border-radius: 8px;
-      font-size: 16px;
-      outline: none;
-      width: 100%;
-      box-sizing: border-box; /* Include padding in width */
-    }
-    #searchResults {
-      display: none; /* Hidden by default */
-      grid-template-columns: 1fr; /* Single column */
-      background-color: #fff;
-      border: 1px solid #ddd;
-      border-top: none;
-      border-radius: 0 0 8px 8px;
-      max-height: 300px;
-      overflow-y: auto;
-      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-      position: absolute; /* positioned relative to the search-container */
-      z-index: 999; /* below search box */
-      width: 100%; /* same width as search box */
-      box-sizing: border-box;
-    }
-    .result-item {
-      padding: 10px 15px;
-      border-bottom: 1px solid #eee;
-      cursor: pointer;
-      font-size: 15px;
-      white-space: nowrap; /* Prevent text wrapping */
-      overflow: hidden;    /* Hide overflowed text */
-      text-overflow: ellipsis; /* Show ellipsis for overflowed text */
-    }
-    .result-item:last-child {
-      border-bottom: none;
-    }
-    .result-item:hover {
-      background-color: #f0f0f0;
-    }
-    .nav-buttons-container {
-      position: absolute;
-      bottom: 15px;
-      right: 15px;
-      z-index: 1000;
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-    }
-    .nav-button {
-      background-color: #007bff;
-      color: white;
-      border: none;
-      padding: 10px 15px;
-      border-radius: 5px;
-      cursor: pointer;
-      font-size: 16px;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-      transition: background-color 0.3s ease;
-    }
-    .nav-button:hover {
-      background-color: #0056b3;
-    }
-    .nav-button .material-symbols-outlined {
-      font-size: 20px;
-    }
-    .import-export-container {
-      position: absolute;
-      bottom: 15px;
-      left: 15px;
-      z-index: 1000;
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-    }
-    .import-export-button {
-      background-color: #6c757d;
-      color: white;
-      border: none;
-      padding: 10px 15px;
-      border-radius: 5px;
-      cursor: pointer;
-      font-size: 16px;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-      transition: background-color 0.3s ease;
-    }
-    .import-export-button:hover {
-      background-color: #5a6268;
-    }
-    .user-info {
-      position: absolute;
-      top: 10px;
-      right: 10px;
-      background: white;
-      padding: 10px;
-      border-radius: 5px;
-      box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-      z-index: 1000;
-      text-align: right; /* Align content to the right */
-    }
-    .user-info p {
-        margin: 0 0 5px 0;
-        font-size: 14px;
-        color: #555;
-    }
-    .user-info button {
-        padding: 6px 12px;
-        font-size: 14px;
-        border-radius: 4px;
-        cursor: pointer;
-        transition: background-color 0.3s ease;
-        margin-left: 5px; /* Add some space between buttons */
-    }
-    #auth-button {
-        background-color: #007bff;
-        color: white;
+    /* Nav Button Icon Styles */
+    .nav-button-icon {
+        pointer-events: auto;
+        background: none;
         border: none;
-    }
-    #auth-button:hover {
-        background-color: #0056b3;
-    }
-    #logout-button {
-        background-color: #dc3545;
-        color: white;
-        border: none;
-    }
-    #logout-button:hover {
-        background-color: #c82333;
-    }
-    /* ownerPanel 的樣式，根據 v4.0.40 基礎調整 */
-    #ownerPanel {
-      display: none; /* 預設隱藏 */
-      position: absolute;
-      top: 70px; /* 調整位置，不與 user-info 重疊 */
-      right: 10px;
-      background: white;
-      padding: 15px;
-      border-radius: 8px;
-      box-shadow: 0 4px 10px rgba(0,0,0,0.1);
-      z-index: 999;
-      width: 300px;
-      max-height: 80vh;
-      overflow-y: auto;
-      box-sizing: border-box; /* 確保 padding 不增加寬度 */
-    }
-    #ownerPanel h3, #ownerPanel h4 {
-        margin-top: 0;
-        margin-bottom: 10px;
-        color: #333;
-    }
-    #ownerPanel button {
-        width: 100%;
-        padding: 10px;
-        border: none;
-        border-radius: 4px;
-        cursor: pointer;
-        margin-bottom: 8px; /* 按鈕間距 */
-        font-size: 15px;
-    }
-    #ownerPanel button#openRegistrationCodeButton {
-        background-color: #28a745;
-        color: white;
-    }
-    #ownerPanel button#openRegistrationCodeButton:hover {
-        background-color: #218838;
-    }
-    #ownerPanel #registrationCodeStatus {
-        margin-top: 5px;
-        margin-bottom: 15px;
-        font-size: 14px;
-        text-align: center;
-        color: #555;
-    }
-    #ownerPanel button#refreshPendingUsersButton {
-        background-color: #6c757d; /* 灰色 */
-        color: white;
-    }
-    #ownerPanel button#refreshPendingUsersButton:hover {
-        background-color: #5a6268; /* 深灰色 */
-    }
-    #pendingUsersList {
-        margin-top: 10px;
-    }
-    .pending-user-item {
-        border-bottom: 1px solid #eee;
-        padding: 8px 0;
+        box-shadow: none;
+        padding: 0;
         display: flex;
-        justify-content: space-between;
+        justify-content: center;
         align-items: center;
-        font-size: 14px;
+        transform: translate(-50%, -50%);
     }
-    .pending-user-item:last-child {
-        border-bottom: none;
+    /* Actual Nav Button Content (Image) Styles */
+    .nav-button-content img {
+      width: 48px;
+      height: 48px;
+      cursor: pointer;
+      display: block;
+      border-radius: 50%;
+      background-color: rgba(255, 255, 255, 0.8);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+      transition: transform 0.2s ease-in-out;
     }
-    .pending-user-item button.assign-editor-btn {
-        width: auto; /* 讓按鈕根據內容調整寬度 */
-        padding: 5px 10px;
-        background-color: #007bff; /* 藍色 */
-        color: white;
-        font-size: 13px;
-        margin-bottom: 0; /* 覆蓋父級按鈕的 margin-bottom */
+    .nav-button-content img:hover {
+      transform: scale(1.1);
     }
-    .pending-user-item button.assign-editor-btn:hover {
-        background-color: #0056b3; /* 深藍色 */
-    }
-    #messageDisplayOwner {
-        margin-top: 10px;
-        margin-bottom: 10px;
-        font-weight: bold;
-        text-align: center;
-    }
-    .loading-spinner {
-        display: none; /* 預設隱藏 */
-        border: 3px solid #f3f3f3;
-        border-top: 3px solid #3498db;
+    /* Custom Dot Icon Styles */
+    .custom-dot-icon {
+        background-color: #e74c3c;
+        border: 2px solid white;
         border-radius: 50%;
         width: 18px;
         height: 18px;
-        animation: spin 1s linear infinite;
-        margin: 5px auto;
+        pointer-events: auto;
+        display: block;
+        margin-left: -9px;
+        margin-top: -9px;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.2);
     }
-    @keyframes spin {
-        0% { transform: rotate(0deg); }
-        100% { transform: rotate(360deg); }
+    /* Message Box Styles */
+    .message-box-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.5);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 2002; /* Changed from 2000 to 2002 */
+        opacity: 0;
+        visibility: hidden;
+        transition: opacity 0.3s ease, visibility 0.3s ease;
+    }
+    .message-box-overlay.visible {
+        opacity: 1;
+        visibility: visible;
+    }
+    .message-box-content {
+        background: #fff;
+        padding: 30px;
+        border-radius: 12px;
+        box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+        text-align: center;
+        max-width: 400px;
+        width: 90%;
+        transform: translateY(-20px);
+        transition: transform 0.3s ease;
+    }
+    .message-box-overlay.visible .message-box-content {
+        transform: translateY(0);
+    }
+    .message-box-content h3 {
+        margin-top: 0;
+        color: #333;
+        font-size: 22px;
+        margin-bottom: 15px;
+    }
+    .message-box-content p {
+        color: #555;
+        font-size: 16px;
+        line-height: 1.6;
+        margin-bottom: 25px;
+    }
+    .message-box-content button {
+        background-color: #4a90e2;
+        color: white;
+        border: none;
+        padding: 12px 25px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 16px;
+        font-weight: 600;
+        transition: background-color 0.2s, transform 0.2s;
+    }
+    .message-box-content button:hover {
+        background-color: #357ABD;
+        transform: translateY(-1px);
+    }
+    /* Action Buttons */
+    .action-buttons {
+      background-color: #28a745;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 15px;
+      font-weight: 600;
+      transition: background-color 0.2s, transform 0.2s;
+    }
+    .action-buttons:hover {
+      transform: translateY(-1px);
+    }
+    .action-buttons:disabled {
+        background-color: #cccccc;
+        cursor: not-allowed;
+        transform: none;
+        box-shadow: none;
+    }
+    .action-buttons.upload-btn {
+      background-color: #007bff;
+    }
+    .action-buttons.delete-btn {
+      background-color: #dc3545;
+    }
+    /* Admin Option Buttons (for dashboard) */
+    .admin-option-button {
+        background-color: #28a745;
+        color: white;
+        padding: 12px 20px;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 16px;
+        font-weight: 600;
+        transition: background-color 0.2s, transform 0.2s;
+        width: 100%;
+        box-sizing: border-box;
+    }
+    .admin-option-button:hover {
+        background-color: #218838;
+        transform: translateY(-1px);
+    }
+    .admin-option-button.delete-kml-dashboard-btn {
+        background-color: #dc3545;
+    }
+    .admin-option-button.delete-kml-dashboard-btn:hover {
+        background-color: #c82333;
+    }
+    .admin-option-button.add-user-dashboard-btn { /* 這個類別現在可能會用於其他管理按鈕 */
+        background-color: #17a2b8;
+    }
+    .admin-option-button.add-user-dashboard-btn:hover {
+        background-color: #138496;
+    }
+    /* 新增的註冊設定區塊樣式 */
+    #registrationSettingsSection {
+        border-top: 1px solid #eee;
+        padding-top: 15px;
+        margin-top: 15px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+    #registrationSettingsSection h4 {
+        margin-top: 0;
+        margin-bottom: 5px;
+        font-size: 18px;
+        color: #555;
+    }
+    #registrationSettingsSection input[type="datetime-local"] {
+        padding: 10px 12px;
+        font-size: 15px;
+        border-radius: 8px;
+        border: 1px solid #dcdcdc;
+        width: calc(100% - 24px); /* 考慮 padding */
+        box-sizing: border-box;
+    }
+    #registrationSettingsSection input[type="checkbox"] {
+        width: auto;
+        margin-right: 5px;
+    }
+    #registrationSettingsSection label {
+        font-size: 15px;
+        font-weight: 500;
+        display: flex;
+        align-items: center;
+        gap: 5px;
+    }
+    #registrationCodeDisplay {
+        font-size: 18px;
+        font-weight: 600;
+        color: #2193b0;
+        background-color: #e6f0ff;
+        padding: 10px;
+        border-radius: 8px;
+        text-align: center;
+        margin-bottom: 10px;
+        word-break: break-all; /* 避免長代碼溢出 */
+    }
+    #registrationExpiryDisplay { /* 新增樣式 */
+        font-size: 14px;
+        color: #888;
+        text-align: center;
+        margin-top: -8px;
+        margin-bottom: 10px;
+    }
+    /* Style for the custom locate button */
+    .leaflet-control-custom-locate {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        margin-top: 10px; /* Add some margin below the zoom controls */
+        cursor: pointer;
+        /* Inherits other styles like background, border-radius, shadow from leaflet-bar */
+    }
+    .leaflet-control-custom-locate span {
+        color: #4a90e2; /* Blue color for the icon */
+    }
+    .leaflet-control-custom-locate:hover {
+        background-color: #f4f4f4;
+    }
+    /* Style for the user's current location dot marker */
+    .user-location-dot {
+        background-color: #1a73e8; /* Google Blue */
+        border: 2px solid white;
+        border-radius: 50%;
+        width: 16px;
+        height: 16px;
+        box-shadow: 0 0 0 3px rgba(26, 115, 232, 0.4); /* Pulsing effect */
+        animation: pulse 1.5s infinite ease-out;
+    }
+    @keyframes pulse {
+        0% {
+            box-shadow: 0 0 0 0 rgba(26, 115, 232, 0.4);
+        }
+        70% {
+            box-shadow: 0 0 0 10px rgba(26, 115, 232, 0);
+        }
+        100% {
+            box-shadow: 0 0 0 0 rgba(26, 115, 232, 0);
+        }
+    }
+    /* Google Sign-In Button Style */
+    #googleSignInBtn {
+        background-color: #4285F4; /* Google Blue */
+        color: white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        padding: 12px 20px;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 16px;
+        font-weight: 600;
+        transition: background-color 0.2s, transform 0.2s;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    }
+    #googleSignInBtn:hover {
+        background-color: #357ae8;
+        transform: translateY(-1px);
+    }
+    #googleSignInBtn img {
+        width: 24px;
+        height: 24px;
+    }
+    /* Registration Code Modal Styles */
+    #registrationCodeModalOverlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.6);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 2001; /* 比 messageBoxOverlay 高 */
+        opacity: 0;
+        visibility: hidden;
+        transition: opacity 0.3s ease, visibility 0.3s ease;
+    }
+    #registrationCodeModalOverlay.visible {
+        opacity: 1;
+        visibility: visible;
+    }
+    .registration-modal-content {
+        background: #fff;
+        padding: 30px;
+        border-radius: 12px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+        text-align: center;
+        max-width: 450px;
+        width: 90%;
+        transform: translateY(-30px);
+        transition: transform 0.3s ease;
+    }
+    #registrationCodeModalOverlay.visible .registration-modal-content {
+        transform: translateY(0);
+    }
+    .registration-modal-content h3 {
+        margin-top: 0;
+        color: #333;
+        font-size: 24px;
+        margin-bottom: 20px;
+    }
+    .registration-modal-content p {
+        color: #555;
+        font-size: 16px;
+        line-height: 1.6;
+        margin-bottom: 20px;
+    }
+    .registration-modal-content input[type="text"] {
+        padding: 12px 15px;
+        font-size: 18px;
+        border-radius: 8px;
+        border: 1px solid #dcdcdc;
+        width: calc(100% - 30px); /* 考慮 padding */
+        box-sizing: border-box;
+        margin-bottom: 20px;
+        text-align: center;
+    }
+    .registration-modal-content .button-group {
+        display: flex;
+        justify-content: center;
+        gap: 15px;
+    }
+    .registration-modal-content button {
+        padding: 12px 25px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 16px;
+        font-weight: 600;
+        transition: background-color 0.2s, transform 0.2s;
+        border: none;
+    }
+    .registration-modal-content button.confirm-btn {
+        background-color: #28a745;
+        color: white;
+    }
+    .registration-modal-content button.confirm-btn:hover {
+        background-color: #218838;
+        transform: translateY(-1px);
+    }
+    .registration-modal-content button.cancel-btn {
+        background-color: #6c757d;
+        color: white;
+    }
+    .registration-modal-content button.cancel-btn:hover {
+        background-color: #5a6268;
+        transform: translateY(-1px);
     }
   </style>
 </head>
 <body>
   <div id="title">地圖 v4.1.0</div>
 
+  <div id="authSection">
+    <div id="loginForm">
+        <h3>用戶登入</h3>
+        <div class="input-group">
+            <input type="email" id="loginEmail" placeholder="Email" required>
+        </div>
+        <div class="input-group">
+            <input type="password" id="loginPassword" placeholder="密碼" required>
+        </div>
+        <button id="emailLoginBtn" class="action-buttons">Email 登入</button>
+        <button id="googleSignInBtn" class="action-buttons">
+            <img src="https://img.icons8.com/color/24/000000/google-logo.png" alt="Google icon">
+            使用 Google 登入
+        </button>
+        <button id="showRegisterFormBtn" class="action-buttons" style="background-color: #17a2b8;">註冊新帳號</button>
+        <p id="loginMessage" style="color: red;"></p>
+    </div>
+
+    <div id="loggedInDashboard" style="display: none;">
+        <h3>歡迎使用</h3>
+        <p id="userEmailDisplay"></p>
+        <p>您的角色: <span id="userRoleDisplay"></span></p>
+
+        <div id="kmlControls" style="display: none;">
+            <h4>KML 資料管理</h4>
+            <div id="uploadKmlSectionDashboard">
+                <label for="kmlFileInputDashboard">上傳 KML:</label>
+                <input type="file" id="kmlFileInputDashboard" accept=".kml" style="display: none;" />
+                <span id="selectedKmlFileNameDashboard">未選擇檔案</span>
+                <button id="selectKmlFileBtn" class="action-buttons upload-btn">選擇檔案</button>
+                <button id="uploadKmlBtn" class="action-buttons upload-btn">上傳</button>
+            </div>
+            <div id="deleteKmlSectionDashboard">
+                <label for="kmlLayerSelectDashboard">刪除 KML:</label>
+                <select id="kmlLayerSelectDashboard">
+                    <option value="">-- 選擇要刪除的 KML --</option>
+                </select>
+                <button id="deleteSelectedKmlBtn" class="action-buttons delete-btn">刪除</button>
+            </div>
+        </div>
+
+        <div id="registrationSettingsSection" style="display: none;">
+            <h4>註冊設定</h4>
+            <button id="generateRegistrationCodeBtn" class="admin-option-button">產生一次性註冊碼</button>
+            <p id="registrationCodeDisplay" style="display: none;"></p>
+            <p id="registrationExpiryDisplay" style="display: none;"></p>
+            <label>
+                <input type="checkbox" id="allowDirectRegistration" disabled> 允許直接註冊 (非一次性)
+            </label>
+        </div>
+
+        <div id="userManagementSection" style="display: none;">
+            <h4>用戶管理</h4>
+            <button id="refreshUsersBtn" class="admin-option-button add-user-dashboard-btn">重新整理用戶列表</button>
+            <div id="userList" style="margin-top: 10px;">
+                </div>
+        </div>
+
+        <button id="logoutBtn" class="action-buttons delete-btn">登出</button>
+    </div>
+  </div>
+
   <div id="map"></div>
 
-  <div class="search-container">
+  <div class="search-container" style="top: 100px; /* 調整以避開 authSection */">
     <input type="text" id="searchBox" placeholder="搜尋地標..." />
     <div id="searchResults"></div>
   </div>
@@ -306,44 +694,31 @@
   <div class="nav-buttons-container">
     </div>
 
-  <div class="import-export-container">
-    <input type="file" id="kmlInput" accept=".kml" style="display: none;" />
-    <button id="importButton" class="import-export-button">
-      <span class="material-symbols-outlined">upload_file</span> 匯入 KML
-    </button>
-    <button id="exportButton" class="import-export-button">
-      <span class="material-symbols-outlined">download</span> 匯出 KML
-    </button>
-  </div>
-
-  <div class="user-info" id="user-info">
-    <p id="user-status">載入中...</p>
-    <button id="auth-button" style="display: none;"></button>
-    <button id="logout-button" style="display: none;">登出</button>
-  </div>
-
-  <div id="ownerPanel">
-    <h3>Owner 管理面板</h3>
-    <p id="messageDisplayOwner"></p>
-    <div id="loadingSpinnerOwner" class="loading-spinner"></div>
-    
-    <h4>一次性註冊碼管理：</h4>
-    <button id="openRegistrationCodeButton">開啟一次性註冊碼 (30秒)</button>
-    <p id="registrationCodeStatus" style="font-size: 14px; text-align: center; margin-top: 5px; margin-bottom: 15px; color: #555;"></p>
-
-    <h4>待處理用戶權限賦予：</h4>
-    <button id="refreshPendingUsersButton">重新整理待處理用戶</button>
-    <div id="pendingUsersList" style="margin-top: 10px;">
-      <p>沒有待處理的註冊。</p>
+  <div id="messageBoxOverlay" class="message-box-overlay">
+    <div class="message-box-content">
+        <h3 id="messageBoxTitle"></h3>
+        <p id="messageBoxContent"></p>
+        <button id="messageBoxCloseBtn">關閉</button>
     </div>
   </div>
 
+  <div id="registrationCodeModalOverlay" class="registration-modal-overlay">
+    <div class="registration-modal-content">
+        <h3>輸入註冊碼</h3>
+        <p>請輸入管理員提供的一次性註冊碼。</p>
+        <input type="text" id="registrationCodeInput" placeholder="註冊碼" />
+        <p id="registrationModalMessage" style="color: red; font-size: 14px;"></p>
+        <div class="button-group">
+            <button id="confirmRegistrationCodeBtn" class="confirm-btn">確認</button>
+            <button id="cancelRegistrationCodeBtn" class="cancel-btn">取消</button>
+        </div>
+    </div>
+  </div>
 
   <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
-
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-storage.js"></script> <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet-omnivore/0.3.4/leaflet-omnivore.min.js"></script>
   <script src="https://unpkg.com/leaflet.locatecontrol/dist/L.Control.Locate.min.js" charset="utf-8"></script>
   <link rel="stylesheet" href="https://unpkg.com/leaflet.locatecontrol/dist/L.Control.Locate.min.css" />
