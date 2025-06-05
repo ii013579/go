@@ -8,6 +8,8 @@
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
+    /* 此處的 CSS 樣式是直接從您提供的 `地圖 v4.0.40.txt` 中【完全複製】而來，
+       並僅針對新增的 `ownerPanel` 元素添加了必要的佈局和視覺樣式，以保持整體一致性。*/
     html, body {
       margin: 0;
       padding: 0;
@@ -193,6 +195,7 @@
     #logout-button:hover {
         background-color: #c82333;
     }
+    /* ownerPanel 的樣式，根據 v4.0.40 基礎調整 */
     #ownerPanel {
       display: none; /* 預設隱藏 */
       position: absolute;
@@ -237,11 +240,11 @@
         color: #555;
     }
     #ownerPanel button#refreshPendingUsersButton {
-        background-color: #6c757d;
+        background-color: #6c757d; /* 灰色 */
         color: white;
     }
     #ownerPanel button#refreshPendingUsersButton:hover {
-        background-color: #5a6268;
+        background-color: #5a6268; /* 深灰色 */
     }
     #pendingUsersList {
         margin-top: 10px;
@@ -260,13 +263,13 @@
     .pending-user-item button.assign-editor-btn {
         width: auto; /* 讓按鈕根據內容調整寬度 */
         padding: 5px 10px;
-        background-color: #007bff;
+        background-color: #007bff; /* 藍色 */
         color: white;
         font-size: 13px;
         margin-bottom: 0; /* 覆蓋父級按鈕的 margin-bottom */
     }
     .pending-user-item button.assign-editor-btn:hover {
-        background-color: #0056b3;
+        background-color: #0056b3; /* 深藍色 */
     }
     #messageDisplayOwner {
         margin-top: 10px;
@@ -347,6 +350,7 @@
 
   <script src="js/firebase-init.js"></script>
   <script src="js/map-app.js"></script>
+  <script src="js/auth.js"></script>
 
 </body>
 </html>
