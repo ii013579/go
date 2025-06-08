@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>地圖 v4.2.3 (恢復堆疊面板)</title>
+  <title>地圖 v4.2.4 (優化認證與KML讀取)</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -92,17 +92,14 @@
         gap: 10px;
     }
     #loggedInDashboard {
-        text-align: left; /* 調整為靠左對齊 */
+        text-align: center; /* 調整為置中對齊 */
     }
-    #loggedInDashboard p {
-        margin: 0;
-        color: #555;
-    }
-    #userEmailDisplay {
+    #userEmailDisplay { /* Email 顯示樣式 */
         font-size: 18px;
         font-weight: 600;
         color: #2193b0;
         margin-bottom: 5px;
+        text-align: center; /* 確保 Email 自身置中 */
     }
     /* KML 管理區塊內的樣式 */
     #kmlControlsDashboard {
@@ -150,12 +147,23 @@
         flex-direction: column;
         gap: 10px;
     }
+    /* 註冊碼顯示區域的 flex 佈局 */
+    .registration-code-display-group {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap; /* 允許換行在小螢幕上 */
+    }
+    .registration-code-display-group button {
+        flex-shrink: 0; /* 按鈕不縮小 */
+    }
     #registrationCodeDisplay {
         background-color: #e6f0ff;
         padding: 8px;
         border-radius: 5px;
         word-break: break-all;
         text-align: center;
+        flex-grow: 1; /* 讓代碼顯示區塊佔據剩餘空間 */
     }
 
     /* controls 樣式 - 預設顯示 */
@@ -175,9 +183,6 @@
       flex-direction: column;
       gap: 10px;
     }
-
-    /* 上傳 KML 區塊，現在統一在 Dashboard 處理，此處移除其樣式 */
-    /* #uploadKmlSection 相關樣式已移除 */
 
     #kmlInput, #searchBox, #kmlLayerSelect, #kmlLayerSelectDashboard, #registrationCodeInput { /* 統一輸入框樣式 */
       padding: 10px 12px;
@@ -572,7 +577,7 @@
 </head>
 <body>
   <div id="title">
-    我的地圖系統 v4.2.3
+    我的地圖系統 v4.2.4
     <button id="editButton">編輯</button>
   </div>
 
@@ -603,8 +608,7 @@
     </div>
 
     <div id="loggedInDashboard" style="display: none;">
-      <p>歡迎您：<span id="userEmailDisplay"></span></p>
-      <p>您的角色: <span id="userRoleDisplay"></span></p>
+      <h3 id="userEmailDisplay" style="text-align: center; margin-bottom: 10px;"></h3> <!-- Email 置中顯示 -->
 
       <!-- KML 管理區塊 -->
       <div id="kmlControlsDashboard">
@@ -629,12 +633,12 @@
       <!-- 註冊設定區塊 (僅限 owner 顯示) -->
       <div id="registrationSettingsSection" style="display: none;">
           <h4>註冊設定</h4>
-          <button id="generateRegistrationCodeBtn" class="action-buttons" style="background-color: #28a745;">產生一次性註冊碼</button>
-          <p id="registrationCodeDisplay" style="display: none; font-size: 14px; margin-top: 10px; word-break: break-all; text-align: center; background-color: #e6f0ff; padding: 8px; border-radius: 5px;"></p>
+          <div class="registration-code-display-group">
+            <button id="generateRegistrationCodeBtn" class="action-buttons" style="background-color: #28a745;">產生一次性註冊碼</button>
+            <span id="registrationCodeDisplay" style="display: none;"></span> <!-- 註冊碼顯示位置 -->
+          </div>
           <p id="registrationExpiryDisplay" style="display: none; font-size: 12px; color: #888; text-align: center; margin-top: -5px;"></p>
-          <label style="font-size: 14px; margin-top: 5px;">
-              <input type="checkbox" id="allowDirectRegistration" disabled> 允許直接註冊 (非一次性)
-          </label>
+          <!-- 移除 "允許直接註冊 (非一次性)" -->
       </div>
 
       <!-- 用戶管理區塊 (僅限 owner 顯示) -->
@@ -697,8 +701,8 @@
       projectId: "kmldata-d22fb",
       storageBucket: "kmldata-d22fb.firebasestorage.app",
       messagingSenderId: "6673236901",
-      appId: "1:6673236901:web:5aac773cbb512a14b8de4c", // Updated
-      measurementId: "G-TJFH5SXNJX" // Updated
+      appId: "1:6673236901:web:5aac773cbb512a14b8de4c", 
+      measurementId: "G-TJFH5SXNJX" 
     };
 
     // 初始化 Firebase
@@ -845,12 +849,6 @@
                 return;
             }
 
-            // 檢查用戶權限 (Viewer 也能讀取 KML)
-            if (!auth.currentUser) { // 確保有登入用戶
-                showMessage('權限不足', '您沒有權限載入 KML 圖層，請登入。');
-                return;
-            }
-
             // 移除現有 KML 圖層和所有標記
             window.clearAllKmlLayers();
 
@@ -861,9 +859,6 @@
                     showMessage('錯誤', '找不到指定的 KML 圖層資料。');
                     return;
                 }
-                // 在 v4.0.20 中，KML 數據是直接從 Firestore 的 features 子集合中讀取的
-                // 而不是從 Storage URL 讀取。
-                // 這裡的邏輯需要調整，確保是讀取 features 子集合，而不是嘗試獲取 url
                 const kmlData = doc.data(); // 獲取 KML 層本身的元數據
 
                 console.log(`載入 KML Features for layer: ${kmlData.name || kmlId}`);
@@ -970,7 +965,7 @@
         const logoutBtn = document.getElementById('logoutBtn');
         const loginMessage = document.getElementById('loginMessage');
         const userEmailDisplay = document.getElementById('userEmailDisplay');
-        const userRoleDisplay = document.getElementById('userRoleDisplay');
+        const userRoleDisplay = document.getElementById('userRoleDisplay'); // 雖然不再顯示，但可能內部邏輯會用到
 
         const hiddenKmlFileInput = document.getElementById('hiddenKmlFileInput');
         const selectedKmlFileNameDashboard = document.getElementById('selectedKmlFileNameDashboard');
@@ -982,7 +977,7 @@
         const generateRegistrationCodeBtn = document.getElementById('generateRegistrationCodeBtn');
         const registrationCodeDisplay = document.getElementById('registrationCodeDisplay');
         const registrationExpiryDisplay = document.getElementById('registrationExpiryDisplay');
-        const allowDirectRegistration = document.getElementById('allowDirectRegistration');
+        // const allowDirectRegistration = document.getElementById('allowDirectRegistration'); // 已移除
 
         const userManagementSection = document.getElementById('userManagementSection');
         const refreshUsersBtn = document.getElementById('refreshUsersBtn');
@@ -1003,17 +998,9 @@
             const deleteSelectedKmlBtn = document.getElementById('deleteSelectedKmlBtn');
             if (deleteSelectedKmlBtn) deleteSelectedKmlBtn.disabled = true; // 預設禁用刪除按鈕
 
-            if (!auth.currentUser) {
-                console.log("未登入，無法載入 KML 圖層列表。");
-                window.clearAllKmlLayers(); // 清空所有 KML 數據
-                kmlLayerSelect.disabled = true;
-                kmlLayerSelectDashboard.disabled = true;
-                return;
-            }
-            
-            // 只要登入，KML 選擇器就啟用 (Viewer 也能使用)
+            // KML 選擇器始終啟用，無論登入狀態，因為所有人都必須能讀取 KML
             kmlLayerSelect.disabled = false; 
-
+            
             // 只有 owner 或 editor 才能操作 dashboard 上的 KML 選擇器和按鈕
             const canEdit = (window.currentUserRole === 'owner' || window.currentUserRole === 'editor');
             if (kmlLayerSelectDashboard) kmlLayerSelectDashboard.disabled = !canEdit;
@@ -1188,7 +1175,6 @@
                 loginForm.style.display = 'none';
                 loggedInDashboard.style.display = 'block';
                 userEmailDisplay.textContent = user.email;
-                userEmailDisplay.style.display = 'block'; // 顯示 email
 
                 // 獲取用戶角色
                 // 使用 onSnapshot 監聽用戶角色，這樣角色變更時會即時更新 UI
@@ -1196,7 +1182,8 @@
                     if (doc.exists) {
                         const userData = doc.data();
                         window.currentUserRole = userData.role || 'unapproved'; // 新用戶預設為 unapproved
-                        userRoleDisplay.textContent = window.currentUserRole;
+                        // userRoleDisplay.textContent = window.currentUserRole; // 這一行不再顯示
+
                         console.log("用戶角色:", window.currentUserRole);
 
                         // 根據角色禁用/啟用功能
@@ -1204,7 +1191,7 @@
                         const isOwner = (window.currentUserRole === 'owner');
 
                         // KML 選擇器 (主地圖) - 任何登入用戶都可以使用
-                        document.getElementById('kmlLayerSelect').disabled = false;
+                        // document.getElementById('kmlLayerSelect').disabled 已經在上方統一設定為 false
 
                         // Dashboard KML 功能 (僅限 editor 或 owner)
                         uploadKmlSubmitBtnDashboard.disabled = !canEdit;
@@ -1212,9 +1199,9 @@
                         kmlLayerSelectDashboard.disabled = !canEdit;
 
                         // 註冊設定 (Owner Only)
-                        registrationSettingsSection.style.display = isOwner ? 'flex' : 'none'; // changed to flex
+                        registrationSettingsSection.style.display = isOwner ? 'flex' : 'none'; 
                         generateRegistrationCodeBtn.disabled = !isOwner;
-                        allowDirectRegistration.disabled = !isOwner;
+                        // allowDirectRegistration.disabled = !isOwner; // 已移除
 
                         // 用戶管理 (Owner Only)
                         userManagementSection.style.display = isOwner ? 'block' : 'none';
@@ -1228,10 +1215,10 @@
                             db.collection('settings').doc('registration').onSnapshot((regDoc) => {
                                 if (regDoc.exists) {
                                     const regData = regDoc.data();
-                                    allowDirectRegistration.checked = regData.isRegistrationOpen || false;
+                                    // allowDirectRegistration.checked = regData.isRegistrationOpen || false; // 已移除
 
                                     if (regData.oneTimeCode) {
-                                        registrationCodeDisplay.textContent = `一次性註冊碼: ${regData.oneTimeCode}`;
+                                        registrationCodeDisplay.textContent = regData.oneTimeCode; // 直接顯示代碼
                                         registrationCodeDisplay.style.display = 'block';
                                         if (regData.oneTimeCodeExpiry) {
                                             const expiryDate = new Date(regData.oneTimeCodeExpiry.toDate());
@@ -1245,7 +1232,7 @@
                                         registrationExpiryDisplay.style.display = 'none';
                                     }
                                 } else {
-                                    allowDirectRegistration.checked = false;
+                                    // allowDirectRegistration.checked = false; // 已移除
                                     registrationCodeDisplay.style.display = 'none';
                                     registrationExpiryDisplay.style.display = 'none';
                                 }
@@ -1299,59 +1286,45 @@
                 // 檢查用戶是否是第一次登入 (新註冊)
                 const userDoc = await db.collection('users').doc(user.uid).get();
                 if (!userDoc.exists) {
-                    // 新用戶，檢查註冊碼或直接註冊權限
-                    const allowDirectRegDoc = await db.collection('settings').doc('registration').get();
-                    const isDirectRegistrationOpen = allowDirectRegDoc.exists && allowDirectRegDoc.data().isRegistrationOpen;
-
-                    if (isDirectRegistrationOpen) {
-                        // 直接註冊
-                        await db.collection('users').doc(user.uid).set({
-                            email: user.email,
-                            role: 'unapproved', // 新註冊用戶預設為 'unapproved'
-                            createdAt: firebase.firestore.FieldValue.serverTimestamp()
-                        });
-                        showMessage('註冊成功', `歡迎 ${user.email}！您的帳號已成功註冊，正在等待管理員審核。`);
-                    } else {
-                        // 需要註冊碼
-                        await auth.signOut(); // 先登出，因為沒有註冊碼無法完成註冊
-                        window.showRegistrationCodeModal(async (code) => {
-                            if (code) {
-                                try {
-                                    const regDoc = await db.collection('settings').doc('registration').get();
-                                    // 檢查註冊碼是否存在、是否匹配且未過期
-                                    if (!regDoc.exists || regDoc.data().oneTimeCode !== code || new Date() > regDoc.data().oneTimeCodeExpiry.toDate()) {
-                                        showMessage('註冊失敗', '無效或過期的註冊碼。');
-                                        return;
-                                    }
-                                    // 重新登入以完成註冊 (因為上次為了模態框而登出了)
-                                    const reAuthUserCredential = await auth.signInWithPopup(provider);
-                                    const reAuthUser = reAuthUserCredential.user;
-
-                                    await db.collection('users').doc(reAuthUser.uid).set({
-                                        email: reAuthUser.email,
-                                        role: 'unapproved',
-                                        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-                                        registeredWithCode: true,
-                                        registrationCodeUsed: code
-                                    });
-
-                                    // 刪除用過的一次性註冊碼
-                                    await db.collection('settings').doc('registration').update({
-                                        oneTimeCode: firebase.firestore.FieldValue.delete(),
-                                        oneTimeCodeExpiry: firebase.firestore.FieldValue.delete()
-                                    });
-
-                                    showMessage('註冊成功', `歡迎 ${reAuthUser.email}！您的帳號已成功註冊，正在等待管理員審核。`);
-
-                                } catch (error) {
-                                    console.error("使用註冊碼登入/註冊失敗:", error);
-                                    showMessage('註冊失敗', `使用註冊碼登入/註冊時發生錯誤: ${error.message}`);
+                    // 新用戶，僅能透過註冊碼註冊 (因為已移除直接註冊選項)
+                    await auth.signOut(); // 先登出，因為沒有註冊碼無法完成註冊
+                    window.showRegistrationCodeModal(async (code) => {
+                        if (code) {
+                            try {
+                                const regDoc = await db.collection('settings').doc('registration').get();
+                                // 檢查註冊碼是否存在、是否匹配且未過期
+                                if (!regDoc.exists || regDoc.data().oneTimeCode !== code || new Date() > regDoc.data().oneTimeCodeExpiry.toDate()) {
+                                    showMessage('註冊失敗', '無效或過期的註冊碼。');
+                                    return;
                                 }
-                            } else {
-                                showMessage('取消', '您已取消註冊。');
+                                // 重新登入以完成註冊 (因為上次為了模態框而登出了)
+                                const reAuthUserCredential = await auth.signInWithPopup(provider);
+                                const reAuthUser = reAuthUserCredential.user;
+
+                                await db.collection('users').doc(reAuthUser.uid).set({
+                                    email: reAuthUser.email,
+                                    role: 'unapproved',
+                                    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                                    registeredWithCode: true,
+                                    registrationCodeUsed: code
+                                });
+
+                                // 刪除用過的一次性註冊碼
+                                await db.collection('settings').doc('registration').update({
+                                    oneTimeCode: firebase.firestore.FieldValue.delete(),
+                                    oneTimeCodeExpiry: firebase.firestore.FieldValue.delete()
+                                });
+
+                                showMessage('註冊成功', `歡迎 ${reAuthUser.email}！您的帳號已成功註冊，正在等待管理員審核。`);
+
+                            } catch (error) {
+                                console.error("使用註冊碼登入/註冊失敗:", error);
+                                showMessage('註冊失敗', `使用註冊碼登入/註冊時發生錯誤: ${error.message}`);
                             }
-                        });
-                    }
+                        } else {
+                            showMessage('取消', '您已取消註冊。');
+                        }
+                    });
                 } else {
                     // 已存在的用戶，正常登入
                     showMessage('登入成功', `歡迎回來 ${user.email}！`);
@@ -1410,8 +1383,11 @@
                 console.log(`Processing KML file: ${file.name}`);
                 try {
                     const parser = new DOMParser();
-                    const kml = parser.parseFromString(reader.result, 'text/xml');
-                    const geojson = toGeoJSON.kml(kml);
+                    const kmlDoc = parser.parseFromString(reader.result, 'text/xml');
+                    
+                    // 使用 omnivore.kml() 處理 KML，然後提取 GeoJSON features
+                    const tempLayer = omnivore.kml(kmlDoc);
+                    const geojson = tempLayer.toGeoJSON(); // 將 omnivore 載入的圖層轉換為 GeoJSON
                     const parsedFeatures = geojson.features || []; 
 
                     if (parsedFeatures.length === 0) {
@@ -1528,34 +1504,28 @@
                     oneTimeCodeExpiry: firebase.firestore.Timestamp.fromDate(expiryDate)
                 }, { merge: true });
 
-                registrationCodeDisplay.textContent = `一次性註冊碼: ${code}`;
+                registrationCodeDisplay.textContent = code; // 直接顯示代碼
+                registrationCodeDisplay.style.display = 'inline-block'; // 確保顯示為 inline-block
                 registrationExpiryDisplay.textContent = `過期時間: ${expiryDate.toLocaleString()}`;
-                registrationCodeDisplay.style.display = 'block';
                 registrationExpiryDisplay.style.display = 'block';
-                showMessage('成功', '一次性註冊碼已生成並設定為 30 秒後過期！');
+                
+                // 複製到剪貼簿
+                const tempInput = document.createElement('textarea');
+                tempInput.value = code;
+                document.body.appendChild(tempInput);
+                tempInput.select();
+                document.execCommand('copy');
+                document.body.removeChild(tempInput);
+
+                showMessage('成功', `一次性註冊碼已生成並複製到剪貼簿，設定為 30 秒後過期！`);
             } catch (error) {
                 console.error("生成註冊碼時出錯:", error);
                 showMessage('錯誤', `生成註冊碼失敗: ${error.message}`);
             }
         });
 
-        // 事件監聽器：切換直接註冊權限 (Owner Only)
-        allowDirectRegistration.addEventListener('change', async (event) => {
-            if (window.currentUserRole !== 'owner') {
-                showMessage('權限不足', '只有管理員才能修改此設定。');
-                event.target.checked = !event.target.checked; // 恢復原狀態
-                return;
-            }
-            try {
-                await db.collection('settings').doc('registration').set({
-                    isRegistrationOpen: event.target.checked
-                }, { merge: true });
-                showMessage('成功', `直接註冊已${event.target.checked ? '啟用' : '禁用'}。`);
-            } catch (error) {
-                console.error("修改直接註冊設定時出錯:", error);
-                showMessage('錯誤', `修改設定失敗: ${error.message}`);
-            }
-        });
+        // "允許直接註冊"功能已取消，因此相關監聽器也移除
+        // allowDirectRegistration.addEventListener('change', async (event) => { /* ... */ });
 
         // 事件監聽器：重新整理用戶列表 (Owner Only)
         refreshUsersBtn.addEventListener('click', () => {
@@ -1611,9 +1581,6 @@
                 searchResults.innerHTML = ''; // 清空之前的結果
 
                 if (query.length > 0) {
-                    // 根據搜尋框的位置來決定搜尋結果框的位置 (由於 searchResults 是 searchContainer 的子元素，top: 100% 即可)
-                    // 不需要重新計算其絕對位置
-                    
                     let results = [];
                     // 從 window.allKmlFeatures 中篩選結果 
                     if (window.allKmlFeatures && window.allKmlFeatures.length > 0) {
