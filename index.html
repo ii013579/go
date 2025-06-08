@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>地圖 v4.2.6 (KML上傳與讀取修復)</title>
+  <title>地圖 v4.2.7 (KML讀取與上傳優化)</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -576,7 +576,7 @@
 </head>
 <body>
   <div id="title">
-    我的地圖系統 v4.2.6
+    我的地圖系統 v4.2.7
     <button id="editButton">編輯</button>
   </div>
 
@@ -861,8 +861,8 @@
             window.clearAllKmlLayers();
 
             try {
-                // 從 Firestore 獲取 KML 文件的 URL
-                const doc = await db.collection('kmlLayers').doc(kmlId).get(); // 修改 collection name
+                // 從 Firestore 獲取 KML 文件的元數據
+                const doc = await db.collection('kmlLayers').doc(kmlId).get();
                 if (!doc.exists) {
                     showMessage('錯誤', '找不到指定的 KML 圖層資料。');
                     console.error('KML Layer document not found for ID:', kmlId);
@@ -871,23 +871,37 @@
                 const kmlData = doc.data(); // 獲取 KML 層本身的元數據
 
                 console.log(`載入 KML Features for layer: ${kmlData.name || kmlId}`);
-                showMessage('載入中', '正在載入 KML 圖層地標，請稍候...');
+                showMessage('載入中', `正在載入 KML 圖層 "${kmlData.name}" 的地標，請稍候...`);
 
-                const featuresSubCollectionRef = db.collection('kmlLayers').doc(kmlId).collection('features'); // 修改 collection name
+                // 從 kmlLayers/{kmlId}/features 子集合中獲取所有 GeoJSON features
+                const featuresSubCollectionRef = db.collection('kmlLayers').doc(kmlId).collection('features');
                 const querySnapshot = await featuresSubCollectionRef.get();
                 
                 const loadedFeatures = [];
-                querySnapshot.forEach(featureDoc => {
-                    loadedFeatures.push(featureDoc.data());
-                });
+                if (querySnapshot.empty) {
+                    console.log(`KML 圖層 "${kmlData.name}" 的 features 子集合為空。`);
+                } else {
+                    querySnapshot.forEach(featureDoc => {
+                        const feature = featureDoc.data();
+                        // 僅處理 Point 類型的 feature，並進行基本的數據驗證
+                        if (feature.geometry && feature.geometry.type === 'Point' && feature.geometry.coordinates && feature.properties) {
+                            loadedFeatures.push(feature);
+                        } else {
+                            console.warn('Skipping invalid or non-Point feature from Firestore:', feature);
+                        }
+                    });
+                }
 
                 window.allKmlFeatures = loadedFeatures; // 更新全局搜尋數據
                 window.addMarkers(window.allKmlFeatures); // 將地標添加到地圖
 
                 if (window.allKmlFeatures.length > 0) {
+                    // 如果有地標，設定地圖視角以包含所有地標
                     const geoJsonLayer = L.geoJSON({ type: 'FeatureCollection', features: window.allKmlFeatures });
-                    map.fitBounds(geoJsonLayer.getBounds());
-                    showMessage('成功', `KML 圖層 "${kmlData.name}" 載入完成！`);
+                    if (geoJsonLayer.getBounds().isValid()) { // 檢查邊界是否有效，避免空數據導致錯誤
+                        map.fitBounds(geoJsonLayer.getBounds());
+                    }
+                    showMessage('成功', `KML 圖層 "${kmlData.name}" 載入完成，共 ${window.allKmlFeatures.length} 個地標。`);
                 } else {
                     showMessage('成功', `KML 圖層 "${kmlData.name}" 載入完成，但沒有找到地標。`);
                 }
@@ -973,7 +987,6 @@
         const logoutBtn = document.getElementById('logoutBtn');
         const loginMessage = document.getElementById('loginMessage');
         const userEmailDisplay = document.getElementById('userEmailDisplay');
-        // const userRoleDisplay = document.getElementById('userRoleDisplay'); // 雖然不再顯示，但可能內部邏輯會用到
 
         const hiddenKmlFileInput = document.getElementById('hiddenKmlFileInput');
         const selectedKmlFileNameDashboard = document.getElementById('selectedKmlFileNameDashboard');
@@ -1371,13 +1384,18 @@
                     }
 
                     // 將 XML Document 傳遞給 omnivore.kml
-                    const tempLayer = omnivore.kml(kmlDoc); 
-                    const geojson = tempLayer.toGeoJSON(); 
+                    const tempOmnivoreLayer = omnivore.kml(kmlDoc); 
+                    if (!tempOmnivoreLayer) {
+                        throw new Error("Failed to create Omnivore KML layer from parsed XML document.");
+                    }
+                    const geojson = tempOmnivoreLayer.toGeoJSON(); 
                     const parsedFeatures = geojson.features || []; 
 
+                    console.log(`KML file parsed. Found ${parsedFeatures.length} features.`);
+
                     if (parsedFeatures.length === 0) {
-                        showMessage('KML 載入', 'KML 檔案中沒有找到任何地標。');
-                        console.warn("KML file contains no features.");
+                        showMessage('KML 載入', 'KML 檔案中沒有找到任何地標 (Point features)。');
+                        console.warn("KML file contains no usable point features.");
                         return;
                     }
 
