@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>地圖 v4.2.5 (優化 UI 與 KML 讀取修復)</title>
+  <title>地圖 v4.2.6 (KML修復與UI優化)</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -142,7 +142,7 @@
     }
     /* 調整上傳和刪除按鈕寬度 */
     #uploadKmlSubmitBtnDashboard, #deleteSelectedKmlBtn {
-        width: 80px; /* 固定按鈕寬度，可調整 */
+        width: 80px; /* 固定按鈕寬度 */
         flex-shrink: 0; /* 防止按鈕縮小 */
     }
 
@@ -164,6 +164,11 @@
         text-align: center;
         flex-grow: 1; /* 讓代碼顯示區塊佔據剩餘空間 */
     }
+    #registrationCodeDisplay.countdown-active {
+        font-weight: bold;
+        color: #007bff;
+    }
+
 
     /* controls 樣式 - 預設顯示 */
     #controls {
@@ -571,7 +576,7 @@
 </head>
 <body>
   <div id="title">
-    我的地圖系統 v4.2.5
+    我的地圖系統 v4.2.6
     <button id="editButton">編輯</button>
   </div>
 
@@ -600,7 +605,9 @@
     </div>
 
     <div id="loggedInDashboard" style="display: none;">
-      <h3 id="userEmailDisplay" style="text-align: center; margin-bottom: 10px;"></h3> <div id="kmlControlsDashboard">
+      <h3 id="userEmailDisplay" style="text-align: center; margin-bottom: 10px;"></h3> 
+      
+      <div id="kmlControlsDashboard">
           <div id="uploadKmlSectionDashboard">
               <label for="hiddenKmlFileInput" style="white-space: nowrap;">上傳 KML:</label>
               <input type="file" id="hiddenKmlFileInput" accept=".kml" style="display: none;" />
@@ -619,14 +626,15 @@
       <div id="registrationSettingsSection" style="display: none;">
           <div class="registration-code-display-group">
             <button id="generateRegistrationCodeBtn" class="action-buttons" style="background-color: #28a745;">產生一次性註冊碼</button>
-            <span id="registrationCodeDisplay" style="display: none;"></span> </div>
-          <p id="registrationExpiryDisplay" style="display: none; font-size: 12px; color: #888; text-align: center; margin-top: -5px;"></p>
+            <span id="registrationCodeDisplay" style="display: none;"></span> 
           </div>
+          <p id="registrationExpiryDisplay" style="display: none; font-size: 12px; color: #888; text-align: center; margin-top: -5px;"></p>
+      </div>
 
       <div id="userManagementSection" style="display: none; margin-top: 10px;">
           <button id="refreshUsersBtn" class="action-buttons" style="background-color: #17a2b8; margin-bottom: 10px;">重新整理用戶列表</button>
           <div id="userList" style="font-size: 14px;">
-              </div>
+          </div>
       </div>
 
       <button id="logoutBtn" class="action-buttons" style="background-color: #f44336; margin-top: 15px;">登出</button>
@@ -723,7 +731,7 @@
         modalMessage.classList.remove('countdown'); // 移除計時器樣式
         modalOverlay.classList.add('visible'); // 顯示模態框
 
-        let countdown = 30; // 30秒計時
+        let countdown = 60; // 60秒計時 (從 30 秒修改為 60 秒)
         let timerInterval;
 
         const updateTimer = () => {
@@ -822,14 +830,21 @@
             markers.clearLayers(); // 清除現有標記
             navButtons.clearLayers(); // 清除現有導航按鈕
             features.forEach(feature => {
-                if (feature.geometry && feature.geometry.type === 'Point' && feature.geometry.coordinates) {
-                    const [lon, lat] = feature.geometry.coordinates;
-                    const name = feature.properties.name || '未命名地點';
-                    const latlng = L.latLng(lat, lon);
-                    window.createMarkerWithLabel(latlng, name);
-                    window.createNavButton(latlng, name);
+                // 確保 feature.geometry 和 feature.properties 存在
+                if (feature.geometry && feature.geometry.coordinates && feature.properties) {
+                    // 檢查 geometry 類型，只處理 Point
+                    if (feature.geometry.type === 'Point') {
+                        const [lon, lat] = feature.geometry.coordinates;
+                        // 確保 name 屬性存在且為字串
+                        const name = feature.properties.name && typeof feature.properties.name === 'string' ? feature.properties.name : '未命名地點';
+                        const latlng = L.latLng(lat, lon);
+                        window.createMarkerWithLabel(latlng, name);
+                        window.createNavButton(latlng, name);
+                    } else {
+                        console.warn('Skipping non-Point feature:', feature.geometry.type, feature);
+                    }
                 } else {
-                    console.warn('Skipping non-Point feature or feature without coordinates:', feature);
+                    console.warn('Skipping feature without geometry or properties:', feature);
                 }
             });
         };
@@ -978,6 +993,7 @@
         // 全局變數
         window.currentUserRole = null;
         let currentKmlLayers = []; // 用於存儲 KML 圖層的 ID 和名稱
+        let registrationCodeTimer = null; // 用於儲存註冊碼計時器的實例
 
         // 輔助函數：更新 KML 圖層選單
         const updateKmlLayerSelects = async () => {
@@ -1200,7 +1216,6 @@
 
                         if (isOwner) {
                             refreshUserList(); // 重新整理用戶列表
-                            // KML 上傳/刪除按鈕會由 updateKmlLayerSelects 處理 enabled/disabled 狀態
                         }
 
                         // 如果用戶是 'unapproved' 狀態，顯示提示訊息
@@ -1344,11 +1359,8 @@
             reader.onload = async () => {
                 console.log(`Processing KML file: ${file.name}`);
                 try {
-                    const parser = new DOMParser();
-                    const kmlDoc = parser.parseFromString(reader.result, 'text/xml');
-                    
-                    // 使用 omnivore.kml() 處理 KML，然後提取 GeoJSON features
-                    const tempLayer = omnivore.kml(kmlDoc);
+                    // 直接將 reader.result (原始 KML 文字內容) 傳給 omnivore.kml()
+                    const tempLayer = omnivore.kml(reader.result); 
                     const geojson = tempLayer.toGeoJSON(); // 將 omnivore 載入的圖層轉換為 GeoJSON
                     const parsedFeatures = geojson.features || []; 
 
@@ -1456,20 +1468,41 @@
                 return;
             }
 
+            // 清除現有計時器（如果存在）
+            if (registrationCodeTimer) {
+                clearInterval(registrationCodeTimer);
+                registrationCodeTimer = null;
+            }
+
             try {
                 const code = Math.random().toString(36).substring(2, 10).toUpperCase();
+                let countdownSeconds = 60; // 註冊碼有效時間 60 秒
                 const expiryDate = new Date();
-                expiryDate.setSeconds(expiryDate.getSeconds() + 30); // 設定為 30 秒後過期
+                expiryDate.setSeconds(expiryDate.getSeconds() + countdownSeconds); 
 
                 await db.collection('settings').doc('registration').set({
                     oneTimeCode: code,
                     oneTimeCodeExpiry: firebase.firestore.Timestamp.fromDate(expiryDate)
                 }, { merge: true });
 
-                registrationCodeDisplay.textContent = code; // 直接顯示代碼
-                registrationCodeDisplay.style.display = 'inline-block'; // 確保顯示為 inline-block
-                registrationExpiryDisplay.textContent = `過期時間: ${expiryDate.toLocaleString()}`;
-                registrationExpiryDisplay.style.display = 'block';
+                registrationCodeDisplay.textContent = `${code} (剩餘 ${countdownSeconds} 秒)`; 
+                registrationCodeDisplay.style.display = 'inline-block'; 
+                registrationCodeDisplay.classList.add('countdown-active'); // 添加樣式
+                registrationExpiryDisplay.style.display = 'none'; // 過期時間不再單獨顯示
+
+                // 啟動新的計時器
+                registrationCodeTimer = setInterval(() => {
+                    countdownSeconds--;
+                    if (countdownSeconds >= 0) {
+                        registrationCodeDisplay.textContent = `${code} (剩餘 ${countdownSeconds} 秒)`;
+                    } else {
+                        clearInterval(registrationCodeTimer);
+                        registrationCodeTimer = null;
+                        registrationCodeDisplay.textContent = '註冊碼已過期';
+                        registrationCodeDisplay.classList.remove('countdown-active');
+                        showMessage('註冊碼過期', '一次性註冊碼已過期，請重新生成。');
+                    }
+                }, 1000);
                 
                 // 複製到剪貼簿
                 const tempInput = document.createElement('textarea');
@@ -1479,15 +1512,12 @@
                 document.execCommand('copy');
                 document.body.removeChild(tempInput);
 
-                showMessage('成功', `一次性註冊碼已生成並複製到剪貼簿，設定為 30 秒後過期！`);
+                showMessage('成功', `一次性註冊碼已生成並複製到剪貼簿，設定為 ${countdownSeconds} 秒後過期！`);
             } catch (error) {
                 console.error("生成註冊碼時出錯:", error);
                 showMessage('錯誤', `生成註冊碼失敗: ${error.message}`);
             }
         });
-
-        // "允許直接註冊"功能已取消，因此相關監聽器也移除
-        // allowDirectRegistration.addEventListener('change', async (event) => { /* ... */ });
 
         // 事件監聽器：重新整理用戶列表 (Owner Only)
         refreshUsersBtn.addEventListener('click', () => {
@@ -1547,7 +1577,7 @@
                     // 從 window.allKmlFeatures 中篩選結果 
                     if (window.allKmlFeatures && window.allKmlFeatures.length > 0) {
                         results = window.allKmlFeatures.filter(feature =>
-                            feature.properties && feature.properties.name && feature.properties.name.toLowerCase().includes(query)
+                            feature.properties && feature.properties.name && typeof feature.properties.name === 'string' && feature.properties.name.toLowerCase().includes(query)
                         );
                     }
 
@@ -1578,7 +1608,7 @@
                                 });
                                 searchResults.appendChild(item);
                             } else {
-                                console.warn("Skipping non-Point feature or feature without coordinates:", f);
+                                console.warn("Skipping non-Point feature or feature without coordinates for search:", f);
                             }
                         });
                     }
