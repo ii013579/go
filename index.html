@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>地圖 v4.2.7 (KML路徑修正)</title>
+  <title>地圖 v4.2.8 (KML樣式與權限修正)</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -323,7 +323,8 @@
     .nav-button-content img:hover {
       transform: scale(1.1);
     }
-    /* Custom Dot Icon Styles */
+    /* Custom Dot Icon Styles (不再使用，但保留以防萬一) */
+    /*
     .custom-dot-icon {
         background-color: #e74c3c;
         border: 2px solid white;
@@ -336,6 +337,7 @@
         margin-top: -9px;
         box-shadow: 0 2px 5px rgba(0,0,0,0.2);
     }
+    */
 
     /* Message Box Styles (統一為 modal 樣式) */
     .message-box-overlay, .registration-modal-overlay {
@@ -576,7 +578,7 @@
 </head>
 <body>
   <div id="title">
-    我的地圖系統 v4.2.7
+    我的地圖系統 v4.2.8
     <button id="editButton">編輯</button>
   </div>
 
@@ -746,7 +748,7 @@
             if (countdown <= 0) {
                 clearInterval(timerInterval);
                 modalOverlay.classList.remove('visible'); // 隱藏模態框
-                showMessage('註冊碼過期', '註冊碼輸入時間已過，請重新註冊或聯繫管理員。');
+                // 移除註冊碼過期提示，依據使用者需求
                 cleanupListeners();
                 callback(null); // 表示時間到，自動取消
             }
@@ -844,6 +846,7 @@
                         // 確保 name 屬性存在且為字串
                         const name = feature.properties.name && typeof feature.properties.name === 'string' ? feature.properties.name : '未命名地點';
                         const latlng = L.latLng(lat, lon);
+                        // 使用 Leaflet 預設 Marker 圖標
                         window.createMarkerWithLabel(latlng, name);
                         window.createNavButton(latlng, name);
                     } else {
@@ -870,14 +873,15 @@
                 // 從 Firestore 獲取 KML 文件的元數據 (修正路徑)
                 const doc = await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('kmlLayers').doc(kmlId).get();
                 if (!doc.exists) {
-                    showMessage('錯誤', '找不到指定的 KML 圖層資料。');
                     console.error('KML Layer document not found for ID:', kmlId);
+                    showMessage('錯誤', '找不到指定的 KML 圖層資料。'); // 保留錯誤提示
                     return;
                 }
                 const kmlData = doc.data(); // 獲取 KML 層本身的元數據
 
                 console.log(`載入 KML Features for layer: ${kmlData.name || kmlId}`);
-                showMessage('載入中', `正在載入 KML 圖層 "${kmlData.name}" 的地標，請稍候...`);
+                // 移除載入中提示
+                // showMessage('載入中', `正在載入 KML 圖層 "${kmlData.name}" 的地標，請稍候...`);
 
                 // 從 kmlLayers/{kmlId}/features 子集合中獲取所有 GeoJSON features (修正路徑)
                 const featuresSubCollectionRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('kmlLayers').doc(kmlId).collection('features');
@@ -892,6 +896,7 @@
                         // 僅處理 Point 類型的 feature，並進行基本的數據驗證
                         if (feature.geometry && feature.geometry.type === 'Point' && feature.geometry.coordinates && feature.properties) {
                             loadedFeatures.push(feature);
+                            // console.log('Loaded feature:', feature); // 用於調試 GeoJSON 格式
                         } else {
                             console.warn('Skipping invalid or non-Point feature from Firestore:', feature);
                         }
@@ -902,14 +907,16 @@
                 window.addMarkers(window.allKmlFeatures); // 將地標添加到地圖
 
                 if (window.allKmlFeatures.length > 0) {
-                    // 如果有地標，設定地圖視角以包含所有地標
-                    const geoJsonLayer = L.geoJSON({ type: 'FeatureCollection', features: window.allKmlFeatures });
-                    if (geoJsonLayer.getBounds().isValid()) { // 檢查邊界是否有效，避免空數據導致錯誤
-                        map.fitBounds(geoJsonLayer.getBounds());
+                    // 如果有地標，設定地圖視角以包含所有地標，使用 markers.getBounds()
+                    if (markers.getLayers().length > 0 && markers.getBounds().isValid()) {
+                        map.fitBounds(markers.getBounds());
+                    } else {
+                        console.warn("Markers exist, but their bounds are not valid for fitting map view.");
                     }
-                    showMessage('成功', `KML 圖層 "${kmlData.name}" 載入完成，共 ${window.allKmlFeatures.length} 個地標。`);
+                    // 移除載入完成提示
+                    // showMessage('成功', `KML 圖層 "${kmlData.name}" 載入完成，共 ${window.allKmlFeatures.length} 個地標。`);
                 } else {
-                    showMessage('成功', `KML 圖層 "${kmlData.name}" 載入完成，但沒有找到地標。`);
+                    console.log(`KML 圖層 "${kmlData.name}" 載入完成，但沒有找到地標。`);
                 }
 
             } catch (error) {
@@ -930,19 +937,15 @@
             console.log("所有 KML 圖層、標記和導航按鈕已清除。");
         };
 
-        // 全局函數：創建帶有標籤的標記
+        // 全局函數：創建帶有標籤的標記 (使用 Leaflet 預設 Marker 圖標)
         window.createMarkerWithLabel = function(latlng, labelText) {
-            const customIcon = L.divIcon({
-                className: 'custom-dot-icon', // 使用自定義圓點樣式
-                iconSize: [18, 18],
-                iconAnchor: [9, 9]
-            });
+            // 使用 Leaflet 預設的 Marker 圖標，沒有自定義圖標類別
+            const marker = L.marker(latlng).addTo(markers); // 添加到 markers FeatureGroup
 
-            const marker = L.marker(latlng, { icon: customIcon }).addTo(markers); // 添加到 markers FeatureGroup
             marker.bindTooltip(labelText, {
-                permanent: true,
+                permanent: true, // 永久顯示
                 direction: 'bottom',
-                className: 'marker-label', // 使用自定義標籤樣式
+                className: 'marker-label', // 使用自定義標籤樣式 (例如文字顏色、陰影等)
                 offset: [0, 10]
             }).openTooltip();
             return marker;
@@ -1288,14 +1291,37 @@
                         if (code) {
                             try {
                                 const regDoc = await db.collection('settings').doc('registration').get();
-                                // 檢查註冊碼是否存在、是否匹配且未過期
-                                if (!regDoc.exists || regDoc.data().oneTimeCode !== code || new Date() > regDoc.data().oneTimeCodeExpiry.toDate()) {
-                                    showMessage('註冊失敗', '無效或過期的註冊碼。');
+                                console.log("註冊嘗試: 用戶輸入的註冊碼:", code);
+                                if (regDoc.exists) {
+                                    console.log("Firestore 註冊設定數據:", regDoc.data());
+                                    const storedCode = regDoc.data().oneTimeCode;
+                                    const expiryTime = regDoc.data().oneTimeCodeExpiry ? regDoc.data().oneTimeCodeExpiry.toDate() : null;
+                                    const currentTime = new Date();
+                                    console.log(`儲存的註冊碼: ${storedCode}, 過期時間: ${expiryTime}, 目前時間: ${currentTime}`);
+                                    console.log(`註冊碼是否匹配: ${storedCode === code}, 是否過期: ${expiryTime && currentTime > expiryTime}`);
+
+
+                                    if (!storedCode || storedCode !== code || (expiryTime && currentTime > expiryTime)) {
+                                        showMessage('註冊失敗', '無效或過期的註冊碼。');
+                                        console.error(`註冊失敗: 註冊碼不匹配或已過期。`);
+                                        return;
+                                    }
+                                } else {
+                                    showMessage('註冊失敗', '註冊系統未啟用或無效的註冊碼。請聯繫管理員。');
+                                    console.error("settings/registration 文檔不存在。");
                                     return;
                                 }
                                 // 重新登入以完成註冊 (因為上次為了模態框而登出了)
                                 const reAuthUserCredential = await auth.signInWithPopup(provider);
                                 const reAuthUser = reAuthUserCredential.user;
+
+                                console.log("嘗試創建新用戶文檔:", {
+                                    uid: reAuthUser.uid,
+                                    email: reAuthUser.email,
+                                    role: 'unapproved',
+                                    registeredWithCode: true,
+                                    registrationCodeUsed: code
+                                });
 
                                 await db.collection('users').doc(reAuthUser.uid).set({
                                     email: reAuthUser.email,
@@ -1304,18 +1330,24 @@
                                     registeredWithCode: true,
                                     registrationCodeUsed: code
                                 });
+                                console.log("新用戶文檔創建成功。");
 
                                 // 刪除用過的一次性註冊碼
                                 await db.collection('settings').doc('registration').update({
                                     oneTimeCode: firebase.firestore.FieldValue.delete(),
                                     oneTimeCodeExpiry: firebase.firestore.FieldValue.delete()
                                 });
+                                console.log("一次性註冊碼已刪除。");
 
                                 showMessage('註冊成功', `歡迎 ${reAuthUser.email}！您的帳號已成功註冊，正在等待管理員審核。`);
 
                             } catch (error) {
                                 console.error("使用註冊碼登入/註冊失敗:", error);
-                                showMessage('註冊失敗', `使用註冊碼登入/註冊時發生錯誤: ${error.message}`);
+                                // 更詳細的錯誤輸出
+                                if (error.code) {
+                                    console.error(`Firebase Error Code: ${error.code}`);
+                                }
+                                showMessage('註冊失敗', `使用註冊碼登入/註冊時發生錯誤: ${error.message} (請檢查安全規則)`);
                             }
                         } else {
                             showMessage('取消', '您已取消註冊。');
@@ -1539,11 +1571,11 @@
                         registrationCodeTimer = null;
                         registrationCodeDisplay.textContent = '註冊碼已過期';
                         registrationCodeDisplay.classList.remove('countdown-active');
-                        showMessage('註冊碼過期', '一次性註冊碼已過期，請重新生成。');
+                        // 移除註冊碼到期提示，依據使用者需求
                     }
                 }, 1000);
                 
-                // 複製到剪貼簿
+                // 複製到剪貼簿 (在生成後立即複製)
                 const tempInput = document.createElement('textarea');
                 tempInput.value = code;
                 document.body.appendChild(tempInput);
