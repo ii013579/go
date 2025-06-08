@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>地圖 v4.2.6 (KML修復與UI優化)</title>
+  <title>地圖 v4.2.6 (KML上傳與讀取修復)</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -197,7 +197,7 @@
       width: calc(100% - 24px); /* 讓輸入框佔滿父容器寬度 */
       box-sizing: border-box;
     }
-    #kmlInput:focus, #searchBox:focus, #kmlLayerSelect:focus, #kmlLayerSelectDashboard:focus, #registrationCodeInput:focus {
+    #kmlInput:focus, #searchBox:focus, #kmlLayerSelect:focus, #kmlLayerSelectDashboard:focus {
       border-color: #4a90e2;
       box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.2);
       outline: none;
@@ -1359,9 +1359,20 @@
             reader.onload = async () => {
                 console.log(`Processing KML file: ${file.name}`);
                 try {
-                    // 直接將 reader.result (原始 KML 文字內容) 傳給 omnivore.kml()
-                    const tempLayer = omnivore.kml(reader.result); 
-                    const geojson = tempLayer.toGeoJSON(); // 將 omnivore 載入的圖層轉換為 GeoJSON
+                    const kmlString = reader.result;
+                    // 使用 DOMParser 將 KML 字符串解析為 XML Document
+                    const parser = new DOMParser();
+                    const kmlDoc = parser.parseFromString(kmlString, 'text/xml');
+
+                    // 檢查解析錯誤
+                    if (kmlDoc.getElementsByTagName('parsererror').length > 0) {
+                        const errorText = kmlDoc.getElementsByTagName('parsererror')[0].textContent;
+                        throw new Error(`KML XML parsing error: ${errorText}. Please ensure your KML file is valid XML.`);
+                    }
+
+                    // 將 XML Document 傳遞給 omnivore.kml
+                    const tempLayer = omnivore.kml(kmlDoc); 
+                    const geojson = tempLayer.toGeoJSON(); 
                     const parsedFeatures = geojson.features || []; 
 
                     if (parsedFeatures.length === 0) {
@@ -1384,12 +1395,15 @@
                     let addedCount = 0;
                     console.log(`Starting batch write for ${parsedFeatures.length} features.`);
                     for (const f of parsedFeatures) {
+                        // 僅儲存 Point 類型的地標
                         if (f.geometry && f.properties && f.geometry.type === 'Point') {
                             batch.set(featuresSubCollectionRef.doc(), { // 自動生成 ID
                                 geometry: f.geometry,
                                 properties: f.properties
                             });
                             addedCount++;
+                        } else {
+                            console.warn("Skipping non-Point feature during upload:", f.geometry ? f.geometry.type : 'No Geometry', f);
                         }
                     }
                     await batch.commit();
