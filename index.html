@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>地圖 v4.2.7 (KML讀取與上傳優化)</title>
+  <title>地圖 v4.2.7 (KML路徑修正)</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -697,6 +697,12 @@
     const db = firebase.firestore();
     const storage = firebase.storage();
 
+    // 根據 Canvas 環境提供的 __app_id 或是 Firebase 配置中的 projectId 來確定 appId
+    // 這對於構建 artifacts 集合路徑至關重要
+    const appId = typeof __app_id !== 'undefined' ? __app_id : firebaseConfig.projectId;
+    console.log("Using App ID for Firestore path:", appId);
+
+
     // 定義 showMessage 函數以便全局使用
     window.showMessage = function(title, message, callback) {
         const messageBoxOverlay = document.getElementById('messageBoxOverlay');
@@ -825,7 +831,7 @@
         markers.addTo(map);
         navButtons.addTo(map);
 
-        // 全局函數：添加標記到地圖 (修復圖層讀不到的問題)
+        // 全局函數：添加標記到地圖
         window.addMarkers = function(features) {
             markers.clearLayers(); // 清除現有標記
             navButtons.clearLayers(); // 清除現有導航按鈕
@@ -861,8 +867,8 @@
             window.clearAllKmlLayers();
 
             try {
-                // 從 Firestore 獲取 KML 文件的元數據
-                const doc = await db.collection('kmlLayers').doc(kmlId).get();
+                // 從 Firestore 獲取 KML 文件的元數據 (修正路徑)
+                const doc = await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('kmlLayers').doc(kmlId).get();
                 if (!doc.exists) {
                     showMessage('錯誤', '找不到指定的 KML 圖層資料。');
                     console.error('KML Layer document not found for ID:', kmlId);
@@ -873,8 +879,8 @@
                 console.log(`載入 KML Features for layer: ${kmlData.name || kmlId}`);
                 showMessage('載入中', `正在載入 KML 圖層 "${kmlData.name}" 的地標，請稍候...`);
 
-                // 從 kmlLayers/{kmlId}/features 子集合中獲取所有 GeoJSON features
-                const featuresSubCollectionRef = db.collection('kmlLayers').doc(kmlId).collection('features');
+                // 從 kmlLayers/{kmlId}/features 子集合中獲取所有 GeoJSON features (修正路徑)
+                const featuresSubCollectionRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('kmlLayers').doc(kmlId).collection('features');
                 const querySnapshot = await featuresSubCollectionRef.get();
                 
                 const loadedFeatures = [];
@@ -924,7 +930,7 @@
             console.log("所有 KML 圖層、標記和導航按鈕已清除。");
         };
 
-        // 全局函數：創建帶有標籤的標記 (與 v4.2.2 相同，確保圖片路徑)
+        // 全局函數：創建帶有標籤的標記
         window.createMarkerWithLabel = function(latlng, labelText) {
             const customIcon = L.divIcon({
                 className: 'custom-dot-icon', // 使用自定義圓點樣式
@@ -942,7 +948,7 @@
             return marker;
         };
 
-        // 全局函數：創建導航按鈕 (與 v4.2.2 相同，確保圖片路徑)
+        // 全局函數：創建導航按鈕
         window.createNavButton = function(latlng, name) {
             const navIcon = L.divIcon({
                 className: 'nav-button-icon', // 容器樣式
@@ -1029,8 +1035,8 @@
 
 
             try {
-                // 修改 collection name
-                const kmlRef = db.collection(`kmlLayers`); // 正確的 Firestore 集合路徑
+                // 修改 collection name (修正路徑)
+                const kmlRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('kmlLayers');
                 const snapshot = await kmlRef.get();
                 currentKmlLayers = []; // 清空現有列表
 
@@ -1399,8 +1405,8 @@
                         return;
                     }
 
-                    // 使用新的 Firestore 集合路徑
-                    const kmlLayersCollectionRef = db.collection('kmlLayers');
+                    // 使用新的 Firestore 集合路徑 (修正路徑)
+                    const kmlLayersCollectionRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('kmlLayers');
                     const kmlLayerDocRef = await kmlLayersCollectionRef.add({
                         name: fileName,
                         uploadTime: firebase.firestore.FieldValue.serverTimestamp(),
@@ -1408,6 +1414,7 @@
                         uploadedByRole: window.currentUserRole // 記錄上傳者角色
                     });
 
+                    // features 子集合路徑 (修正路徑)
                     const featuresSubCollectionRef = kmlLayersCollectionRef.doc(kmlLayerDocRef.id).collection('features');
                     const batch = db.batch();
                     let addedCount = 0;
@@ -1458,8 +1465,8 @@
             }
 
             try {
-                // 修改 collection name
-                const kmlLayerDocRef = db.collection('kmlLayers').doc(kmlIdToDelete);
+                // 修改 collection name (修正路徑)
+                const kmlLayerDocRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('kmlLayers').doc(kmlIdToDelete);
                 const kmlDoc = await kmlLayerDocRef.get();
                 if (!kmlDoc.exists) {
                     showMessage('錯誤', '找不到該 KML 圖層。');
@@ -1468,7 +1475,7 @@
                 const kmlData = kmlDoc.data();
                 const fileName = kmlData.name;
 
-                // 刪除子集合中的所有地標
+                // 刪除子集合中的所有地標 (路徑已修正)
                 const featuresSubCollectionRef = kmlLayerDocRef.collection('features');
                 const featuresSnapshot = await featuresSubCollectionRef.get();
                 const batch = db.batch();
@@ -1480,7 +1487,7 @@
                 await batch.commit();
                 console.log(`Deleted ${deletedFeaturesCount} features from subcollection.`);
 
-                // 然後刪除主 KML 圖層文檔
+                // 然後刪除主 KML 圖層文檔 (路徑已修正)
                 await kmlLayerDocRef.delete();
                 console.log(`Deleted parent KML layer document: ${kmlIdToDelete}`);
                 
@@ -1563,7 +1570,7 @@
 
 
     // ====================================================================================
-    // 4. 主要 UI 互動邏輯 (恢復 v4.0.20 的行為)
+    // 4. 主要 UI 互動邏輯
     // ====================================================================================
 
     document.addEventListener('DOMContentLoaded', () => {
