@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>地圖 v4.2.4 (優化認證與KML讀取)</title>
+  <title>地圖 v4.2.5 (優化 UI 與 KML 讀取修復)</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -102,14 +102,15 @@
         text-align: center; /* 確保 Email 自身置中 */
     }
     /* KML 管理區塊內的樣式 */
-    #kmlControlsDashboard {
+    #kmlControlsDashboard, #registrationSettingsSection, #userManagementSection {
         border-top: 1px solid #eee;
         padding-top: 10px;
         margin-top: 10px;
-        display: flex;
+        display: flex; /* 確保其內部元素在有內容時能正確顯示 */
         flex-direction: column;
         gap: 10px;
     }
+    /* 調整上傳和刪除按鈕佈局 */
     #uploadKmlSectionDashboard, #deleteKmlSectionDashboard {
         display: flex;
         flex-direction: row;
@@ -139,14 +140,12 @@
         display: flex;
         align-items: center;
     }
-    #registrationSettingsSection, #userManagementSection {
-        border-top: 1px solid #eee;
-        padding-top: 10px;
-        margin-top: 10px;
-        display: flex; /* 確保其內部元素在有內容時能正確顯示 */
-        flex-direction: column;
-        gap: 10px;
+    /* 調整上傳和刪除按鈕寬度 */
+    #uploadKmlSubmitBtnDashboard, #deleteSelectedKmlBtn {
+        width: 80px; /* 固定按鈕寬度，可調整 */
+        flex-shrink: 0; /* 防止按鈕縮小 */
     }
+
     /* 註冊碼顯示區域的 flex 佈局 */
     .registration-code-display-group {
         display: flex;
@@ -548,11 +547,6 @@
     .user-list-item select, .user-list-item button {
         margin-left: 5px;
     }
-    .user-role-select {
-        padding: 5px;
-        border-radius: 5px;
-        border: 1px solid #ddd;
-    }
     .user-list-table {
         width: 100%;
         border-collapse: collapse;
@@ -577,11 +571,10 @@
 </head>
 <body>
   <div id="title">
-    我的地圖系統 v4.2.4
+    我的地圖系統 v4.2.5
     <button id="editButton">編輯</button>
   </div>
 
-  <!-- controls - KML 圖層選擇器和搜尋框，預設顯示 -->
   <div id="controls">
     <div style="display: flex; gap: 10px; align-items: center;">
         <label for="kmlLayerSelect" style="font-size: 15px; font-weight: 500; white-space: nowrap;">選擇資料庫圖層:</label>
@@ -596,7 +589,6 @@
     </div>
   </div>
 
-  <!-- authSection - 登入/管理面板，預設隱藏 -->
   <div id="authSection">
     <div id="loginForm">
       <h3>請登入</h3>
@@ -608,19 +600,13 @@
     </div>
 
     <div id="loggedInDashboard" style="display: none;">
-      <h3 id="userEmailDisplay" style="text-align: center; margin-bottom: 10px;"></h3> <!-- Email 置中顯示 -->
-
-      <!-- KML 管理區塊 -->
-      <div id="kmlControlsDashboard">
-          <h4>KML 資料管理</h4>
-          <!-- 上傳 KML -->
+      <h3 id="userEmailDisplay" style="text-align: center; margin-bottom: 10px;"></h3> <div id="kmlControlsDashboard">
           <div id="uploadKmlSectionDashboard">
               <label for="hiddenKmlFileInput" style="white-space: nowrap;">上傳 KML:</label>
               <input type="file" id="hiddenKmlFileInput" accept=".kml" style="display: none;" />
               <span id="selectedKmlFileNameDashboard" style="flex-grow: 1; text-align: left;">尚未選擇檔案</span>
               <button id="uploadKmlSubmitBtnDashboard" class="action-buttons upload-btn" disabled>上傳</button>
           </div>
-          <!-- 刪除 KML -->
           <div id="deleteKmlSectionDashboard">
               <label for="kmlLayerSelectDashboard" style="white-space: nowrap;">刪除 KML:</label>
               <select id="kmlLayerSelectDashboard" style="flex-grow: 1;" disabled>
@@ -630,24 +616,17 @@
           </div>
       </div>
 
-      <!-- 註冊設定區塊 (僅限 owner 顯示) -->
       <div id="registrationSettingsSection" style="display: none;">
-          <h4>註冊設定</h4>
           <div class="registration-code-display-group">
             <button id="generateRegistrationCodeBtn" class="action-buttons" style="background-color: #28a745;">產生一次性註冊碼</button>
-            <span id="registrationCodeDisplay" style="display: none;"></span> <!-- 註冊碼顯示位置 -->
-          </div>
+            <span id="registrationCodeDisplay" style="display: none;"></span> </div>
           <p id="registrationExpiryDisplay" style="display: none; font-size: 12px; color: #888; text-align: center; margin-top: -5px;"></p>
-          <!-- 移除 "允許直接註冊 (非一次性)" -->
-      </div>
+          </div>
 
-      <!-- 用戶管理區塊 (僅限 owner 顯示) -->
       <div id="userManagementSection" style="display: none; margin-top: 10px;">
-          <h4>用戶管理</h4>
           <button id="refreshUsersBtn" class="action-buttons" style="background-color: #17a2b8; margin-bottom: 10px;">重新整理用戶列表</button>
           <div id="userList" style="font-size: 14px;">
-              <!-- 用戶列表會動態載入到這裡 -->
-          </div>
+              </div>
       </div>
 
       <button id="logoutBtn" class="action-buttons" style="background-color: #f44336; margin-top: 15px;">登出</button>
@@ -656,7 +635,6 @@
 
   <div id="map"></div>
 
-  <!-- 這些是真正的浮動視窗，維持它們的浮動樣式 -->
   <div id="messageBoxOverlay" class="message-box-overlay">
     <div class="message-box-content">
       <h3 id="messageBoxTitle"></h3>
@@ -677,13 +655,11 @@
     </div>
   </div>
 
-  <!-- Firebase SDKs -->
   <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-storage.js"></script>
 
-  <!-- Leaflet and other libraries -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet-omnivore/0.3.4/leaflet-omnivore.min.js"></script>
   <script src="https://unpkg.com/leaflet.locatecontrol/dist/L.Control.Locate.min.js" charset="utf-8"></script>
@@ -841,6 +817,23 @@
         markers.addTo(map);
         navButtons.addTo(map);
 
+        // 全局函數：添加標記到地圖 (修復圖層讀不到的問題)
+        window.addMarkers = function(features) {
+            markers.clearLayers(); // 清除現有標記
+            navButtons.clearLayers(); // 清除現有導航按鈕
+            features.forEach(feature => {
+                if (feature.geometry && feature.geometry.type === 'Point' && feature.geometry.coordinates) {
+                    const [lon, lat] = feature.geometry.coordinates;
+                    const name = feature.properties.name || '未命名地點';
+                    const latlng = L.latLng(lat, lon);
+                    window.createMarkerWithLabel(latlng, name);
+                    window.createNavButton(latlng, name);
+                } else {
+                    console.warn('Skipping non-Point feature or feature without coordinates:', feature);
+                }
+            });
+        };
+
         // 全局函數：載入 KML 圖層
         window.loadKmlLayerFromFirestore = async function(kmlId) {
             if (!kmlId) {
@@ -857,6 +850,7 @@
                 const doc = await db.collection('kmlLayers').doc(kmlId).get(); // 修改 collection name
                 if (!doc.exists) {
                     showMessage('錯誤', '找不到指定的 KML 圖層資料。');
+                    console.error('KML Layer document not found for ID:', kmlId);
                     return;
                 }
                 const kmlData = doc.data(); // 獲取 KML 層本身的元數據
@@ -873,7 +867,7 @@
                 });
 
                 window.allKmlFeatures = loadedFeatures; // 更新全局搜尋數據
-                addMarkers(window.allKmlFeatures); // 將地標添加到地圖
+                window.addMarkers(window.allKmlFeatures); // 將地標添加到地圖
 
                 if (window.allKmlFeatures.length > 0) {
                     const geoJsonLayer = L.geoJSON({ type: 'FeatureCollection', features: window.allKmlFeatures });
@@ -923,7 +917,6 @@
         window.createNavButton = function(latlng, name) {
             const navIcon = L.divIcon({
                 className: 'nav-button-icon', // 容器樣式
-                // 使用您提供的圖片路徑 "https://i0.wp.com/canadasafetycouncil.org/wp-content/uploads/2018/08/offroad.png"
                 html: `<div class="nav-button-content"><img src="image_ac684c.jpg" alt="導航" title="導航到 ${name}"></div>`,
                 iconSize: [48, 48], // 圖標大小
                 iconAnchor: [24, 24] // 圖標中心點
@@ -933,7 +926,7 @@
 
             // 為導航按鈕添加點擊事件
             navMarker.on('click', () => {
-                const googleMapsUrl = `http://maps.google.com/maps?daddr=${latlng.lat},${latlng.lng}`;
+                const googleMapsUrl = `http://maps.google.com/maps?daddr=${latlng.lat},${latlng.lng}`; // 更正為 daddr 以導航到
                 window.open(googleMapsUrl, '_blank');
             });
             return navMarker;
@@ -965,7 +958,7 @@
         const logoutBtn = document.getElementById('logoutBtn');
         const loginMessage = document.getElementById('loginMessage');
         const userEmailDisplay = document.getElementById('userEmailDisplay');
-        const userRoleDisplay = document.getElementById('userRoleDisplay'); // 雖然不再顯示，但可能內部邏輯會用到
+        // const userRoleDisplay = document.getElementById('userRoleDisplay'); // 雖然不再顯示，但可能內部邏輯會用到
 
         const hiddenKmlFileInput = document.getElementById('hiddenKmlFileInput');
         const selectedKmlFileNameDashboard = document.getElementById('selectedKmlFileNameDashboard');
@@ -977,7 +970,6 @@
         const generateRegistrationCodeBtn = document.getElementById('generateRegistrationCodeBtn');
         const registrationCodeDisplay = document.getElementById('registrationCodeDisplay');
         const registrationExpiryDisplay = document.getElementById('registrationExpiryDisplay');
-        // const allowDirectRegistration = document.getElementById('allowDirectRegistration'); // 已移除
 
         const userManagementSection = document.getElementById('userManagementSection');
         const refreshUsersBtn = document.getElementById('refreshUsersBtn');
@@ -1175,6 +1167,7 @@
                 loginForm.style.display = 'none';
                 loggedInDashboard.style.display = 'block';
                 userEmailDisplay.textContent = user.email;
+                userEmailDisplay.style.display = 'block'; // 確保顯示 email
 
                 // 獲取用戶角色
                 // 使用 onSnapshot 監聽用戶角色，這樣角色變更時會即時更新 UI
@@ -1182,16 +1175,12 @@
                     if (doc.exists) {
                         const userData = doc.data();
                         window.currentUserRole = userData.role || 'unapproved'; // 新用戶預設為 unapproved
-                        // userRoleDisplay.textContent = window.currentUserRole; // 這一行不再顯示
 
                         console.log("用戶角色:", window.currentUserRole);
 
                         // 根據角色禁用/啟用功能
                         const canEdit = (window.currentUserRole === 'owner' || window.currentUserRole === 'editor');
                         const isOwner = (window.currentUserRole === 'owner');
-
-                        // KML 選擇器 (主地圖) - 任何登入用戶都可以使用
-                        // document.getElementById('kmlLayerSelect').disabled 已經在上方統一設定為 false
 
                         // Dashboard KML 功能 (僅限 editor 或 owner)
                         uploadKmlSubmitBtnDashboard.disabled = !canEdit;
@@ -1201,7 +1190,8 @@
                         // 註冊設定 (Owner Only)
                         registrationSettingsSection.style.display = isOwner ? 'flex' : 'none'; 
                         generateRegistrationCodeBtn.disabled = !isOwner;
-                        // allowDirectRegistration.disabled = !isOwner; // 已移除
+                        registrationCodeDisplay.style.display = 'none'; // 預設隱藏，點擊才顯示
+                        registrationExpiryDisplay.style.display = 'none'; // 預設隱藏
 
                         // 用戶管理 (Owner Only)
                         userManagementSection.style.display = isOwner ? 'block' : 'none';
@@ -1210,34 +1200,7 @@
 
                         if (isOwner) {
                             refreshUserList(); // 重新整理用戶列表
-
-                            // 獲取註冊設定
-                            db.collection('settings').doc('registration').onSnapshot((regDoc) => {
-                                if (regDoc.exists) {
-                                    const regData = regDoc.data();
-                                    // allowDirectRegistration.checked = regData.isRegistrationOpen || false; // 已移除
-
-                                    if (regData.oneTimeCode) {
-                                        registrationCodeDisplay.textContent = regData.oneTimeCode; // 直接顯示代碼
-                                        registrationCodeDisplay.style.display = 'block';
-                                        if (regData.oneTimeCodeExpiry) {
-                                            const expiryDate = new Date(regData.oneTimeCodeExpiry.toDate());
-                                            registrationExpiryDisplay.textContent = `過期時間: ${expiryDate.toLocaleString()}`;
-                                            registrationExpiryDisplay.style.display = 'block';
-                                        } else {
-                                            registrationExpiryDisplay.style.display = 'none';
-                                        }
-                                    } else {
-                                        registrationCodeDisplay.style.display = 'none';
-                                        registrationExpiryDisplay.style.display = 'none';
-                                    }
-                                } else {
-                                    // allowDirectRegistration.checked = false; // 已移除
-                                    registrationCodeDisplay.style.display = 'none';
-                                    registrationExpiryDisplay.style.display = 'none';
-                                }
-                            });
-
+                            // KML 上傳/刪除按鈕會由 updateKmlLayerSelects 處理 enabled/disabled 狀態
                         }
 
                         // 如果用戶是 'unapproved' 狀態，顯示提示訊息
@@ -1270,9 +1233,8 @@
                 loggedInDashboard.style.display = 'none';
                 userEmailDisplay.textContent = '';
                 userEmailDisplay.style.display = 'none';
-                userRoleDisplay.textContent = '';
                 window.currentUserRole = null;
-                updateKmlLayerSelects(); // 清空 KML 選單
+                updateKmlLayerSelects(); // 更新 KML 選單 (它會自動處理權限)
             }
         });
 
