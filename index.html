@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>地圖 v4.2.11 (註冊權限錯誤修正)</title>
+  <title>地圖 v4.2.12 (KML刪除細化, 註冊碼優化, 角色管理改進)</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -139,6 +139,11 @@
         height: 36px;
         display: flex;
         align-items: center;
+        cursor: pointer; /* 讓它看起來可點擊 */
+    }
+    #selectedKmlFileNameDashboard:hover {
+        border-color: #4a90e2; /* 懸停時邊框變色 */
+        box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.1); /* 懸停時增加陰影 */
     }
     /* 調整上傳和刪除按鈕寬度 */
     #uploadKmlSubmitBtnDashboard, #deleteSelectedKmlBtn {
@@ -163,12 +168,15 @@
         word-break: break-all;
         text-align: center;
         flex-grow: 1; /* 讓代碼顯示區塊佔據剩餘空間 */
+        user-select: text; /* 允許選擇文字 */
     }
-    #registrationCodeDisplay.countdown-active {
+    #registrationCodeCountdown { /* 新增的倒數計時顯示 */
         font-weight: bold;
         color: #007bff;
+        white-space: nowrap; /* 不換行 */
+        min-width: 80px; /* 最小寬度，避免閃爍 */
+        text-align: right;
     }
-
 
     /* controls 樣式 - 預設顯示 */
     #controls {
@@ -551,8 +559,34 @@
         font-size: 14px;
         color: #555;
     }
-    .user-list-item select, .user-list-item button {
+    .user-list-item .user-role-select { /* 角色選擇器樣式 */
         margin-left: 5px;
+        padding: 6px 8px;
+        border-radius: 6px;
+        border: 1px solid #dcdcdc;
+        font-size: 14px;
+        flex-shrink: 0;
+    }
+    .user-list-item .change-role-btn { /* 變更按鈕樣式 */
+        padding: 6px 10px;
+        font-size: 14px;
+        margin-left: 8px;
+        width: auto; /* 不強制佔滿寬度 */
+        flex-shrink: 0;
+        background-color: #007bff; /* 藍色 */
+        color: white;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: background-color 0.2s, transform 0.2s;
+    }
+    .user-list-item .change-role-btn:hover {
+        background-color: #0056b3;
+        transform: translateY(-1px);
+    }
+    .user-list-item .change-role-btn:disabled {
+        background-color: #cccccc;
+        cursor: not-allowed;
     }
     .user-list-table {
         width: 100%;
@@ -578,7 +612,7 @@
 </head>
 <body>
   <div id="title">
-    我的地圖系統 v4.2.11
+    我的地圖系統 v4.2.12
     <button id="editButton">編輯</button>
   </div>
 
@@ -629,6 +663,7 @@
           <div class="registration-code-display-group">
             <button id="generateRegistrationCodeBtn" class="action-buttons" style="background-color: #28a745;">產生一次性註冊碼</button>
             <span id="registrationCodeDisplay" style="display: none;"></span> 
+            <span id="registrationCodeCountdown" style="display: none;"></span>
           </div>
           <p id="registrationExpiryDisplay" style="display: none; font-size: 12px; color: #888; text-align: center; margin-top: -5px;"></p>
       </div>
@@ -832,7 +867,7 @@
         markers.addTo(map);
         navButtons.addTo(map);
 
-        // 全局函數：添加標記到地圖 (根據用戶提供的 snippet 更新)
+        // 全局函數：添加標記到地圖
         window.addMarkers = function(featuresToDisplay) {
             markers.clearLayers(); // 清除現有標記
             // navButtons.clearLayers(); // 不在這裡清除導航按鈕，因為點擊地標時會清除
@@ -954,7 +989,7 @@
             console.log("所有 KML 圖層、標記和導航按鈕已清除。");
         };
 
-        // 全局函數：創建導航按鈕 (根據用戶提供的 snippet 更新)
+        // 全局函數：創建導航按鈕
         window.createNavButton = function(latlng, name) {
             // 清除現有的導航按鈕，確保每次只顯示一個
             navButtons.clearLayers();
@@ -1023,7 +1058,8 @@
         const registrationSettingsSection = document.getElementById('registrationSettingsSection');
         const generateRegistrationCodeBtn = document.getElementById('generateRegistrationCodeBtn');
         const registrationCodeDisplay = document.getElementById('registrationCodeDisplay');
-        const registrationExpiryDisplay = document.getElementById('registrationExpiryDisplay');
+        const registrationCodeCountdown = document.getElementById('registrationCodeCountdown'); // 新增
+        const registrationExpiryDisplay = document.getElementById('registrationExpiryDisplay'); // 繼續保留，雖然現在內容會被 countdown 取代
 
         const userManagementSection = document.getElementById('userManagementSection');
         const refreshUsersBtn = document.getElementById('refreshUsersBtn');
@@ -1033,6 +1069,17 @@
         window.currentUserRole = null;
         let currentKmlLayers = []; // 用於存儲 KML 圖層的 ID 和名稱
         let registrationCodeTimer = null; // 用於儲存註冊碼計時器的實例
+
+        // 輔助函數：將角色英文轉換為中文
+        const getRoleDisplayName = (role) => {
+            switch (role) {
+                case 'unapproved': return '未審核';
+                case 'user': return '一般用戶';
+                case 'editor': return '編輯者';
+                case 'owner': return '擁有者';
+                default: return role;
+            }
+        };
 
         // 輔助函數：更新 KML 圖層選單
         const updateKmlLayerSelects = async () => {
@@ -1057,7 +1104,16 @@
             try {
                 // 修改 collection name (修正路徑)
                 const kmlRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('kmlLayers');
-                const snapshot = await kmlRef.get();
+                let snapshot;
+
+                if (window.currentUserRole === 'editor' && auth.currentUser && auth.currentUser.email) {
+                    // 對於編輯者，只顯示他們自己上傳的 KMLs
+                    snapshot = await kmlRef.where('uploadedBy', '==', auth.currentUser.email).get();
+                } else {
+                    // 對於擁有者或未登入用戶，顯示所有 KMLs
+                    snapshot = await kmlRef.get();
+                }
+
                 currentKmlLayers = []; // 清空現有列表
 
                 if (snapshot.empty) {
@@ -1084,7 +1140,8 @@
 
                 if (currentKmlLayers.length > 0) {
                     if (canEdit && deleteSelectedKmlBtn) {
-                        deleteSelectedKmlBtn.disabled = false; // 只有編輯器和擁有者才能刪除
+                        // 只有 editor 或 owner 且有 KML 可刪除時才啟用刪除按鈕
+                        deleteSelectedKmlBtn.disabled = false; 
                     }
                 }
 
@@ -1145,13 +1202,14 @@
                         <td>${user.email || 'N/A'}</td>
                         <td>
                             <select data-uid="${uid}" class="user-role-select">
-                                <option value="unapproved" ${user.role === 'unapproved' ? 'selected' : ''}>Unapproved</option>
-                                <option value="user" ${user.role === 'user' ? 'selected' : ''}>User</option>
-                                <option value="editor" ${user.role === 'editor' ? 'selected' : ''}>Editor</option>
-                                <option value="owner" ${user.role === 'owner' ? 'selected' : ''} ${window.currentUserRole !== 'owner' ? 'disabled' : ''}>Owner</option>
+                                <option value="unapproved" ${user.role === 'unapproved' ? 'selected' : ''}>${getRoleDisplayName('unapproved')}</option>
+                                <option value="user" ${user.role === 'user' ? 'selected' : ''}>${getRoleDisplayName('user')}</option>
+                                <option value="editor" ${user.role === 'editor' ? 'selected' : ''}>${getRoleDisplayName('editor')}</option>
+                                <option value="owner" ${user.role === 'owner' ? 'selected' : ''} ${window.currentUserRole !== 'owner' ? 'disabled' : ''}>${getRoleDisplayName('owner')}</option>
                             </select>
                         </td>
                         <td>
+                            <button class="change-role-btn" data-uid="${uid}" disabled>變更</button>
                             <button class="delete-user-btn action-buttons delete-btn" data-uid="${uid}" style="padding: 6px 10px; font-size: 14px;">刪除</button>
                         </td>
                     `;
@@ -1163,29 +1221,33 @@
 
                 // 為角色選擇器添加事件監聽器
                 userListDiv.querySelectorAll('.user-role-select').forEach(select => {
-                    select.addEventListener('change', async (event) => {
+                    select.dataset.originalValue = select.value; // 保存原始值
+                    const changeButton = select.closest('td').querySelector('.change-role-btn');
+                    
+                    select.addEventListener('change', (event) => {
+                        // 角色變更時啟用 "變更" 按鈕
+                        changeButton.disabled = (event.target.value === select.dataset.originalValue);
+                    });
+
+                    changeButton.addEventListener('click', async (event) => {
                         const uidToUpdate = event.target.dataset.uid;
-                        const newRole = event.target.value;
+                        const newRole = select.value;
                         if (newRole === 'owner' && !confirm('確定要將此用戶設定為 Owner 嗎？Owner 擁有最高權限。')) {
-                            // 如果取消，將選擇器恢復為原值
-                            event.target.value = event.target.dataset.originalValue;
                             return;
                         }
 
                         try {
                             await db.collection('users').doc(uidToUpdate).update({ role: newRole });
-                            showMessage('成功', `用戶 ${uidToUpdate} 的角色已更新為 ${newRole}。`);
-                            // 更新成功後，也要更新原始值
-                            event.target.dataset.originalValue = newRole;
+                            showMessage('成功', `用戶 ${uidToUpdate} 的角色已更新為 ${getRoleDisplayName(newRole)}。`);
+                            select.dataset.originalValue = newRole; // 更新原始值
+                            changeButton.disabled = true; // 變更成功後禁用按鈕
                         } catch (error) {
                             console.error("更新用戶角色時出錯:", error);
                             showMessage('錯誤', `更新用戶角色失敗: ${error.message}`);
-                            // 失敗時將選擇器恢復為原值
-                            event.target.value = event.target.dataset.originalValue;
+                            select.value = select.dataset.originalValue; // 失敗時恢復原值
+                            changeButton.disabled = true; // 失敗時也禁用按鈕
                         }
                     });
-                    // 保存原始值
-                    select.dataset.originalValue = select.value;
                 });
 
                 // 為刪除按鈕添加事件監聽器
@@ -1245,7 +1307,8 @@
                         // 註冊設定 (Owner Only)
                         registrationSettingsSection.style.display = isOwner ? 'flex' : 'none'; 
                         generateRegistrationCodeBtn.disabled = !isOwner;
-                        registrationCodeDisplay.style.display = 'none'; // 預設隱藏，點擊才顯示
+                        registrationCodeDisplay.style.display = 'none'; // 預設隱藏
+                        registrationCodeCountdown.style.display = 'none'; // 預設隱藏
                         registrationExpiryDisplay.style.display = 'none'; // 預設隱藏
 
                         // 用戶管理 (Owner Only)
@@ -1348,16 +1411,6 @@
                                 });
                                 console.log("新用戶文檔創建成功。");
 
-                                // ***************************************************************
-                                // 移除此處刪除一次性註冊碼的程式碼，因為新用戶沒有權限執行此操作
-                                // ***************************************************************
-                                // await db.collection('settings').doc('registration').update({
-                                //     oneTimeCode: firebase.firestore.FieldValue.delete(),
-                                //     oneTimeCodeExpiry: firebase.firestore.FieldValue.delete()
-                                // });
-                                // console.log("一次性註冊碼已刪除。");
-                                // ***************************************************************
-
                                 showMessage('註冊成功', `歡迎 ${reAuthUser.email}！您的帳號已成功註冊，正在等待管理員審核。`);
 
                             } catch (error) {
@@ -1411,6 +1464,12 @@
                 uploadKmlSubmitBtnDashboard.disabled = true;
             }
         });
+
+        // 點擊 "尚未選擇檔案" 對話框也能選取檔案
+        selectedKmlFileNameDashboard.addEventListener('click', () => {
+            hiddenKmlFileInput.click();
+        });
+
 
         // 實際執行上傳 KML 的函數 (由 hiddenKmlFileInput 選擇檔案後觸發)
         uploadKmlSubmitBtnDashboard.addEventListener('click', async () => {
@@ -1575,22 +1634,22 @@
                     oneTimeCodeExpiry: firebase.firestore.Timestamp.fromDate(expiryDate)
                 }, { merge: true });
 
-                registrationCodeDisplay.textContent = `${code} (剩餘 ${countdownSeconds} 秒)`; 
+                registrationCodeDisplay.textContent = code; // 只顯示註冊碼
+                registrationCodeCountdown.textContent = ` (剩餘 ${countdownSeconds} 秒)`; // 顯示倒數計時
                 registrationCodeDisplay.style.display = 'inline-block'; 
-                registrationCodeDisplay.classList.add('countdown-active'); // 添加樣式
-                registrationExpiryDisplay.style.display = 'none'; // 過期時間不再單獨顯示
+                registrationCodeCountdown.style.display = 'inline-block';
+                registrationExpiryDisplay.style.display = 'none'; // 隱藏原有的過期時間提示
 
                 // 啟動新的計時器
                 registrationCodeTimer = setInterval(() => {
                     countdownSeconds--;
                     if (countdownSeconds >= 0) {
-                        registrationCodeDisplay.textContent = `${code} (剩餘 ${countdownSeconds} 秒)`;
+                        registrationCodeCountdown.textContent = ` (剩餘 ${countdownSeconds} 秒)`;
                     } else {
                         clearInterval(registrationCodeTimer);
                         registrationCodeTimer = null;
                         registrationCodeDisplay.textContent = '註冊碼已過期';
-                        registrationCodeDisplay.classList.remove('countdown-active');
-                        // 移除註冊碼到期提示
+                        registrationCodeCountdown.style.display = 'none'; // 隱藏倒數計時
                     }
                 }, 1000);
                 
