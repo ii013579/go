@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>地圖 v4.2.13 (重新整理用戶列表錯誤修正)</title>
+  <title>地圖 v4.2.14 (新增暱稱, 優化使用者管理與註冊碼顯示)</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -196,7 +196,7 @@
       gap: 10px;
     }
 
-    #kmlInput, #searchBox, #kmlLayerSelect, #kmlLayerSelectDashboard, #registrationCodeInput { /* 統一輸入框樣式 */
+    #kmlInput, #searchBox, #kmlLayerSelect, #kmlLayerSelectDashboard, #registrationCodeInput, #nicknameInput { /* 統一輸入框樣式，新增暱稱輸入框 */
       padding: 10px 12px;
       font-size: 15px;
       border-radius: 8px;
@@ -205,7 +205,7 @@
       width: calc(100% - 24px); /* 讓輸入框佔滿父容器寬度 */
       box-sizing: border-box;
     }
-    #kmlInput:focus, #searchBox:focus, #kmlLayerSelect:focus, #kmlLayerSelectDashboard:focus {
+    #kmlInput:focus, #searchBox:focus, #kmlLayerSelect:focus, #kmlLayerSelectDashboard:focus, #registrationCodeInput:focus, #nicknameInput:focus {
       border-color: #4a90e2;
       box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.2);
       outline: none;
@@ -597,10 +597,25 @@
         border: 1px solid #eee;
         padding: 8px;
         text-align: left;
+        white-space: nowrap; /* 確保單元格內容不換行 */
+        overflow: hidden;
+        text-overflow: ellipsis;
     }
     .user-list-table th {
         background-color: #f5f5f5;
         font-weight: 600;
+    }
+    .user-list-table td:nth-child(1) { /* Email 欄位 */
+        max-width: 150px; /* 或您需要的一個固定寬度 */
+    }
+    .user-list-table td:nth-child(2) { /* 暱稱欄位 */
+        max-width: 100px;
+    }
+    .user-list-table td:nth-child(3) { /* 角色欄位 */
+        width: 100px; /* 固定寬度給下拉選單 */
+    }
+    .user-list-table td:nth-child(4) { /* 動作欄位 */
+        width: 160px; /* 容納兩個按鈕 */
     }
     /* Registration Code Modal Timer */
     #registrationModalMessage.countdown {
@@ -612,7 +627,7 @@
 </head>
 <body>
   <div id="title">
-    我的地圖系統 v4.2.13
+    我的地圖系統 v4.2.14
     <button id="editButton">編輯</button>
   </div>
 
@@ -669,7 +684,7 @@
       </div>
 
       <div id="userManagementSection" style="display: none; margin-top: 10px;">
-          <button id="refreshUsersBtn" class="action-buttons" style="background-color: #17a2b8; margin-bottom: 10px;">重新整理用戶列表</button>
+          <button id="refreshUsersBtn" class="action-buttons" style="background-color: #17a2b8; margin-bottom: 10px;">使用者管理</button>
           <div id="userList" style="font-size: 14px;">
           </div>
       </div>
@@ -693,6 +708,7 @@
       <h3>輸入註冊碼</h3>
       <p id="registrationModalMessage">請輸入管理員提供的一次性註冊碼。</p>
       <input type="text" id="registrationCodeInput" placeholder="註冊碼" />
+      <input type="text" id="nicknameInput" placeholder="您的暱稱" /> <!-- 新增暱稱輸入框 -->
       <div class="button-group" style="display: flex; justify-content: center; gap: 15px;">
           <button id="confirmRegistrationCodeBtn" class="action-buttons" style="background-color: #28a745;">確認</button>
           <button id="cancelRegistrationCodeBtn" class="action-buttons" style="background-color: #6c757d;">取消</button>
@@ -765,16 +781,18 @@
     window.showRegistrationCodeModal = function(callback) {
         const modalOverlay = document.getElementById('registrationCodeModalOverlay');
         const registrationCodeInput = document.getElementById('registrationCodeInput');
+        const nicknameInput = document.getElementById('nicknameInput'); // 獲取暱稱輸入框
         const confirmBtn = document.getElementById('confirmRegistrationCodeBtn');
         const cancelBtn = document.getElementById('cancelRegistrationCodeBtn');
         const modalMessage = document.getElementById('registrationModalMessage');
 
-        registrationCodeInput.value = ''; // 清空輸入框
+        registrationCodeInput.value = ''; // 清空註冊碼輸入框
+        nicknameInput.value = ''; // 清空暱稱輸入框
         modalMessage.textContent = '請輸入管理員提供的一次性註冊碼。'; // 重設訊息
         modalMessage.classList.remove('countdown'); // 移除計時器樣式
         modalOverlay.classList.add('visible'); // 顯示模態框
 
-        let countdown = 60; // 60秒計時 (從 30 秒修改為 60 秒)
+        let countdown = 60; // 60秒計時
         let timerInterval;
 
         const updateTimer = () => {
@@ -783,7 +801,6 @@
             if (countdown <= 0) {
                 clearInterval(timerInterval);
                 modalOverlay.classList.remove('visible'); // 隱藏模態框
-                // 移除註冊碼過期提示，依據使用者需求
                 cleanupListeners();
                 callback(null); // 表示時間到，自動取消
             }
@@ -798,12 +815,13 @@
 
         const confirmHandler = () => {
             const code = registrationCodeInput.value.trim();
-            if (code) {
+            const nickname = nicknameInput.value.trim(); // 獲取暱稱
+            if (code && nickname) { // 註冊碼和暱稱都必須填寫
                 modalOverlay.classList.remove('visible'); // 隱藏模態框
                 cleanupListeners();
-                callback(code);
+                callback({ code: code, nickname: nickname }); // 將註冊碼和暱稱作為物件傳遞
             } else {
-                modalMessage.textContent = '請輸入註冊碼。';
+                modalMessage.textContent = '請輸入註冊碼和您的暱稱。';
                 modalMessage.classList.remove('countdown');
             }
         };
@@ -927,7 +945,7 @@
             }
 
             // 移除現有 KML 圖層和所有標記 (包括導航按鈕)
-            window.clearAllKmlLayers();
+            window.clearAllKMLayers();
 
             try {
                 // 從 Firestore 獲取 KML 文件的元數據
@@ -1186,6 +1204,7 @@
                 thead.innerHTML = `
                     <tr>
                         <th>Email</th>
+                        <th>暱稱</th> <!-- 新增暱稱標題 -->
                         <th>角色</th>
                         <th>動作</th>
                     </tr>
@@ -1200,6 +1219,7 @@
                     const row = document.createElement('tr');
                     row.innerHTML = `
                         <td>${user.email || 'N/A'}</td>
+                        <td>${user.name || 'N/A'}</td> <!-- 顯示暱稱 -->
                         <td>
                             <select data-uid="${uid}" class="user-role-select">
                                 <option value="unapproved" ${user.role === 'unapproved' ? 'selected' : ''}>${getRoleDisplayName('unapproved')}</option>
@@ -1222,7 +1242,7 @@
                 // 為角色選擇器添加事件監聽器
                 userListDiv.querySelectorAll('.user-role-select').forEach(select => {
                     select.dataset.originalValue = select.value; // 保存原始值
-                    // 修正：從父元素 `row` 中查找按鈕，而不是從 `td`
+                    // 修正：從父元素 `row` 中查找按鈕
                     const changeButton = select.closest('tr').querySelector('.change-role-btn'); 
                     
                     select.addEventListener('change', (event) => {
@@ -1314,6 +1334,7 @@
 
                         // 用戶管理 (Owner Only)
                         userManagementSection.style.display = isOwner ? 'block' : 'none';
+                        // 將 refreshUsersBtn 更名為 使用者管理，並保持其功能
                         refreshUsersBtn.disabled = !isOwner;
 
 
@@ -1367,8 +1388,11 @@
                 if (!userDoc.exists) {
                     // 新用戶，僅能透過註冊碼註冊 (因為已移除直接註冊選項)
                     await auth.signOut(); // 先登出，因為沒有註冊碼無法完成註冊
-                    window.showRegistrationCodeModal(async (code) => {
-                        if (code) {
+                    window.showRegistrationCodeModal(async (result) => { // 接收包含 code 和 nickname 的物件
+                        if (result) {
+                            const code = result.code;
+                            const nickname = result.nickname; // 獲取暱稱
+
                             try {
                                 const regDoc = await db.collection('settings').doc('registration').get();
                                 console.log("註冊嘗試: 用戶輸入的註冊碼:", code);
@@ -1398,13 +1422,16 @@
                                 console.log("嘗試創建新用戶文檔:", {
                                     uid: reAuthUser.uid,
                                     email: reAuthUser.email,
+                                    name: nickname, // 儲存暱稱
                                     role: 'unapproved',
+                                    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
                                     registeredWithCode: true,
                                     registrationCodeUsed: code
                                 });
 
                                 await db.collection('users').doc(reAuthUser.uid).set({
                                     email: reAuthUser.email,
+                                    name: nickname, // 儲存暱稱
                                     role: 'unapproved',
                                     createdAt: firebase.firestore.FieldValue.serverTimestamp(),
                                     registeredWithCode: true,
@@ -1412,7 +1439,7 @@
                                 });
                                 console.log("新用戶文檔創建成功。");
 
-                                showMessage('註冊成功', `歡迎 ${reAuthUser.email}！您的帳號已成功註冊，正在等待管理員審核。`);
+                                showMessage('註冊成功', `歡迎 ${reAuthUser.email} (${nickname})！您的帳號已成功註冊，正在等待管理員審核。`);
 
                             } catch (error) {
                                 console.error("使用註冊碼登入/註冊失敗:", error);
