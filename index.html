@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>地圖 v4.2.12 (KML刪除細化, 註冊碼優化, 角色管理改進)</title>
+  <title>地圖 v4.2.13 (重新整理用戶列表錯誤修正)</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -612,7 +612,7 @@
 </head>
 <body>
   <div id="title">
-    我的地圖系統 v4.2.12
+    我的地圖系統 v4.2.13
     <button id="editButton">編輯</button>
   </div>
 
@@ -1222,7 +1222,8 @@
                 // 為角色選擇器添加事件監聽器
                 userListDiv.querySelectorAll('.user-role-select').forEach(select => {
                     select.dataset.originalValue = select.value; // 保存原始值
-                    const changeButton = select.closest('td').querySelector('.change-role-btn');
+                    // 修正：從父元素 `row` 中查找按鈕，而不是從 `td`
+                    const changeButton = select.closest('tr').querySelector('.change-role-btn'); 
                     
                     select.addEventListener('change', (event) => {
                         // 角色變更時啟用 "變更" 按鈕
