@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>地圖 v4.2.14 (新增暱稱, 優化使用者管理與註冊碼顯示)</title>
+  <title>地圖 v4.2.15 (優化使用者管理介面與註冊碼顯示)</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -156,7 +156,7 @@
         display: flex;
         align-items: center;
         gap: 10px;
-        flex-wrap: wrap; /* 允許換行在小螢幕上 */
+        flex-wrap: nowrap; /* 確保不換行 */
     }
     .registration-code-display-group button {
         flex-shrink: 0; /* 按鈕不縮小 */
@@ -169,6 +169,9 @@
         text-align: center;
         flex-grow: 1; /* 讓代碼顯示區塊佔據剩餘空間 */
         user-select: text; /* 允許選擇文字 */
+        white-space: nowrap; /* 確保不換行 */
+        overflow: hidden; /* 隱藏溢出內容 */
+        text-overflow: ellipsis; /* 顯示省略號 */
     }
     #registrationCodeCountdown { /* 新增的倒數計時顯示 */
         font-weight: bold;
@@ -592,6 +595,7 @@
         width: 100%;
         border-collapse: collapse;
         margin-top: 10px;
+        table-layout: fixed; /* 固定表格布局 */
     }
     .user-list-table th, .user-list-table td {
         border: 1px solid #eee;
@@ -605,17 +609,20 @@
         background-color: #f5f5f5;
         font-weight: 600;
     }
-    .user-list-table td:nth-child(1) { /* Email 欄位 */
-        max-width: 150px; /* 或您需要的一個固定寬度 */
+    .user-list-table td:nth-child(1), .user-list-table th:nth-child(1) { /* Email 欄位 */
+        width: 30%; /* 調整為更適中的寬度 */
     }
-    .user-list-table td:nth-child(2) { /* 暱稱欄位 */
-        max-width: 100px;
+    .user-list-table td:nth-child(2), .user-list-table th:nth-child(2) { /* 暱稱欄位 */
+        width: 20%; /* 調整為更適中的寬度 */
     }
-    .user-list-table td:nth-child(3) { /* 角色欄位 */
-        width: 100px; /* 固定寬度給下拉選單 */
+    .user-list-table td:nth-child(3), .user-list-table th:nth-child(3) { /* 角色欄位 */
+        width: 20%; /* 固定寬度給下拉選單 */
     }
-    .user-list-table td:nth-child(4) { /* 動作欄位 */
-        width: 160px; /* 容納兩個按鈕 */
+    .user-list-table td:nth-child(4), .user-list-table th:nth-child(4) { /* 動作欄位 */
+        width: 30%; /* 容納兩個按鈕，讓其靈活適應 */
+    }
+    .user-list-table td button {
+        margin-right: 5px; /* 按鈕間距 */
     }
     /* Registration Code Modal Timer */
     #registrationModalMessage.countdown {
@@ -627,7 +634,7 @@
 </head>
 <body>
   <div id="title">
-    我的地圖系統 v4.2.14
+    我的地圖系統 v4.2.15
     <button id="editButton">編輯</button>
   </div>
 
@@ -945,7 +952,7 @@
             }
 
             // 移除現有 KML 圖層和所有標記 (包括導航按鈕)
-            window.clearAllKMLayers();
+            window.clearAllKmlLayers();
 
             try {
                 // 從 Firestore 獲取 KML 文件的元數據
@@ -1204,7 +1211,7 @@
                 thead.innerHTML = `
                     <tr>
                         <th>Email</th>
-                        <th>暱稱</th> <!-- 新增暱稱標題 -->
+                        <th>暱稱</th>
                         <th>角色</th>
                         <th>動作</th>
                     </tr>
@@ -1217,9 +1224,13 @@
                     if (uid === auth.currentUser.uid) return; // 不顯示自己
 
                     const row = document.createElement('tr');
+                    // 將 nickname 和 uid 儲存在行的 data 屬性中，以便在事件監聽器中訪問
+                    row.dataset.nickname = user.name || 'N/A';
+                    row.dataset.uid = uid;
+
                     row.innerHTML = `
                         <td>${user.email || 'N/A'}</td>
-                        <td>${user.name || 'N/A'}</td> <!-- 顯示暱稱 -->
+                        <td>${user.name || 'N/A'}</td>
                         <td>
                             <select data-uid="${uid}" class="user-role-select">
                                 <option value="unapproved" ${user.role === 'unapproved' ? 'selected' : ''}>${getRoleDisplayName('unapproved')}</option>
@@ -1242,16 +1253,16 @@
                 // 為角色選擇器添加事件監聽器
                 userListDiv.querySelectorAll('.user-role-select').forEach(select => {
                     select.dataset.originalValue = select.value; // 保存原始值
-                    // 修正：從父元素 `row` 中查找按鈕
                     const changeButton = select.closest('tr').querySelector('.change-role-btn'); 
                     
                     select.addEventListener('change', (event) => {
-                        // 角色變更時啟用 "變更" 按鈕
                         changeButton.disabled = (event.target.value === select.dataset.originalValue);
                     });
 
                     changeButton.addEventListener('click', async (event) => {
-                        const uidToUpdate = event.target.dataset.uid;
+                        const userRow = event.target.closest('tr');
+                        const uidToUpdate = userRow.dataset.uid;
+                        const nicknameToUpdate = userRow.dataset.nickname;
                         const newRole = select.value;
                         if (newRole === 'owner' && !confirm('確定要將此用戶設定為 Owner 嗎？Owner 擁有最高權限。')) {
                             return;
@@ -1259,14 +1270,14 @@
 
                         try {
                             await db.collection('users').doc(uidToUpdate).update({ role: newRole });
-                            showMessage('成功', `用戶 ${uidToUpdate} 的角色已更新為 ${getRoleDisplayName(newRole)}。`);
-                            select.dataset.originalValue = newRole; // 更新原始值
-                            changeButton.disabled = true; // 變更成功後禁用按鈕
+                            showMessage('成功', `用戶 ${nicknameToUpdate} (${uidToUpdate.substring(0,6)}...) 的角色已更新為 ${getRoleDisplayName(newRole)}。`);
+                            select.dataset.originalValue = newRole;
+                            changeButton.disabled = true;
                         } catch (error) {
                             console.error("更新用戶角色時出錯:", error);
                             showMessage('錯誤', `更新用戶角色失敗: ${error.message}`);
-                            select.value = select.dataset.originalValue; // 失敗時恢復原值
-                            changeButton.disabled = true; // 失敗時也禁用按鈕
+                            select.value = select.dataset.originalValue;
+                            changeButton.disabled = true;
                         }
                     });
                 });
@@ -1274,14 +1285,15 @@
                 // 為刪除按鈕添加事件監聽器
                 userListDiv.querySelectorAll('.delete-user-btn').forEach(button => {
                     button.addEventListener('click', async (event) => {
-                        const uidToDelete = event.target.dataset.uid;
-                        if (confirm(`確定要刪除用戶 ${uidToDelete} 嗎？此操作不可逆！`)) {
+                        const userRow = event.target.closest('tr');
+                        const uidToDelete = userRow.dataset.uid;
+                        const nicknameToDelete = userRow.dataset.nickname;
+
+                        if (confirm(`確定要刪除用戶 ${nicknameToDelete} (${uidToDelete.substring(0,6)}...) 嗎？此操作不可逆！`)) {
                             try {
                                 // 先刪除 Firestore 文檔
                                 await db.collection('users').doc(uidToDelete).delete();
-                                // 然後嘗試刪除 Authentication 中的用戶（這需要管理員 SDK，前端無法直接執行）
-                                // 這一步通常在後端（Cloud Functions）完成，因為前端無法直接訪問 admin SDK
-                                showMessage('成功', `用戶 ${uidToDelete} 已刪除（請確保在 Firebase Authentication 中也同步刪除）。`);
+                                showMessage('成功', `用戶 ${nicknameToDelete} (${uidToDelete.substring(0,6)}...) 已刪除（請確保在 Firebase Authentication 中也同步刪除）。`);
                                 refreshUserList(); // 重新整理列表
                             } catch (error) {
                                 console.error("刪除用戶時出錯:", error);
