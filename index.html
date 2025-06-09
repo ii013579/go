@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>地圖 v4.2.10 (導航樣式與KML標記更新)</title>
+  <title>地圖 v4.2.11 (註冊權限錯誤修正)</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -578,7 +578,7 @@
 </head>
 <body>
   <div id="title">
-    我的地圖系統 v4.2.10
+    我的地圖系統 v4.2.11
     <button id="editButton">編輯</button>
   </div>
 
@@ -1267,11 +1267,10 @@
 
                     } else {
                         console.log("用戶數據不存在，為新註冊用戶創建預設數據。");
-                        // 如果用戶數據不存在，則可能是新註冊的用戶， Firestore 安全規則會阻止自行創建帶有 'role' 的用戶
+                        // 如果用戶數據不存在，則可能是新註冊的用戶
+                        // 由於 Firestore 安全規則會阻止自行創建帶有 'role' 的用戶
                         // 所以這裡只會顯示登入狀態，而實際的角色會透過後端或管理員設定後才能生效
                         // 這裡可以選擇登出或者顯示一個等待審核的訊息
-                        // 由於是 onAuthStateChanged 監聽，如果用戶首次登入，會自動創建帶有預設角色的文檔
-                        // 所以這裡應該不會再觸發。
                         // 如果用戶文檔被刪除了，則視為未通過審核，導回登入介面
                          auth.signOut(); // 強制登出
                          showMessage('帳號資料異常', '您的帳號資料有誤或已被移除，請重新登入或聯繫管理員。');
@@ -1349,12 +1348,15 @@
                                 });
                                 console.log("新用戶文檔創建成功。");
 
-                                // 刪除用過的一次性註冊碼
-                                await db.collection('settings').doc('registration').update({
-                                    oneTimeCode: firebase.firestore.FieldValue.delete(),
-                                    oneTimeCodeExpiry: firebase.firestore.FieldValue.delete()
-                                });
-                                console.log("一次性註冊碼已刪除。");
+                                // ***************************************************************
+                                // 移除此處刪除一次性註冊碼的程式碼，因為新用戶沒有權限執行此操作
+                                // ***************************************************************
+                                // await db.collection('settings').doc('registration').update({
+                                //     oneTimeCode: firebase.firestore.FieldValue.delete(),
+                                //     oneTimeCodeExpiry: firebase.firestore.FieldValue.delete()
+                                // });
+                                // console.log("一次性註冊碼已刪除。");
+                                // ***************************************************************
 
                                 showMessage('註冊成功', `歡迎 ${reAuthUser.email}！您的帳號已成功註冊，正在等待管理員審核。`);
 
@@ -1588,7 +1590,7 @@
                         registrationCodeTimer = null;
                         registrationCodeDisplay.textContent = '註冊碼已過期';
                         registrationCodeDisplay.classList.remove('countdown-active');
-                        // 移除註冊碼到期提示，依據使用者需求
+                        // 移除註冊碼到期提示
                     }
                 }, 1000);
                 
