@@ -3,11 +3,12 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>地圖 v4.2.15 (優化使用者管理介面與註冊碼顯示)</title>
+  <title>地圖 v4.2.18 (優化縮放與定位按鈕，搜尋三欄顯示)</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="https://unpkg.com/leaflet.locatecontrol/dist/L.Control.Locate.min.css" />
+  <!-- 移除原有的 Leaflet.LocateControl 樣式，因為將使用自訂控制項 -->
+  <!-- <link rel="stylesheet" href="https://unpkg.com/leaflet.locatecontrol/dist/L.Control.Locate.min.css" /> -->
 
   <style>
     /* 這裡放置所有 CSS 樣式 */
@@ -160,12 +161,20 @@
     }
     .registration-code-display-group button {
         flex-shrink: 0; /* 按鈕不縮小 */
+        width: auto; /* 讓按鈕根據內容自動調整寬度 */
     }
-    #registrationCodeDisplay {
+    .registration-code-content-wrapper { /* 新增的 wrapper */
+        display: flex;
+        flex-grow: 1;
+        align-items: center;
+        gap: 5px; /* 註冊碼和倒數之間的間距 */
         background-color: #e6f0ff;
         padding: 8px;
         border-radius: 5px;
-        word-break: break-all;
+        overflow: hidden; /* 隱藏溢出內容 */
+    }
+    #registrationCodeDisplay {
+        word-break: break-all; /* 允許單詞內斷行 */
         text-align: center;
         flex-grow: 1; /* 讓代碼顯示區塊佔據剩餘空間 */
         user-select: text; /* 允許選擇文字 */
@@ -179,6 +188,7 @@
         white-space: nowrap; /* 不換行 */
         min-width: 80px; /* 最小寬度，避免閃爍 */
         text-align: right;
+        flex-shrink: 0; /* 不壓縮倒數計時器 */
     }
 
     /* controls 樣式 - 預設顯示 */
@@ -260,7 +270,8 @@
       font-size: 15px;
       display: none; /* 預設隱藏，有結果才顯示 */
       z-index: 1100;
-      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); /* 響應式網格 */
+      /* Adjusted for three columns */
+      grid-template-columns: repeat(3, 1fr); /* 顯示三欄 */
       gap: 8px;
       padding: 10px;
       box-sizing: border-box;
@@ -497,31 +508,33 @@
         color: #555;
     }
 
-    /* Custom Locate Button */
-    .leaflet-control-container .leaflet-top.leaflet-left {
-        top: auto; /* 重置 top */
-        left: 15px; /* 調整左側邊距 */
-        bottom: 15px; /* 固定在底部 */
-        top: initial;
-    }
-    .leaflet-control-locate {
+    /* Custom Locate Button (取代原有的 Leaflet.LocateControl) */
+    .leaflet-control-custom-locate {
         background-color: #fff;
         border-radius: 8px;
         box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        position: absolute; /* 相對於 .leaflet-control-container 定位 */
+        bottom: 15px; /* 距離底部 15px */
+        left: 15px; /* 距離左側 15px */
+        z-index: 1000; /* 確保它在地圖之上 */
     }
-    .leaflet-control-locate a {
-        border-radius: 8px;
-        color: #4a90e2 !important;
-        line-height: 30px;
+    .leaflet-control-custom-locate a {
+        display: block; /* 使整個錨點可點擊 */
         height: 30px;
         width: 30px;
+        line-height: 30px; /* 垂直居中圖標 */
+        text-align: center;
+        color: #4a90e2; /* 圖標顏色 */
+        border-radius: 8px; /* 圓角 */
+        transition: background-color 0.2s, color 0.2s;
     }
-    .leaflet-control-locate a.active, .leaflet-control-locate a.active:hover {
-        background-color: #e6f0ff;
-        color: #0056b3 !important;
-    }
-    .leaflet-control-locate a:hover {
+    .leaflet-control-custom-locate a:hover {
         background-color: #f4f4f4;
+    }
+    .leaflet-control-custom-locate .material-symbols-outlined {
+        font-size: 24px;
+        line-height: 30px; /* 確保圖標在按鈕中垂直居中 */
+        vertical-align: middle;
     }
 
     /* User Location Dot */
@@ -546,84 +559,84 @@
         }
     }
     /* User list specific styles */
-    .user-list-item {
+    #userList { /* This is the userListDiv in JS */
         display: flex;
-        justify-content: space-between;
+        flex-direction: column;
+        gap: 10px; /* Spacing between user cards */
+        font-size: 14px; /* Default font size */
+    }
+
+    .user-card {
+        background-color: #fdfdfd;
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+        padding: 10px;
+        display: flex;
+        flex-direction: column; /* Stack rows vertically */
+        gap: 8px; /* Space between row 1 and row 2 */
+    }
+
+    .user-card-row-1, .user-card-row-2 {
+        display: flex;
         align-items: center;
-        padding: 8px 0;
-        border-bottom: 1px solid #eee;
+        flex-wrap: wrap; /* Allow wrapping on small screens if content is too long */
+        gap: 10px; /* Space between items in a row */
     }
-    .user-list-item:last-child {
-        border-bottom: none;
+
+    .user-card-row-1 .user-email {
+        flex-basis: 60%; /* Email takes more space */
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        min-width: 120px; /* Ensure a minimum width */
     }
-    .user-list-item span {
-        flex-grow: 1;
-        margin-right: 10px;
-        font-size: 14px;
-        color: #555;
+    .user-card-row-1 .user-nickname {
+        flex-basis: calc(40% - 10px); /* Nickname takes remaining space, accounting for gap */
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        font-weight: 500;
+        min-width: 80px; /* Ensure a minimum width */
     }
-    .user-list-item .user-role-select { /* 角色選擇器樣式 */
-        margin-left: 5px;
+
+    .user-card-row-2 .user-role-controls {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        flex-shrink: 0; /* Prevent shrinking */
+        min-width: 100px; /* Ensure a minimum width for role controls */
+    }
+
+    .user-card-row-2 .user-role-select {
         padding: 6px 8px;
         border-radius: 6px;
         border: 1px solid #dcdcdc;
         font-size: 14px;
-        flex-shrink: 0;
+        flex-grow: 1; /* Allow select to grow */
+        min-width: 80px; /* Minimum width for select */
     }
-    .user-list-item .change-role-btn { /* 變更按鈕樣式 */
+
+    .user-card-row-2 .user-actions {
+        display: flex;
+        gap: 8px; /* Space between buttons */
+        flex-grow: 1; /* Allow actions div to take remaining space */
+        justify-content: flex-end; /* Align buttons to the right */
+        flex-wrap: wrap; /* Allow buttons to wrap to next line if space is too small */
+    }
+
+    .user-card-row-2 .change-role-btn,
+    .user-card-row-2 .delete-user-btn {
         padding: 6px 10px;
         font-size: 14px;
-        margin-left: 8px;
-        width: auto; /* 不強制佔滿寬度 */
+        width: auto; /* Buttons adjust to content */
         flex-shrink: 0;
-        background-color: #007bff; /* 藍色 */
-        color: white;
-        border: none;
-        border-radius: 6px;
-        cursor: pointer;
-        transition: background-color 0.2s, transform 0.2s;
     }
-    .user-list-item .change-role-btn:hover {
-        background-color: #0056b3;
-        transform: translateY(-1px);
+
+    /* Remove old table-specific styles */
+    .user-list-table, .user-list-table th, .user-list-table td {
+        display: none; /* Hide the old table, as we are replacing it with a div structure */
     }
-    .user-list-item .change-role-btn:disabled {
-        background-color: #cccccc;
-        cursor: not-allowed;
-    }
-    .user-list-table {
-        width: 100%;
-        border-collapse: collapse;
-        margin-top: 10px;
-        table-layout: fixed; /* 固定表格布局 */
-    }
-    .user-list-table th, .user-list-table td {
-        border: 1px solid #eee;
-        padding: 8px;
-        text-align: left;
-        white-space: nowrap; /* 確保單元格內容不換行 */
-        overflow: hidden;
-        text-overflow: ellipsis;
-    }
-    .user-list-table th {
-        background-color: #f5f5f5;
-        font-weight: 600;
-    }
-    .user-list-table td:nth-child(1), .user-list-table th:nth-child(1) { /* Email 欄位 */
-        width: 30%; /* 調整為更適中的寬度 */
-    }
-    .user-list-table td:nth-child(2), .user-list-table th:nth-child(2) { /* 暱稱欄位 */
-        width: 20%; /* 調整為更適中的寬度 */
-    }
-    .user-list-table td:nth-child(3), .user-list-table th:nth-child(3) { /* 角色欄位 */
-        width: 20%; /* 固定寬度給下拉選單 */
-    }
-    .user-list-table td:nth-child(4), .user-list-table th:nth-child(4) { /* 動作欄位 */
-        width: 30%; /* 容納兩個按鈕，讓其靈活適應 */
-    }
-    .user-list-table td button {
-        margin-right: 5px; /* 按鈕間距 */
-    }
+
     /* Registration Code Modal Timer */
     #registrationModalMessage.countdown {
         font-size: 16px;
@@ -634,7 +647,7 @@
 </head>
 <body>
   <div id="title">
-    我的地圖系統 v4.2.15
+    我的地圖系統 v4.2.18
     <button id="editButton">編輯</button>
   </div>
 
@@ -684,8 +697,10 @@
       <div id="registrationSettingsSection" style="display: none;">
           <div class="registration-code-display-group">
             <button id="generateRegistrationCodeBtn" class="action-buttons" style="background-color: #28a745;">產生一次性註冊碼</button>
-            <span id="registrationCodeDisplay" style="display: none;"></span> 
-            <span id="registrationCodeCountdown" style="display: none;"></span>
+            <div class="registration-code-content-wrapper"> <!-- 新增的 wrapper -->
+                <span id="registrationCodeDisplay" style="display: none;"></span> 
+                <span id="registrationCodeCountdown" style="display: none;"></span>
+            </div>
           </div>
           <p id="registrationExpiryDisplay" style="display: none; font-size: 12px; color: #888; text-align: center; margin-top: -5px;"></p>
       </div>
@@ -730,7 +745,8 @@
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet-omnivore/0.3.4/leaflet-omnivore.min.js"></script>
-  <script src="https://unpkg.com/leaflet.locatecontrol/dist/L.Control.Locate.min.js" charset="utf-8"></script>
+  <!-- 移除原有的 Leaflet.LocateControl.js 腳本，因為將使用自訂控制項 -->
+  <!-- <script src="https://unpkg.com/leaflet.locatecontrol/dist/L.Control.Locate.min.js" charset="utf-8"></script> -->
 
   <script>
     // ====================================================================================
@@ -866,27 +882,97 @@
             attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         }).addTo(map);
 
-        // 添加定位控制項
-        L.control.locate({
-            position: 'bottomleft', // 定位按鈕位置調整
-            strings: {
-                title: "顯示我的位置"
+        // 將縮放控制添加到地圖的左上方
+        L.control.zoom({ position: 'topleft' }).addTo(map);
+
+        // Define a custom control for geolocation
+        L.Control.LocateMe = L.Control.extend({
+            _userLocationMarker: null, // To store the current user location marker
+            _userLocationCircle: null, // To store the current user location circle
+
+            onAdd: function(map) {
+                const container = L.DomUtil.create('div', 'leaflet-bar leaflet-control leaflet-control-custom-locate');
+                const button = L.DomUtil.create('a', '', container);
+                button.href = "#";
+                button.title = "顯示我的位置";
+                button.setAttribute("role", "button");
+                button.setAttribute("aria-label", "顯示我的位置");
+                button.innerHTML = `<span class="material-symbols-outlined" style="font-size: 24px; line-height: 30px;">my_location</span>`;
+
+                L.DomEvent.on(button, 'click', this._locateUser, this);
+
+                // Event listeners for geolocation success/error
+                map.on('locationfound', this._onLocationFound, this);
+                map.on('locationerror', this._onLocationError, this);
+
+                return container;
             },
-            locateOptions: {
-                enableHighAccuracy: true,
-                maxZoom: 16 // 定位後縮放級別
+
+            onRemove: function(map) {
+                map.off('locationfound', this._onLocationFound, this);
+                map.off('locationerror', this._onLocationError, this);
+                this._clearLocationMarkers();
             },
-            markerStyle: {
-                className: 'user-location-dot' // 自定義用戶位置標記樣式
+
+            _locateUser: function(e) {
+                L.DomEvent.stopPropagation(e); // Prevent map click event
+                L.DomEvent.preventDefault(e); // Prevent default anchor behavior
+
+                this._clearLocationMarkers(); // Clear previous markers
+
+                // Start locating user
+                map.locate({
+                    setView: true, // Automatically set map view to the found location
+                    maxZoom: 16,   // Maximum zoom level to use
+                    enableHighAccuracy: true,
+                    watch: false   // Don't continuously watch location for this simple button
+                });
+                window.showMessage('定位中', '正在獲取您的位置...');
             },
-            circleStyle: {
-                color: '#1a73e8', // 藍色圈
-                fillColor: '#1a73e8',
-                fillOpacity: 0.15
+
+            _onLocationFound: function(e) {
+                this._clearLocationMarkers(); // Clear any previous markers
+
+                const radius = e.accuracy / 2;
+
+                this._userLocationMarker = L.marker(e.latlng, {
+                    icon: L.divIcon({
+                        className: 'user-location-dot', // Reuse the pulsing dot style
+                        iconSize: [16, 16],
+                        iconAnchor: [8, 8]
+                    })
+                }).addTo(map);
+
+                this._userLocationCircle = L.circle(e.latlng, radius, {
+                    color: '#1a73e8',
+                    fillColor: '#1a73e8',
+                    fillOpacity: 0.15,
+                    weight: 2
+                }).addTo(map);
+
+                window.showMessage('定位成功', `您的位置已定位，誤差約 ${radius.toFixed(0)} 公尺。`);
             },
-            icon: 'material-symbols-outlined',
-            iconLoading: 'material-symbols-outlined'
-        }).addTo(map);
+
+            _onLocationError: function(e) {
+                this._clearLocationMarkers(); // Clear any previous markers
+                window.showMessage('定位失敗', `無法獲取您的位置: ${e.message}`);
+                console.error('Geolocation error:', e.message);
+            },
+
+            _clearLocationMarkers: function() {
+                if (this._userLocationMarker) {
+                    map.removeLayer(this._userLocationMarker);
+                    this._userLocationMarker = null;
+                }
+                if (this._userLocationCircle) {
+                    map.removeLayer(this._userLocationCircle);
+                    this._userLocationCircle = null;
+                }
+            }
+        });
+
+        // Add the custom control to the map
+        new L.Control.LocateMe().addTo(map);
 
         // 將 markers 和 navButtons 添加到地圖
         markers.addTo(map);
@@ -1205,64 +1291,55 @@
                     return;
                 }
 
-                const table = document.createElement('table');
-                table.className = 'user-list-table'; // 使用新的表格樣式
-                const thead = document.createElement('thead');
-                thead.innerHTML = `
-                    <tr>
-                        <th>Email</th>
-                        <th>暱稱</th>
-                        <th>角色</th>
-                        <th>動作</th>
-                    </tr>
-                `;
-                const tbody = document.createElement('tbody');
-
+                // Instead of a table, we'll use a series of div-based "user-card" elements
                 snapshot.forEach(doc => {
                     const user = doc.data();
                     const uid = doc.id;
                     if (uid === auth.currentUser.uid) return; // 不顯示自己
 
-                    const row = document.createElement('tr');
-                    // 將 nickname 和 uid 儲存在行的 data 屬性中，以便在事件監聽器中訪問
-                    row.dataset.nickname = user.name || 'N/A';
-                    row.dataset.uid = uid;
+                    const userCard = document.createElement('div');
+                    userCard.className = 'user-card';
+                    userCard.dataset.nickname = user.name || 'N/A';
+                    userCard.dataset.uid = uid;
 
-                    row.innerHTML = `
-                        <td>${user.email || 'N/A'}</td>
-                        <td>${user.name || 'N/A'}</td>
-                        <td>
-                            <select data-uid="${uid}" class="user-role-select">
-                                <option value="unapproved" ${user.role === 'unapproved' ? 'selected' : ''}>${getRoleDisplayName('unapproved')}</option>
-                                <option value="user" ${user.role === 'user' ? 'selected' : ''}>${getRoleDisplayName('user')}</option>
-                                <option value="editor" ${user.role === 'editor' ? 'selected' : ''}>${getRoleDisplayName('editor')}</option>
-                                <option value="owner" ${user.role === 'owner' ? 'selected' : ''} ${window.currentUserRole !== 'owner' ? 'disabled' : ''}>${getRoleDisplayName('owner')}</option>
-                            </select>
-                        </td>
-                        <td>
-                            <button class="change-role-btn" data-uid="${uid}" disabled>變更</button>
-                            <button class="delete-user-btn action-buttons delete-btn" data-uid="${uid}" style="padding: 6px 10px; font-size: 14px;">刪除</button>
-                        </td>
+                    userCard.innerHTML = `
+                        <div class="user-card-row-1">
+                            <span class="user-email">Email: ${user.email || 'N/A'}</span>
+                            <span class="user-nickname">暱稱: ${user.name || 'N/A'}</span>
+                        </div>
+                        <div class="user-card-row-2">
+                            <div class="user-role-controls">
+                                <label for="role-select-${uid}">角色:</label>
+                                <select id="role-select-${uid}" data-uid="${uid}" data-original-value="${user.role}" class="user-role-select">
+                                    <option value="unapproved" ${user.role === 'unapproved' ? 'selected' : ''}>${getRoleDisplayName('unapproved')}</option>
+                                    <option value="user" ${user.role === 'user' ? 'selected' : ''}>${getRoleDisplayName('user')}</option>
+                                    <option value="editor" ${user.role === 'editor' ? 'selected' : ''}>${getRoleDisplayName('editor')}</option>
+                                    <option value="owner" ${user.role === 'owner' ? 'selected' : ''} ${window.currentUserRole !== 'owner' ? 'disabled' : ''}>${getRoleDisplayName('owner')}</option>
+                                </select>
+                            </div>
+                            <div class="user-actions">
+                                <button class="change-role-btn" data-uid="${uid}" disabled>變更</button>
+                                <button class="delete-user-btn action-buttons delete-btn" data-uid="${uid}">刪除</button>
+                            </div>
+                        </div>
                     `;
-                    tbody.appendChild(row);
+                    userListDiv.appendChild(userCard);
                 });
-                table.appendChild(thead);
-                table.appendChild(tbody);
-                userListDiv.appendChild(table);
 
                 // 為角色選擇器添加事件監聽器
                 userListDiv.querySelectorAll('.user-role-select').forEach(select => {
                     select.dataset.originalValue = select.value; // 保存原始值
-                    const changeButton = select.closest('tr').querySelector('.change-role-btn'); 
+                    // Find the change button within the same user card
+                    const changeButton = select.closest('.user-card').querySelector('.change-role-btn'); 
                     
                     select.addEventListener('change', (event) => {
                         changeButton.disabled = (event.target.value === select.dataset.originalValue);
                     });
 
                     changeButton.addEventListener('click', async (event) => {
-                        const userRow = event.target.closest('tr');
-                        const uidToUpdate = userRow.dataset.uid;
-                        const nicknameToUpdate = userRow.dataset.nickname;
+                        const userCard = event.target.closest('.user-card');
+                        const uidToUpdate = userCard.dataset.uid;
+                        const nicknameToUpdate = userCard.dataset.nickname;
                         const newRole = select.value;
                         if (newRole === 'owner' && !confirm('確定要將此用戶設定為 Owner 嗎？Owner 擁有最高權限。')) {
                             return;
@@ -1285,9 +1362,9 @@
                 // 為刪除按鈕添加事件監聽器
                 userListDiv.querySelectorAll('.delete-user-btn').forEach(button => {
                     button.addEventListener('click', async (event) => {
-                        const userRow = event.target.closest('tr');
-                        const uidToDelete = userRow.dataset.uid;
-                        const nicknameToDelete = userRow.dataset.nickname;
+                        const userCard = event.target.closest('.user-card');
+                        const uidToDelete = userCard.dataset.uid;
+                        const nicknameToDelete = userCard.dataset.nickname;
 
                         if (confirm(`確定要刪除用戶 ${nicknameToDelete} (${uidToDelete.substring(0,6)}...) 嗎？此操作不可逆！`)) {
                             try {
@@ -1818,7 +1895,7 @@
             document.addEventListener('keydown', (event) => {
                 if (event.key === 'Escape') {
                     searchResults.style.display = 'none';
-                    searchBox.value = ''; // 清空搜尋框
+                    searchBox.blur(); // 移除搜尋框的焦點
                 }
             });
         }
