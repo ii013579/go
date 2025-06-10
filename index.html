@@ -3,452 +3,1169 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>地圖 v4.2.19 (單一縮放與定位按鈕，搜尋三欄對齊，註冊碼新規則)</title>
+  <title>地圖 v4.2.20</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
-    /* 這裡放置所有 CSS 樣式 */
     html, body {
       margin: 0;
       padding: 0;
       height: 100%;
       font-family: 'Inter', sans-serif;
       color: #333;
-      overflow: hidden; /* 防止滾動條 */
+    }
+    body {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      background-color: #f0f2f5;
+    }
+    #title {
+      text-align: center;
+      padding: 12px;
+      font-size: 24px;
+      font-weight: 700;
+      background: linear-gradient(135deg, #6dd5ed, #2193b0);
+      color: white;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+      border-bottom-left-radius: 12px;
+      border-bottom-right-radius: 12px;
+      position: relative;
+    }
+    #editButton {
+      position: absolute;
+      top: 50%;
+      right: 15px;
+      transform: translateY(-50%);
+      background-color: #f0f0f0;
+      color: #333;
+      padding: 8px 15px;
+      border: none;
+      border-radius: 8px;
+      font-size: 16px;
+      cursor: pointer;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      transition: background-color 0.2s, transform 0.2s;
+    }
+    #editButton:hover {
+      background-color: #e0e0e0;
+      transform: translateY(-50%) scale(1.05);
+    }
+    #editButton:active {
+      transform: translateY(-50%) scale(0.98);
     }
 
-    #map {
-      height: 100%;
+    #authSection {
+      padding: 20px;
+      background-color: #ffffff;
+      border-bottom: 1px solid #e0e0e0;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 15px;
+    }
+
+    #loginForm {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 15px;
+    }
+
+    #loginForm h3, #loggedInDashboard h3 {
+        margin-top: 0;
+        color: #007bff;
+    }
+
+    #googleSignInBtn {
+      background-color: #4285F4;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      padding: 10px 20px;
+      font-size: 16px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+      transition: background-color 0.2s ease;
+    }
+    #googleSignInBtn:hover {
+      background-color: #357ae8;
+    }
+    #googleSignInBtn img {
+      width: 20px;
+      height: 20px;
+    }
+
+    #loggedInDashboard {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      width: 100%;
+      max-width: 500px;
+      gap: 15px;
+    }
+
+    #loggedInDashboard p {
+      text-align: center;
+      margin-bottom: 10px;
+    }
+
+    #uploadKmlSectionDashboard, #deleteKmlSectionDashboard {
+      display: flex;
+      align-items: center;
+      gap: 10px;
       width: 100%;
     }
 
-    /* 自訂控制項的基礎樣式 */
-    .leaflet-control-custom {
-      background-color: #fff;
-      padding: 6px;
-      border-radius: 8px;
-      box-shadow: 0 1px 5px rgba(0,0,0,0.4);
-      cursor: pointer;
-      display: flex; /* 使用 Flexbox 布局 */
-      flex-direction: column; /* 垂直堆疊 */
-      align-items: center; /* 水平居中 */
-      gap: 5px; /* 按鈕間距 */
-      z-index: 1000; /* 確保在其他元素之上 */
+    #uploadKmlSectionDashboard label, #deleteKmlSectionDashboard label {
+        font-weight: 500;
     }
 
-    .leaflet-control-custom button {
-      background-color: #007bff;
+    #selectedKmlFileNameDashboard {
+        background-color: #f8f9fa;
+        border: 1px solid #e2e6ea;
+        padding: 8px 12px;
+        border-radius: 8px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        flex-grow: 1;
+    }
+
+    #uploadKmlSubmitBtnDashboard, #deleteKmlSubmitBtnDashboard {
+        padding: 8px 15px;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 14px;
+        transition: background-color 0.2s, transform 0.2s;
+    }
+
+    .action-buttons.upload-btn {
+        background-color: #28a745;
+        color: white;
+    }
+    .action-buttons.upload-btn:hover:not(:disabled) {
+        background-color: #218838;
+        transform: scale(1.05);
+    }
+
+    .action-buttons.delete-btn {
+        background-color: #dc3545;
+        color: white;
+    }
+    .action-buttons.delete-btn:hover:not(:disabled) {
+        background-color: #c82333;
+        transform: scale(1.05);
+    }
+
+    #kmlLayerSelectDashboard {
+        padding: 8px 12px;
+        border-radius: 8px;
+        border: 1px solid #ced4da;
+        flex-grow: 1;
+        background-color: #fff;
+        cursor: pointer;
+    }
+
+    #logoutBtn {
+      background-color: #f44336;
       color: white;
       border: none;
-      padding: 8px 12px;
-      border-radius: 5px;
-      cursor: pointer;
-      font-size: 16px;
-      display: flex;
-      align-items: center;
-      gap: 5px;
-      transition: background-color 0.2s;
-      width: 100%; /* 讓按鈕填滿容器寬度 */
-      justify-content: center; /* 水平居中內容 */
-    }
-
-    .leaflet-control-custom button:hover {
-      background-color: #0056b3;
-    }
-
-    .leaflet-control-custom button:active {
-      background-color: #004085;
-    }
-
-    .material-symbols-outlined {
-      font-variation-settings:
-        'FILL' 0,
-        'wght' 400,
-        'GRAD' 0,
-        'opsz' 24;
-      vertical-align: middle;
-    }
-
-    /* 搜尋框樣式 */
-    .search-container {
-      position: absolute;
-      top: 20px;
-      left: 20px;
-      z-index: 1000; /* 確保在地圖之上 */
-      width: 300px; /* 搜尋框寬度 */
-      max-width: 90%; /* 防止在大螢幕上過寬 */
-      background-color: #fff; /* 背景色，方便看清楚邊界 */
       border-radius: 8px;
-      box-shadow: 0 1px 5px rgba(0,0,0,0.4);
-      padding: 10px;
-    }
-
-    #searchBox {
-      width: calc(100% - 20px); /* 減去 padding */
-      padding: 10px;
-      border: 1px solid #ccc;
-      border-radius: 5px;
+      padding: 10px 20px;
       font-size: 16px;
-      box-sizing: border-box; /* 確保 padding 不增加寬度 */
-    }
-
-    #searchResults {
-      list-style: none;
-      padding: 0;
-      margin: 10px 0 0 0; /* 在搜尋框下方留一點空間 */
-      max-height: 400px; /* 設定最大高度 */
-      overflow-y: auto; /* 超過高度時滾動 */
-      background-color: #fff;
-      border-radius: 8px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-      display: none; /* 預設隱藏 */
-      width: 100%; /* 填滿父容器寬度 */
-      box-sizing: border-box;
-      /* 重要：確保搜尋結果不阻擋右側的按鈕 */
-      max-width: 300px; /* 限制搜尋結果的最大寬度，與搜尋框一致 */
-    }
-
-    .search-item {
-      padding: 10px;
-      border-bottom: 1px solid #eee;
       cursor: pointer;
-      display: grid; /* 使用 Grid 布局 */
-      grid-template-columns: 1fr 1fr 1fr; /* 三等分欄位 */
-      align-items: center;
-      gap: 10px; /* 欄位間距 */
+      margin-top: 20px;
+      transition: background-color 0.2s ease;
+    }
+    #logoutBtn:hover {
+      background-color: #da190b;
     }
 
-    .search-item:last-child {
-      border-bottom: none;
-    }
-
-    .search-item:hover {
-      background-color: #f0f0f0;
-    }
-
-    .search-item-icon {
-      grid-column: 1; /* 第一欄 */
-      display: flex;
-      justify-content: center;
-      align-items: center;
-    }
-
-    .search-item-icon .material-symbols-outlined {
-      font-size: 20px;
-      color: #666;
-    }
-
-    .search-item-text {
-      grid-column: 2 / span 2; /* 第二、三欄合併 */
-      font-size: 14px;
-      color: #333;
-    }
-
-    /* 導航按鈕 */
-    #navButton {
-      position: absolute;
-      bottom: 20px;
-      left: 20px;
-      z-index: 1000;
-      display: none; /* 預設隱藏 */
-      background-color: #28a745;
-      color: white;
-      border: none;
-      padding: 10px 15px;
-      border-radius: 8px;
-      cursor: pointer;
-      font-size: 16px;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      box-shadow: 0 1px 5px rgba(0,0,0,0.4);
-      transition: background-color 0.2s;
-    }
-
-    #navButton:hover {
-      background-color: #218838;
-    }
-
-    #navButton:active {
-      background-color: #1e7e34;
-    }
-
-    /* 調整 Leaflet 內建控制項的位置，如果需要 */
-    /* .leaflet-control-zoom {
-      top: 100px !important; // 示例：調整位置
-    } */
-
-    /* 將自訂的定位和縮放按鈕放在右下角 */
-    .map-controls-bottom-right {
-      position: absolute;
-      bottom: 20px;
-      right: 20px;
-      z-index: 1000;
+    #controls {
+      padding: 15px;
+      background-color: #f8f9fa;
+      border-bottom: 1px solid #e9ecef;
       display: flex;
       flex-direction: column;
       gap: 10px;
-      align-items: flex-end; /* 右對齊 */
     }
 
-    .map-control-button {
-      background-color: #007bff;
-      color: white;
-      border: none;
-      padding: 10px 15px;
+    #kmlControls {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    #kmlLayerSelect {
+      padding: 8px 12px;
       border-radius: 8px;
+      border: 1px solid #ced4da;
+      width: 100%;
+      box-sizing: border-box;
+      background-color: #fff;
       cursor: pointer;
-      font-size: 16px;
+    }
+
+    #searchContainer {
       display: flex;
       align-items: center;
       gap: 8px;
-      box-shadow: 0 1px 5px rgba(0,0,0,0.4);
-      transition: background-color 0.2s;
+      background-color: #ffffff;
+      border: 1px solid #ced4da;
+      border-radius: 8px;
+      padding: 5px 12px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+      width: 100%;
+      box-sizing: border-box;
+    }
+    #searchContainer span {
+      color: #6c757d;
+    }
+    #searchBox {
+      border: none;
+      outline: none;
+      flex-grow: 1;
+      padding: 5px 0;
+      font-size: 16px;
     }
 
-    .map-control-button:hover {
-      background-color: #0056b3;
+    #map {
+      flex-grow: 1;
+      background-color: #e2e6ea;
+      border-top: 1px solid #dee2e6;
+      position: relative; /* Required for absolute positioning of map controls */
+      z-index: 0; /* Ensure map is below search results */
     }
 
-    .map-control-button:active {
-      background-color: #004085;
+    /* Custom styles for Leaflet controls */
+    .leaflet-control-container .leaflet-top.leaflet-left {
+        display: flex;
+        flex-direction: column; /* Stack controls vertically */
+        align-items: flex-start;
+        gap: 8px; /* Space between controls */
     }
 
-    .map-control-button.locate {
-      background-color: #ffc107; /* 黃色定位按鈕 */
+    /* Base style for custom locate button */
+    .leaflet-control-locate-me {
+        background-color: #fff;
+        border-radius: 4px;
+        box-shadow: 0 1px 5px rgba(0,0,0,0.65);
+        padding: 0;
+        cursor: pointer;
+        text-align: center;
+        line-height: 28px; /* Match Leaflet's default button height */
+        width: 30px; /* Match Leaflet's default button width */
+        height: 30px; /* Match Leaflet's default button height */
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        transition: background-color 0.2s, box-shadow 0.2s;
+    }
+
+    .leaflet-control-locate-me:hover {
+        background-color: #f4f4f4;
+        box-shadow: 0 1px 5px rgba(0,0,0,0.8);
+    }
+
+    .leaflet-control-locate-me a {
+        display: block;
+        width: 100%;
+        height: 100%;
+        text-decoration: none;
+        color: #333; /* Icon color */
+        font-size: 20px; /* Icon size */
+    }
+
+    /* Search Results Styling */
+    #searchResults {
+      position: absolute;
+      top: 0; /* Will be dynamically adjusted */
+      left: 0; /* Will be dynamically adjusted */
+      width: auto; /* Will be dynamically adjusted or set to 100% of search box */
+      max-height: 200px; /* Limit height */
+      overflow-y: auto;
+      background-color: #ffffff;
+      border: 1px solid #e0e0e0;
+      border-radius: 8px;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+      z-index: 1000; /* Ensure it's above the map and other elements */
+      display: none; /* Hidden by default */
+      grid-template-columns: 1fr; /* Single column */
+      gap: 0px; /* No gap between items, let padding handle spacing */
+      padding: 0;
+    }
+
+    #searchResults .result-item {
+      padding: 12px 15px;
+      cursor: pointer;
+      border-bottom: 1px solid #f0f0f0;
+      transition: background-color 0.2s ease;
+      font-size: 15px;
       color: #333;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
 
-    .map-control-button.locate:hover {
-      background-color: #e0a800;
+    #searchResults .result-item:last-child {
+      border-bottom: none;
     }
 
-    .map-control-button.locate:active {
-      background-color: #c69500;
+    #searchResults .result-item:hover {
+      background-color: #f5f5f5;
     }
 
-    .map-control-button.zoom-in,
-    .map-control-button.zoom-out {
-      background-color: #6c757d; /* 灰色縮放按鈕 */
+    /* Message Box Overlay */
+    .message-box-overlay, .registration-code-modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0, 0, 0, 0.6);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 2000;
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity 0.3s ease, visibility 0.3s ease;
     }
 
-    .map-control-button.zoom-in:hover,
-    .map-control-button.zoom-out:hover {
-      background-color: #5a6268;
+    .message-box-overlay.visible, .registration-code-modal-overlay.visible {
+      opacity: 1;
+      visibility: visible;
     }
 
-    .map-control-button.zoom-in:active,
-    .map-control-button.zoom-out:active {
-      background-color: #494f55;
+    .message-box-content, .registration-modal-content {
+      background-color: #fff;
+      padding: 30px;
+      border-radius: 12px;
+      box-shadow: 0 8px 16px rgba(0, 0, 0, 0.25);
+      text-align: center;
+      max-width: 400px;
+      width: 90%;
+      transform: translateY(-20px);
+      transition: transform 0.3s ease;
     }
 
+    .message-box-overlay.visible .message-box-content,
+    .registration-code-modal-overlay.visible .registration-modal-content {
+      transform: translateY(0);
+    }
 
+    .message-box-content h3, .registration-modal-content h3 {
+      color: #007bff;
+      margin-top: 0;
+      font-size: 24px;
+      margin-bottom: 15px;
+    }
+
+    .message-box-content p, .registration-modal-content p {
+      color: #555;
+      font-size: 16px;
+      line-height: 1.6;
+      margin-bottom: 25px;
+    }
+
+    .message-box-content button, .registration-modal-content button {
+      padding: 12px 25px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 16px;
+      font-weight: 600;
+      transition: background-color 0.2s, transform 0.2s;
+      border: none;
+    }
+
+    #messageBoxCloseBtn, .registration-modal-content .button-group button.confirm-btn {
+      background-color: #007bff;
+      color: white;
+    }
+
+    #messageBoxCloseBtn:hover, .registration-modal-content .button-group button.confirm-btn:hover {
+      background-color: #0056b3;
+      transform: translateY(-2px);
+    }
+
+    .registration-modal-content h3 {
+        margin-top: 0;
+        color: #333;
+        font-size: 24px;
+        margin-bottom: 20px;
+    }
+    .registration-modal-content p {
+        color: #555;
+        font-size: 16px;
+        line-height: 1.6;
+        margin-bottom: 20px;
+    }
+    .registration-modal-content input[type="text"] {
+        padding: 12px 15px;
+        font-size: 18px;
+        border-radius: 8px;
+        border: 1px solid #dcdcdc;
+        width: calc(100% - 30px); /* 考慮 padding */
+        box-sizing: border-box;
+        margin-bottom: 20px;
+        text-align: center;
+    }
+    .registration-modal-content .button-group {
+        display: flex;
+        justify-content: center;
+        gap: 15px;
+    }
+    .registration-modal-content button {
+        padding: 12px 25px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 16px;
+        font-weight: 600;
+        transition: background-color 0.2s, transform 0.2s;
+        border: none;
+    }
+    .registration-modal-content .button-group button.cancel-btn {
+        background-color: #6c757d;
+        color: white;
+    }
+    .registration-modal-content .button-group button.cancel-btn:hover {
+        background-color: #5a6268;
+        transform: translateY(-2px);
+    }
   </style>
+  <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-storage-compat.js"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/@tmcw/togeojson@3.0.0/togeojson.js"></script>
+  <script src="https://unpkg.com/shpjs@latest/dist/shp.js"></script>
+  <script src="https://unpkg.com/jszip@3.7.1/dist/jszip.min.js"></script>
 </head>
 <body>
+  <div id="title">
+    我的地圖系統
+    <button id="editButton">編輯</button>
+  </div>
+
+  <div id="authSection">
+    <div id="loginForm">
+      <h3>請登入</h3>
+      <button id="googleSignInBtn">
+        <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google icon" />
+        使用 Google 登入
+      </button>
+    </div>
+
+    <div id="loggedInDashboard" style="display:none;">
+      <h3 id="userEmailDisplay" style="display:none;"></h3>
+      <p>您已登入，現在可以管理 KML 圖層。</p>
+
+      <div id="uploadKmlSectionDashboard">
+          <label for="hiddenKmlFileInput" style="white-space: nowrap;">上傳 KML:</label>
+          <span id="selectedKmlFileNameDashboard" style="flex-grow: 1; text-align: left;">尚未選擇檔案</span>
+          <input type="file" id="hiddenKmlFileInput" accept=".kml,.kmz,.zip" style="display:none;" />
+          <button id="uploadKmlSubmitBtnDashboard" class="action-buttons upload-btn" disabled>上傳</button>
+      </div>
+
+      <div id="deleteKmlSectionDashboard">
+          <label for="kmlLayerSelectDashboard" style="white-space: nowrap;">刪除 KML:</label>
+          <select id="kmlLayerSelectDashboard" style="flex-grow: 1;" disabled>
+              <option value="">-- 請選擇 KML 圖層 --</option>
+          </select>
+          <button id="deleteKmlSubmitBtnDashboard" class="action-buttons delete-btn" disabled>刪除</button>
+      </div>
+
+      <button id="logoutBtn">登出</button>
+    </div>
+  </div>
+  <div id="controls">
+    <div id="kmlControls">
+        <div style="display: flex; gap: 10px; align-items: center;">
+            <label for="kmlLayerSelect" style="font-size: 15px; font-weight: 500; white-space: nowrap;">選擇資料庫圖層:</label>
+            <select id="kmlLayerSelect" style="flex-grow: 1;">
+                <option value="">-- 請選擇 KML 圖層 --</option>
+            </select>
+            </div>
+        <div id="searchContainer">
+            <span class="material-symbols-outlined">search</span>
+            <input type="text" id="searchBox" placeholder="搜尋地點..." autocomplete="off" />
+        </div>
+        </div>
+  </div>
   <div id="map"></div>
 
-  <div class="search-container">
-    <input type="text" id="searchBox" placeholder="搜尋地點..." />
-    <ul id="searchResults" class="search-results"></ul>
+  <div id="searchResults"></div>
+
+  <div id="messageBoxOverlay" class="message-box-overlay">
+    <div class="message-box-content">
+      <h3 id="messageBoxTitle"></h3>
+      <p id="messageBoxMessage"></p>
+      <button id="messageBoxCloseBtn">確定</button>
+    </div>
   </div>
 
-  <button id="navButton">
-    <span class="material-symbols-outlined">navigation</span>
-    開始導航
-  </button>
-
-  <div class="map-controls-bottom-right">
-    <button id="locateButton" class="map-control-button locate">
-      <span class="material-symbols-outlined">my_location</span>
-      定位
-    </button>
-    <button id="zoomInButton" class="map-control-button zoom-in">
-      <span class="material-symbols-outlined">add</span>
-      放大
-    </button>
-    <button id="zoomOutButton" class="map-control-button zoom-out">
-      <span class="material-symbols-outlined">remove</span>
-      縮小
-    </button>
+  <div id="registrationCodeModalOverlay" class="registration-code-modal-overlay">
+    <div class="registration-modal-content">
+      <h3>輸入註冊碼</h3>
+      <p>請輸入管理員提供的註冊碼以完成帳號啟用。</p>
+      <input type="text" id="registrationCodeInput" placeholder="註冊碼" />
+      <div class="button-group">
+        <button id="submitRegistrationCodeBtn" class="confirm-btn">提交</button>
+        <button id="cancelRegistrationBtn" class="cancel-btn">取消</button>
+      </div>
+    </div>
   </div>
 
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script>
-    document.addEventListener('DOMContentLoaded', () => {
-      // 初始化地圖，禁用內建縮放控制項
-      const map = L.map('map', {
-        center: [22.6685, 120.5599], // 預設中心點 (例如：屏東內埔)
-        zoom: 16,
-        minZoom: 1, // 最小縮放級別
-        maxZoom: 18, // 最大縮放級別
-        zoomControl: false // 禁用 Leaflet 預設的縮放控制項
-      });
+  <script type="module">
+    // Import the functions you need from the SDKs you need
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-app.js";
+    import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut, signInAnonymously } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-auth.js";
+    import { getFirestore, doc, getDoc, setDoc, collection, query, where, getDocs, deleteDoc, updateDoc } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore.js";
+    import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-storage.js";
 
-      // 設定地圖圖層 (OpenStreetMap)
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-      }).addTo(map);
+    // Your web app's Firebase configuration
+    const firebaseConfig = {
+      apiKey: "YOUR_API_KEY", // Replace with your Firebase API Key
+      authDomain: "YOUR_AUTH_DOMAIN",
+      projectId: "YOUR_PROJECT_ID",
+      storageBucket: "YOUR_STORAGE_BUCKET",
+      messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+      appId: "YOUR_APP_ID"
+    };
 
-      // 原始標記點 (如果有的話)
-      let originalMarker = null;
+    // Initialize Firebase
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+    const storage = getStorage(app);
 
-      // 導航按鈕
-      const navButton = document.getElementById('navButton');
-      let currentDestination = null; // 用於儲存導航目的地
+    const map = L.map('map', { zoomControl: false }).setView([22.5, 120.5], 11); // Disable default zoom control
 
-      // 創建導航按鈕的函數
-      window.createNavButton = (destinationLatLng, name) => {
-        currentDestination = destinationLatLng;
-        navButton.style.display = 'flex'; // 顯示按鈕
-        navButton.innerHTML = `<span class="material-symbols-outlined">navigation</span>開始導航至 ${name}`;
-        navButton.onclick = () => {
-          if (currentDestination) {
-            const origin = map.getCenter(); // 使用地圖當前中心作為起點
-            const url = `https://www.google.com/maps/dir/?api=1&origin=${origin.lat},${origin.lng}&destination=${currentDestination.lat},${currentDestination.lng}&travelmode=driving`;
-            window.open(url, '_blank');
-          }
-        };
-      };
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '© OpenStreetMap'
+    }).addTo(map);
 
-      // 點擊地圖時隱藏導航按鈕 (除非是導航按鈕本身)
-      map.on('click', (e) => {
-        if (e.originalEvent.target !== navButton && !navButton.contains(e.originalEvent.target)) {
-            navButton.style.display = 'none';
+    // Add custom zoom control
+    L.control.zoom({ position: 'topleft' }).addTo(map);
+
+    // Custom Locate Me control
+    const LocateMeControl = L.Control.extend({
+        onAdd: function(map) {
+            const container = L.DomUtil.create('div', 'leaflet-bar leaflet-control leaflet-control-locate-me');
+            const link = L.DomUtil.create('a', '', container);
+            link.innerHTML = '<span class="material-symbols-outlined">my_location</span>';
+            link.href = '#';
+            link.title = '定位我的位置';
+
+            L.DomEvent.on(link, 'click', L.DomEvent.stopPropagation)
+                      .on(link, 'click', L.DomEvent.preventDefault)
+                      .on(link, 'click', () => {
+                          map.locate({ setView: true, maxZoom: 16 });
+                      });
+
+            return container;
+        },
+        onRemove: function(map) {
+            // Nothing to do here
         }
-      });
+    });
 
-      // 自訂縮放按鈕
-      document.getElementById('zoomInButton').addEventListener('click', () => {
-        map.zoomIn();
-      });
+    new LocateMeControl({ position: 'topleft' }).addTo(map);
 
-      document.getElementById('zoomOutButton').addEventListener('click', () => {
-        map.zoomOut();
-      });
+    // Handle location found event
+    map.on('locationfound', function(e) {
+        L.marker(e.latlng).addTo(map)
+            .bindPopup("您在這裡").openPopup();
+        console.log("Location found:", e.latlng);
+    });
 
-      // 自訂定位按鈕
-      document.getElementById('locateButton').addEventListener('click', () => {
-        if (navigator.geolocation) {
-          navigator.geolocation.getCurrentPosition(
-            (position) => {
-              const lat = position.coords.latitude;
-              const lng = position.coords.longitude;
-              const latLng = L.latLng(lat, lng);
+    // Handle location error event
+    map.on('locationerror', function(e) {
+        showMessageBox('定位失敗', e.message);
+        console.error("Location error:", e.message);
+    });
 
-              // 清除舊的定位標記
-              if (originalMarker) {
-                map.removeLayer(originalMarker);
-              }
+    const googleSignInBtn = document.getElementById('googleSignInBtn');
+    const logoutBtn = document.getElementById('logoutBtn');
+    const loginForm = document.getElementById('loginForm');
+    const loggedInDashboard = document.getElementById('loggedInDashboard');
+    const userEmailDisplay = document.getElementById('userEmailDisplay');
+    const editButton = document.getElementById('editButton');
+    const authSection = document.getElementById('authSection');
+    const hiddenKmlFileInput = document.getElementById('hiddenKmlFileInput');
+    const uploadKmlSubmitBtnDashboard = document.getElementById('uploadKmlSubmitBtnDashboard');
+    const selectedKmlFileNameDashboard = document.getElementById('selectedKmlFileNameDashboard');
+    const kmlLayerSelect = document.getElementById('kmlLayerSelect');
+    const kmlLayerSelectDashboard = document.getElementById('kmlLayerSelectDashboard');
+    const deleteKmlSubmitBtnDashboard = document.getElementById('deleteKmlSubmitBtnDashboard');
+    const searchBox = document.getElementById('searchBox');
+    const searchResults = document.getElementById('searchResults');
+    const messageBoxOverlay = document.getElementById('messageBoxOverlay');
+    const messageBoxTitle = document.getElementById('messageBoxTitle');
+    const messageBoxMessage = document.getElementById('messageBoxMessage');
+    const messageBoxCloseBtn = document.getElementById('messageBoxCloseBtn');
+    const registrationCodeModalOverlay = document.getElementById('registrationCodeModalOverlay');
+    const registrationCodeInput = document.getElementById('registrationCodeInput');
+    const submitRegistrationCodeBtn = document.getElementById('submitRegistrationCodeBtn');
+    const cancelRegistrationBtn = document.getElementById('cancelRegistrationBtn');
 
-              // 添加新的定位標記
-              originalMarker = L.marker(latLng).addTo(map)
-                .bindPopup("你的位置").openPopup();
+    let currentLayer = null;
+    let currentLayerFeatures = []; // To store features for search
+    let routeLayer = null; // Layer for navigation polyline
+    let routeMarkers = L.featureGroup().addTo(map); // Feature group for route markers
 
-              map.setView(latLng, 16); // 縮放到定位點
-            },
-            (error) => {
-              console.error("Geolocation error:", error);
-              alert("無法獲取您的位置，請檢查瀏覽器設定。");
-            },
-            {
-              enableHighAccuracy: true,
-              timeout: 5000,
-              maximumAge: 0
+    // Show message box function
+    function showMessageBox(title, message, onConfirm = null) {
+        messageBoxTitle.textContent = title;
+        messageBoxMessage.textContent = message;
+        messageBoxOverlay.classList.add('visible');
+        messageBoxCloseBtn.onclick = () => {
+            messageBoxOverlay.classList.remove('visible');
+            if (onConfirm) {
+                onConfirm();
             }
-          );
+        };
+    }
+
+    // Auth state observer
+    onAuthStateChanged(auth, async (user) => {
+        if (user) {
+            // User is signed in
+            loginForm.style.display = 'none';
+            loggedInDashboard.style.display = 'flex';
+            editButton.style.display = 'block'; // Show edit button when logged in
+
+            const userDocRef = doc(db, 'users', user.uid);
+            const userDocSnap = await getDoc(userDocRef);
+
+            if (userDocSnap.exists()) {
+                const userData = userDocSnap.data();
+                userEmailDisplay.textContent = `您好，${userData.name || user.email}`;
+                userEmailDisplay.style.display = 'block';
+
+                if (!userData.registrationCompleted) {
+                    showRegistrationCodeModal();
+                } else {
+                    await loadKmlLayers();
+                    await loadKmlLayersForDashboard(); // Load for dashboard select
+                    kmlLayerSelectDashboard.disabled = false;
+                    deleteKmlSubmitBtnDashboard.disabled = true; // Initially disabled
+                }
+            } else {
+                // New user: Create user document and prompt for registration code
+                if (user.email) {
+                    userEmailDisplay.textContent = `您好，${user.email}`;
+                    userEmailDisplay.style.display = 'block';
+                    const registrationSettingsRef = doc(db, 'settings', 'registration');
+                    const registrationSettingsSnap = await getDoc(registrationSettingsRef);
+
+                    if (registrationSettingsSnap.exists() && registrationSettingsSnap.data().isRegistrationOpen) {
+                         // Check if the user already exists in the system (e.g., from a previous anonymous login)
+                        const q = query(collection(db, "users"), where("email", "==", user.email));
+                        const querySnapshot = await getDocs(q);
+                        if (querySnapshot.empty) {
+                            // User does not exist, create new document
+                            await setDoc(userDocRef, {
+                                email: user.email,
+                                name: user.displayName || user.email.split('@')[0],
+                                registrationCompleted: false, // Mark as not completed until code is entered
+                                createdAt: new Date()
+                            });
+                            showRegistrationCodeModal();
+                        } else {
+                            // User exists, but might not have completed registration
+                            const existingUserData = querySnapshot.docs[0].data();
+                            if (!existingUserData.registrationCompleted) {
+                                showRegistrationCodeModal();
+                            } else {
+                                await loadKmlLayers();
+                                await loadKmlLayersForDashboard();
+                                kmlLayerSelectDashboard.disabled = false;
+                                deleteKmlSubmitBtnDashboard.disabled = true;
+                            }
+                        }
+                    } else {
+                        showMessageBox('註冊關閉', '目前不開放新用戶註冊。請聯繫管理員。');
+                        signOut(auth); // Sign out if registration is closed
+                    }
+                } else {
+                     // Anonymous user, just load KML
+                    userEmailDisplay.textContent = `您好，匿名用戶`;
+                    userEmailDisplay.style.display = 'block';
+                    await loadKmlLayers(); // Load for anonymous users
+                    kmlLayerSelectDashboard.disabled = true; // Disable dashboard controls for anonymous
+                    deleteKmlSubmitBtnDashboard.disabled = true;
+                    uploadKmlSubmitBtnDashboard.disabled = true;
+                    hiddenKmlFileInput.disabled = true;
+                }
+            }
         } else {
-          alert("您的瀏覽器不支持地理定位。");
+            // User is signed out
+            loginForm.style.display = 'flex';
+            loggedInDashboard.style.display = 'none';
+            userEmailDisplay.style.display = 'none';
+            editButton.style.display = 'none'; // Hide edit button when logged out
+            if (currentLayer) {
+                map.removeLayer(currentLayer);
+                currentLayer = null;
+                currentLayerFeatures = [];
+            }
+            kmlLayerSelect.innerHTML = '<option value="">-- 請選擇 KML 圖層 --</option>';
+            kmlLayerSelectDashboard.innerHTML = '<option value="">-- 請選擇 KML 圖層 --</option>';
+            kmlLayerSelectDashboard.disabled = true;
+            deleteKmlSubmitBtnDashboard.disabled = true;
+            uploadKmlSubmitBtnDashboard.disabled = true;
+            hiddenKmlFileInput.disabled = true;
+            signInAnonymously(auth).catch((error) => {
+                console.error("Anonymous sign-in error:", error);
+                showMessageBox('登入錯誤', '無法自動登入為匿名用戶。請檢查網絡連接或稍後再試。');
+            });
         }
-      });
+    });
+
+    googleSignInBtn.addEventListener('click', () => {
+        const provider = new GoogleAuthProvider();
+        signInWithPopup(auth, provider)
+            .then((result) => {
+                console.log("Google Sign-In successful", result.user);
+            })
+            .catch((error) => {
+                console.error("Google Sign-In error:", error);
+                showMessageBox('登入錯誤', 'Google 登入失敗。請稍後再試。');
+            });
+    });
+
+    logoutBtn.addEventListener('click', () => {
+        signOut(auth).then(() => {
+            console.log("User signed out");
+            showMessageBox('登出成功', '您已成功登出。');
+        }).catch((error) => {
+            console.error("Sign out error:", error);
+            showMessageBox('登出錯誤', '登出失敗。請稍後再試。');
+        });
+    });
+
+    editButton.addEventListener('click', () => {
+        authSection.style.display = authSection.style.display === 'none' ? 'flex' : 'none';
+    });
+
+    // Handle KML/KMZ/Shapefile file input
+    hiddenKmlFileInput.addEventListener('change', (event) => {
+        const file = event.target.files[0];
+        if (file) {
+            selectedKmlFileNameDashboard.textContent = file.name;
+            uploadKmlSubmitBtnDashboard.disabled = false;
+        } else {
+            selectedKmlFileNameDashboard.textContent = '尚未選擇檔案';
+            uploadKmlSubmitBtnDashboard.disabled = true;
+        }
+    });
+
+    uploadKmlSubmitBtnDashboard.addEventListener('click', async () => {
+        const file = hiddenKmlFileInput.files[0];
+        if (!file) {
+            showMessageBox('錯誤', '請選擇一個檔案。');
+            return;
+        }
+
+        const user = auth.currentUser;
+        if (!user) {
+            showMessageBox('錯誤', '請先登入。');
+            return;
+        }
+
+        let geojsonData = null;
+        const fileName = file.name;
+        const fileExtension = fileName.split('.').pop().toLowerCase();
+
+        try {
+            const arrayBuffer = await file.arrayBuffer();
+
+            if (fileExtension === 'kml') {
+                const kmlText = new TextDecoder('utf-8').decode(arrayBuffer);
+                const parser = new DOMParser();
+                const kmlDoc = parser.parseFromString(kmlText, 'text/xml');
+                geojsonData = togeojson.kml(kmlDoc);
+            } else if (fileExtension === 'kmz') {
+                const zip = await JSZip.loadAsync(arrayBuffer);
+                const kmlFile = Object.keys(zip.files).find(name => name.toLowerCase().endsWith('.kml'));
+                if (!kmlFile) {
+                    throw new Error("KMZ 檔案中未找到 KML 檔案。");
+                }
+                const kmlText = await zip.files[kmlFile].async("string");
+                const parser = new DOMParser();
+                const kmlDoc = parser.parseFromString(kmlText, 'text/xml');
+                geojsonData = togeojson.kml(kmlDoc);
+            } else if (fileExtension === 'zip') { // Assuming .zip contains shapefiles
+                const shpData = await shp(arrayBuffer);
+                if (shpData.features) {
+                    geojsonData = {
+                        type: "FeatureCollection",
+                        features: shpData.features
+                    };
+                } else if (Array.isArray(shpData) && shpData[0] && shpData[0].features) {
+                    // Handle case where shp() returns an array of GeoJSON objects
+                    geojsonData = {
+                        type: "FeatureCollection",
+                        features: shpData.flatMap(layer => layer.features)
+                    };
+                } else {
+                    throw new Error("ZIP 檔案中未找到有效的 Shapefile 數據。");
+                }
+            } else {
+                throw new Error("不支援的檔案類型。請上傳 .kml, .kmz 或 .zip (Shapefile)。");
+            }
+
+            if (!geojsonData || !geojsonData.features || geojsonData.features.length === 0) {
+                throw new Error("檔案中沒有可用的地理數據。");
+            }
+
+            // Upload GeoJSON to Firestore
+            const kmlDocRef = doc(db, 'kml', fileName); // Use filename as document ID
+            await setDoc(kmlDocRef, {
+                fileName: fileName,
+                uploadedBy: user.uid,
+                uploadedAt: new Date(),
+                geojson: geojsonData // Store the GeoJSON data
+            });
+
+            showMessageBox('上傳成功', `${fileName} 已成功上傳！`);
+            hiddenKmlFileInput.value = ''; // Clear input
+            selectedKmlFileNameDashboard.textContent = '尚未選擇檔案';
+            uploadKmlSubmitBtnDashboard.disabled = true;
+            await loadKmlLayers(); // Refresh public KML list
+            await loadKmlLayersForDashboard(); // Refresh dashboard KML list
+
+        } catch (error) {
+            console.error("Error processing or uploading file:", error);
+            showMessageBox('上傳失敗', `無法上傳檔案: ${error.message}`);
+        }
+    });
 
 
-      // 搜尋功能
-      const searchBox = document.getElementById('searchBox');
-      const searchResults = document.getElementById('searchResults');
-      let searchTimeout;
+    // Function to load KML layers from Firestore for the main map select
+    async function loadKmlLayers() {
+        kmlLayerSelect.innerHTML = '<option value="">-- 請選擇 KML 圖層 --</option>';
+        try {
+            const kmlCollectionRef = collection(db, 'kml');
+            const q = query(kmlCollectionRef);
+            const querySnapshot = await getDocs(q);
 
-      searchBox.addEventListener('input', () => {
-          clearTimeout(searchTimeout);
-          const query = searchBox.value.trim();
+            querySnapshot.forEach((doc) => {
+                const data = doc.data();
+                const option = document.createElement('option');
+                option.value = doc.id; // Use doc.id (filename) as value
+                option.textContent = data.fileName;
+                kmlLayerSelect.appendChild(option);
+            });
+        } catch (error) {
+            console.error("Error loading KML layers:", error);
+            showMessageBox('錯誤', '無法載入 KML 圖層列表。');
+        }
+    }
 
-          if (query.length > 1) {
-              searchTimeout = setTimeout(async () => {
-                  try {
-                      // 使用 Nominatim OpenStreetMap API 進行地名搜尋
-                      const response = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=geojson&limit=5`);
-                      const data = await response.json();
-                      console.log("Nominatim search results:", data);
+    // Function to load KML layers for the dashboard select (only current user's uploaded)
+    async function loadKmlLayersForDashboard() {
+        kmlLayerSelectDashboard.innerHTML = '<option value="">-- 請選擇 KML 圖層 --</option>';
+        const user = auth.currentUser;
+        if (!user) return;
 
-                      searchResults.innerHTML = ''; // 清空舊的結果
+        try {
+            const kmlCollectionRef = collection(db, 'kml');
+            const q = query(kmlCollectionRef, where("uploadedBy", "==", user.uid));
+            const querySnapshot = await getDocs(q);
 
-                      if (data.features && data.features.length > 0) {
-                          searchResults.style.display = 'block'; // 顯示結果框
-                          data.features.forEach(f => {
-                              // 確保是 Point 類型且有座標
-                              if (f.geometry && f.geometry.type === 'Point' && f.geometry.coordinates) {
-                                  const [lon, lat] = f.geometry.coordinates;
-                                  const name = f.properties.display_name || '未知地點';
-                                  const originalLatLng = L.latLng(lat, lon);
+            if (querySnapshot.empty) {
+                kmlLayerSelectDashboard.disabled = true;
+                deleteKmlSubmitBtnDashboard.disabled = true;
+                return;
+            }
 
-                                  const item = document.createElement('li');
-                                  item.classList.add('search-item');
-                                  item.innerHTML = `
-                                      <div class="search-item-icon">
-                                          <span class="material-symbols-outlined">place</span>
-                                      </div>
-                                      <div class="search-item-text">${name}</div>
-                                  `;
-                                  item.addEventListener('click', () => {
-                                      // 清除舊的標記
-                                      if (originalMarker) {
-                                          map.removeLayer(originalMarker);
-                                      }
-                                      // 添加新的標記
-                                      originalMarker = L.marker(originalLatLng).addTo(map)
-                                          .bindPopup(name).openPopup();
+            querySnapshot.forEach((doc) => {
+                const data = doc.data();
+                const option = document.createElement('option');
+                option.value = doc.id; // Use doc.id (filename) as value
+                option.textContent = data.fileName;
+                kmlLayerSelectDashboard.appendChild(option);
+            });
+            kmlLayerSelectDashboard.disabled = false;
+        } catch (error) {
+            console.error("Error loading KML layers for dashboard:", error);
+            showMessageBox('錯誤', '無法載入我的 KML 圖層列表。');
+        }
+    }
 
-                                      map.setView(originalLatLng, 16);
-                                      // 點擊搜尋結果時創建導航按鈕，並清除舊的
-                                      window.createNavButton(originalLatLng, name);
-                                      searchResults.style.display = 'none';
-                                      searchBox.value = '';
-                                      console.log(`Clicked search result: ${name}, zooming to map.`);
-                                  });
-                                  searchResults.appendChild(item);
-                              } else {
-                                  console.warn("Skipping non-Point feature or feature without coordinates for search:", f);
-                              }
-                          });
-                      } else {
-                          searchResults.style.display = 'none';
-                      }
-                  } catch (error) {
-                      console.error("搜尋地點時發生錯誤:", error);
-                      searchResults.style.display = 'none';
-                  }
-              }, 300); // 延遲 300ms 執行搜尋
-          } else {
-              searchResults.style.display = 'none';
-          }
-      });
 
-      // 點擊搜尋結果框外部時隱藏搜尋結果
-      document.addEventListener('click', (event) => {
-          if (!searchResults.contains(event.target) && event.target !== searchBox) {
-              searchResults.style.display = 'none';
-          }
-      });
+    // Event listener for main KML layer selection
+    kmlLayerSelect.addEventListener('change', async (event) => {
+        const selectedKmlId = event.target.value;
 
-      // 監聽 ESC 鍵以隱藏搜尋結果
-      document.addEventListener('keydown', (event) => {
-          if (event.key === 'Escape') {
-              searchResults.style.display = 'none';
-              searchBox.blur(); // 移除搜尋框的焦點
-          }
+        // Clear existing layer and search results
+        if (currentLayer) {
+            map.removeLayer(currentLayer);
+            currentLayer = null;
+            currentLayerFeatures = [];
+        }
+        searchResults.style.display = 'none';
+        searchResults.innerHTML = '';
+        searchBox.value = '';
+
+        if (!selectedKmlId) {
+            return; // No layer selected
+        }
+
+        try {
+            const kmlDocRef = doc(db, 'kml', selectedKmlId);
+            const kmlDocSnap = await getDoc(kmlDocRef);
+
+            if (kmlDocSnap.exists()) {
+                const geojson = kmlDocSnap.data().geojson;
+                currentLayer = L.geoJSON(geojson, {
+                    onEachFeature: function (feature, layer) {
+                        if (feature.properties && feature.properties.name) {
+                            layer.bindPopup(feature.properties.name);
+                        }
+                    },
+                    pointToLayer: function (feature, latlng) {
+                        // Use a default marker or a custom icon
+                        return L.marker(latlng);
+                    }
+                }).addTo(map);
+
+                currentLayerFeatures = geojson.features; // Store features for search
+
+                map.fitBounds(currentLayer.getBounds());
+            } else {
+                showMessageBox('錯誤', '找不到選定的 KML 圖層。');
+            }
+        } catch (error) {
+            console.error("Error loading selected KML layer:", error);
+            showMessageBox('錯誤', `載入 KML 圖層失敗: ${error.message}`);
+        }
+    });
+
+    // Event listener for dashboard KML layer selection
+    kmlLayerSelectDashboard.addEventListener('change', () => {
+        if (kmlLayerSelectDashboard.value) {
+            deleteKmlSubmitBtnDashboard.disabled = false;
+        } else {
+            deleteKmlSubmitBtnDashboard.disabled = true;
+        }
+    });
+
+    // Delete KML button
+    deleteKmlSubmitBtnDashboard.addEventListener('click', async () => {
+        const selectedKmlId = kmlLayerSelectDashboard.value;
+        if (!selectedKmlId) {
+            showMessageBox('錯誤', '請選擇要刪除的 KML 圖層。');
+            return;
+        }
+
+        const user = auth.currentUser;
+        if (!user) {
+            showMessageBox('錯誤', '請先登入。');
+            return;
+        }
+
+        try {
+            const kmlDocRef = doc(db, 'kml', selectedKmlId);
+            const kmlDocSnap = await getDoc(kmlDocRef);
+
+            if (!kmlDocSnap.exists() || kmlDocSnap.data().uploadedBy !== user.uid) {
+                showMessageBox('權限不足', '您沒有權限刪除此圖層。');
+                return;
+            }
+
+            await deleteDoc(kmlDocRef);
+            showMessageBox('刪除成功', `${selectedKmlId} 已成功刪除！`, async () => {
+                await loadKmlLayers();
+                await loadKmlLayersForDashboard();
+                // If the deleted layer was the currently displayed one, clear it
+                if (currentLayer && currentLayer.options.name === selectedKmlId) { // Need a way to identify current layer, maybe store its ID
+                    map.removeLayer(currentLayer);
+                    currentLayer = null;
+                    currentLayerFeatures = [];
+                    searchResults.style.display = 'none';
+                    searchResults.innerHTML = '';
+                    searchBox.value = '';
+                }
+            });
+        } catch (error) {
+            console.error("Error deleting KML layer:", error);
+            showMessageBox('刪除失敗', `無法刪除檔案: ${error.message}`);
+        }
+    });
+
+
+    // Search functionality
+    searchBox.addEventListener('input', (e) => {
+      // Clear previous search results
+      searchResults.innerHTML = '';
+
+      if (!currentLayerFeatures || currentLayerFeatures.length === 0) {
+          searchResults.style.display = 'none';
+          console.log("No KML layer loaded or no features, hiding search results.");
+          return;
+      }
+
+      const query = e.target.value.trim().toLowerCase();
+
+      if (!query) {
+        searchResults.style.display = 'none';
+        console.log("Search query empty, hiding results.");
+        return;
+      }
+
+      console.log(`Searching for: ${query}`);
+      const results = currentLayerFeatures.filter(f => f.properties.name?.toLowerCase().includes(query));
+
+      if (results.length === 0) {
+        searchResults.style.display = 'none';
+        console.log("No search results found.");
+        return;
+      }
+
+      // Position searchResults relative to searchBox,
+      // accounting for controls on the top-left
+      const searchBoxRect = searchBox.getBoundingClientRect();
+      const mapControlsContainer = document.querySelector('.leaflet-control-container .leaflet-top.leaflet-left');
+      let controlsWidth = 0;
+      if (mapControlsContainer) {
+          // Get the actual computed width of the controls container
+          const computedStyle = window.getComputedStyle(mapControlsContainer);
+          controlsWidth = parseFloat(computedStyle.width) + parseFloat(computedStyle.paddingLeft) + parseFloat(computedStyle.paddingRight) + parseFloat(computedStyle.marginLeft) + parseFloat(computedStyle.marginRight);
+      }
+
+      searchResults.style.position = 'absolute'; // Ensure it's absolute
+      searchResults.style.top = `${searchBoxRect.bottom}px`; // Just below search box
+      // Adjust left to leave space for map controls
+      searchResults.style.left = `${Math.max(searchBoxRect.left, controlsWidth + 10)}px`; // +10 for a little margin
+      searchResults.style.width = `${searchBoxRect.width}px`; // Match search box width
+
+      searchResults.style.display = 'grid';
+      console.log(`Found ${results.length} search results.`);
+
+      results.forEach(f => {
+        const name = f.properties.name || '未命名';
+        const [lon, lat] = f.geometry.coordinates;
+        const item = document.createElement('div');
+        item.className = 'result-item';
+        item.textContent = name;
+        item.title = name;
+        item.addEventListener('click', () => {
+          const originalLatLng = L.latLng(lat, lon);
+          map.setView(originalLatLng, 16);
+          createNavButton(originalLatLng, name);
+          searchResults.style.display = 'none';
+          searchBox.value = '';
+          console.log(`Clicked search result: ${name}, zooming to map.`);
+        });
+        searchResults.appendChild(item);
       });
     });
 
+    // Hide search results when clicking outside
+    document.addEventListener('click', (event) => {
+        if (!searchResults.contains(event.target) && event.target !== searchBox) {
+            searchResults.style.display = 'none';
+        }
+    });
+    // Hide search results when pressing ESC key
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') {
+            searchResults.style.display = 'none';
+        }
+    });
+
+    function createNavButton(targetLatLng, targetName) {
+      if (routeLayer) {
+        map.removeLayer(routeLayer);
+      }
+      routeMarkers.clearLayers();
+
+      const startLatLng = map.getCenter(); // Current map center as start point
+      const startMarker = L.marker(startLatLng).addTo(routeMarkers).bindPopup("起點").openPopup();
+      const endMarker = L.marker(targetLatLng).addTo(routeMarkers).bindPopup(`目的地: ${targetName}`).openPopup();
+
+      // Simple straight line for demonstration
+      routeLayer = L.polyline([startLatLng, targetLatLng], { color: 'blue', weight: 5, opacity: 0.7 }).addTo(map);
+
+      // Fit bounds to include both start and end markers
+      const bounds = L.latLngBounds(startLatLng, targetLatLng);
+      map.fitBounds(bounds, { padding: [50, 50] }); // Add some padding
+
+      showMessageBox('導航路線', `已規劃從當前視圖中心到 ${targetName} 的直線路線。`);
+    }
+
+    // Firebase Registration Code Modal Handling
+    const showRegistrationCodeModal = () => {
+        registrationCodeModalOverlay.classList.add('visible');
+    };
+
+    const hideRegistrationCodeModal = () => {
+        registrationCodeModalOverlay.classList.remove('visible');
+        registrationCodeInput.value = '';
+    };
+
+    cancelRegistrationBtn.addEventListener('click', () => {
+        hideRegistrationCodeModal();
+        // Option to sign out if they cancel registration, or allow them to continue as anonymous if applicable
+        signOut(auth);
+    });
+
+    submitRegistrationCodeBtn.addEventListener('click', async () => {
+        const code = registrationCodeInput.value.trim();
+        const user = auth.currentUser;
+
+        if (!user || !user.email) {
+            showMessageBox('錯誤', '未檢測到用戶或用戶電子郵件。請重新登入。');
+            signOut(auth);
+            return;
+        }
+
+        if (!code) {
+            showMessageBox('錯誤', '請輸入註冊碼。');
+            return;
+        }
+
+        try {
+            const registrationDocRef = doc(db, 'settings', 'registration');
+            const registrationDocSnap = await getDoc(registrationDocRef);
+
+            if (registrationDocSnap.exists() && registrationDocSnap.data().code === code) {
+                // Code is correct, update user document
+                const userDocRef = doc(db, 'users', user.uid);
+                await updateDoc(userDocRef, {
+                    registrationCompleted: true,
+                    role: 'user' // Assign a default role
+                });
+                showMessageBox('註冊成功', '您的帳號已成功啟用！', () => {
+                    hideRegistrationCodeModal();
+                    // Reload KML layers after successful registration
+                    loadKmlLayers();
+                    loadKmlLayersForDashboard();
+                    kmlLayerSelectDashboard.disabled = false;
+                });
+            } else {
+                showMessageBox('錯誤', '註冊碼不正確。請重試。');
+            }
+        } catch (error) {
+            console.error("Error submitting registration code:", error);
+            showMessageBox('錯誤', `驗證註冊碼失敗: ${error.message}`);
+        }
+    });
+
+    // Initial load of KML layers when the page loads (for anonymous users or signed-in users)
+    // This will be called by onAuthStateChanged, so no need to call it directly here.
   </script>
 </body>
 </html>
