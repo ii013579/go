@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>地圖 v4.2.22</title>
+  <title>地圖 v4.2.23</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -673,7 +673,30 @@
         justify-content: flex-end;
         flex-wrap: wrap;
     }
-    .user-card-row-2 .change-role-btn,
+    /* 變更按鈕樣式 */
+    .user-card-row-2 .change-role-btn {
+        padding: 6px 10px;
+        font-size: 14px;
+        width: auto;
+        flex-shrink: 0;
+        background-color: #007bff; /* 藍色 */
+        color: white;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        font-weight: 600;
+        transition: background-color 0.2s, transform 0.2s;
+    }
+    .user-card-row-2 .change-role-btn:hover {
+        background-color: #0056b3; /* 懸停時顏色加深 */
+        transform: translateY(-1px);
+    }
+    .user-card-row-2 .change-role-btn:disabled {
+        background-color: #cccccc;
+        cursor: not-allowed;
+        transform: none;
+    }
+    /* 刪除按鈕樣式 (保持紅色) */
     .user-card-row-2 .delete-user-btn {
         padding: 6px 10px;
         font-size: 14px;
@@ -691,7 +714,7 @@
 </head>
 <body>
   <div id="title">
-    我的地圖系統 v4.2.22
+    我的地圖系統 v4.2.23
     <button id="editButton">編輯</button>
   </div>
 
@@ -1532,6 +1555,13 @@
                                 });
                                 console.log("新用戶文檔創建成功。");
 
+                                // Invalidate the one-time registration code after successful use
+                                await db.collection('settings').doc('registration').set({
+                                    oneTimeCode: null,
+                                    oneTimeCodeExpiry: null
+                                }, { merge: true });
+                                console.log("一次性註冊碼已在 Firestore 中失效。");
+
                                 showMessage('註冊成功', `歡迎 ${reAuthUser.email} (${nickname})！您的帳號已成功註冊，正在等待管理員審核。`);
 
                             } catch (error) {
@@ -1559,7 +1589,7 @@
         logoutBtn.addEventListener('click', async () => {
             try {
                 await auth.signOut();
-                showMessage('登出成功', '您已成功登出。');
+                showMessage('登出成功', '用戶已登出。'); // 登出訊息已修改
             } catch (error) {
                 console.error("登出失敗:", error);
                 showMessage('登出失敗', `登出時發生錯誤: ${error.message}`);
