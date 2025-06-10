@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>地圖 v4.2.20</title>
+  <title>地圖 v4.2.22</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -235,12 +235,19 @@
       display: flex;
       align-items: center;
       gap: 8px;
-      border: 1px solid #dcdcdc;
-      border-radius: 8px;
+      border: 1px solid #dcdcdc; /* 預設邊框 */
+      border-radius: 8px; /* 預設圓角 */
       padding: 0 12px;
       background-color: #fff;
       box-shadow: inset 0 1px 3px rgba(0,0,0,0.05);
       position: relative; /* 為了 searchResults 絕對定位 */
+      transition: border-radius 0.2s ease-in-out, border-bottom-color 0.2s ease-in-out; /* 平滑過渡 */
+    }
+    /* 當搜尋結果顯示時，調整搜尋容器的底部圓角和邊框 */
+    #searchContainer.search-active {
+        border-bottom-left-radius: 0;
+        border-bottom-right-radius: 0;
+        border-bottom-color: transparent; /* 讓底部邊框透明，與搜尋結果框連接 */
     }
 
     /* Material Symbols 圖標樣式 */
@@ -270,16 +277,18 @@
     /* 搜尋結果彈出框樣式 */
     #searchResults {
       position: absolute;
-      top: 100%; /* 貼著搜尋框底部 */
-      left: 0; /* 貼著搜尋框左側 */
-      width: 100%; /* 與搜尋框同寬 */
+      top: 100%; /* 相對於父容器 (searchContainer) 的底部 */
+      left: 0; /* 相對於父容器的左側 */
+      width: 100%; /* 與父容器同寬 */
       max-height: 300px;
       background: rgba(255, 255, 255, 0.98);
       overflow-y: auto;
-      border: 1px solid #ddd;
-      border-top: none; /* 移除上方邊框，與搜尋框視覺連結 */
-      border-bottom-left-radius: 8px;
-      border-bottom-right-radius: 8px;
+      border: 1px solid #ddd; /* 增加邊框 */
+      border-top: none; /* 移除頂部邊框，實現無縫連接 */
+      border-top-left-radius: 0; /* 頂部無圓角 */
+      border-top-right-radius: 0; /* 頂部無圓角 */
+      border-bottom-left-radius: 8px; /* 底部圓角 */
+      border-bottom-right-radius: 8px; /* 底部圓角 */
       box-shadow: 0 6px 16px rgba(0,0,0,0.18);
       font-size: 15px;
       display: none; /* 預設隱藏 */
@@ -329,11 +338,16 @@
     }
 
     /* Leaflet 控制項容器樣式 */
+    /* 這裡的 top 和 left 需要根據實際佈局和避免重疊來調整 */
     .leaflet-control-container .leaflet-top.leaflet-left {
         display: flex;
         flex-direction: column; /* 將縮放和定位按鈕堆疊 */
         align-items: flex-start;
         gap: 8px; /* 按鈕間距 */
+        /* 調整位置，確保不與搜尋結果重疊 */
+        left: 15px; /* 預設的左邊距 */
+        top: 15px; /* 預設的上邊距 */
+        z-index: 900; /* 確保在搜尋結果之下，避免遮擋 */
     }
 
     /* 地標文字標籤樣式 */
@@ -677,7 +691,7 @@
 </head>
 <body>
   <div id="title">
-    我的地圖系統 v4.2.20
+    我的地圖系統 v4.2.22
     <button id="editButton">編輯</button>
   </div>
 
@@ -1154,8 +1168,10 @@
         // 處理地圖點擊事件，隱藏搜尋結果和導航按鈕
         map.on('click', () => {
             const searchResults = document.getElementById('searchResults');
+            const searchContainer = document.getElementById('searchContainer'); // 獲取搜尋容器
             if (searchResults) {
                 searchResults.style.display = 'none';
+                searchContainer.classList.remove('search-active'); // 移除活躍狀態類別
             }
             const searchBox = document.getElementById('searchBox');
             if (searchBox) {
@@ -1796,7 +1812,8 @@
         const controls = document.getElementById('controls');
         const searchBox = document.getElementById('searchBox');
         const searchResults = document.getElementById('searchResults');
-        
+        const searchContainer = document.getElementById('searchContainer'); // 獲取搜尋容器
+
         authSection.style.display = 'none';
         controls.style.display = 'flex';
 
@@ -1819,7 +1836,7 @@
 
 
         // 監聽搜尋框的輸入事件
-        if (searchBox && searchResults) {
+        if (searchBox && searchResults && searchContainer) {
             searchBox.addEventListener('input', async (e) => {
                 const query = e.target.value.trim().toLowerCase();
                 searchResults.innerHTML = '';
@@ -1832,15 +1849,10 @@
                         );
                     }
 
-                    // 動態定位搜尋結果框，讓它緊貼搜尋框下方，且與搜尋框同寬
-                    const searchBoxRect = searchBox.getBoundingClientRect();
-                    
-                    searchResults.style.position = 'absolute';
-                    searchResults.style.top = `${searchBoxRect.bottom}px`;
-                    searchResults.style.left = `${searchBoxRect.left}px`; 
-                    searchResults.style.width = `${searchBoxRect.width}px`;
+                    // 當搜尋結果顯示時，為 searchContainer 添加活躍狀態類別
+                    searchContainer.classList.add('search-active');
 
-                    searchResults.style.display = 'grid';
+                    searchResults.style.display = 'grid'; // 顯示為 grid
 
                     if (results.length === 0) {
                         const noResult = document.createElement('div');
@@ -1864,6 +1876,8 @@
                                     window.createNavButton(originalLatLng, name); 
                                     searchResults.style.display = 'none';
                                     searchBox.value = '';
+                                    // 當搜尋結果隱藏時，移除 searchContainer 的活躍狀態類別
+                                    searchContainer.classList.remove('search-active');
                                     console.log(`點擊搜尋結果: ${name}，縮放至地圖。`);
                                 });
                                 searchResults.appendChild(item);
@@ -1874,13 +1888,17 @@
                     }
                 } else {
                     searchResults.style.display = 'none';
+                    // 當搜尋結果隱藏時，移除 searchContainer 的活躍狀態類別
+                    searchContainer.classList.remove('search-active');
                 }
             });
 
             // 點擊搜尋結果框外部時隱藏搜尋結果
             document.addEventListener('click', (event) => {
-                if (!searchResults.contains(event.target) && event.target !== searchBox) {
+                // 檢查點擊是否在 searchResults 內部，或者在 searchBox 內部，或者在 searchContainer 內部
+                if (!searchResults.contains(event.target) && event.target !== searchBox && !searchContainer.contains(event.target)) {
                     searchResults.style.display = 'none';
+                    searchContainer.classList.remove('search-active'); // 移除活躍狀態類別
                 }
             });
 
@@ -1888,6 +1906,7 @@
             document.addEventListener('keydown', (event) => {
                 if (event.key === 'Escape') {
                     searchResults.style.display = 'none';
+                    searchContainer.classList.remove('search-active'); // 移除活躍狀態類別
                     searchBox.blur();
                 }
             });
