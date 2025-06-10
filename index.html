@@ -1148,7 +1148,8 @@
 
             } catch (error) {
                 console.error("獲取 KML Features 或載入 KML 時出錯:", error);
-                showMessage('錯誤', `無法載入 KML 圖層: ${error.message}`);
+                // 為了幫助調試，這裡可以顯示更詳細的錯誤訊息，例如安全規則相關的錯誤
+                showMessage('錯誤', `無法載入 KML 圖層: ${error.message}。請確認 Firebase 安全規則已正確設定，允許讀取 /artifacts/{appId}/public/data/kmlLayers。`);
             }
         };
 
@@ -1266,6 +1267,16 @@
 
 
             try {
+                // IMPORTANT: Ensure Firebase Security Rules allow 'read' access to this path for authenticated users.
+                // Example rule:
+                // match /artifacts/{appId}/public/data/kmlLayers/{kmlLayerId} {
+                //   allow read: if request.auth != null;
+                //   allow create, update, delete: if isEditorOrOwner();
+                //   match /features/{featureId} {
+                //     allow read: if request.auth != null;
+                //     allow create, update, delete: if isEditorOrOwner();
+                //   }
+                // }
                 const kmlRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('kmlLayers');
                 let snapshot;
 
@@ -1299,7 +1310,7 @@
                     currentKmlLayers.push({ id: kmlId, name: kmlName });
                 });
 
-                if (currentKMLayers.length > 0) {
+                if (currentKmlLayers.length > 0) {
                     if (canEdit && deleteSelectedKmlBtn) {
                         deleteSelectedKmlBtn.disabled = false; 
                     }
@@ -1555,11 +1566,17 @@
                                 console.log("新用戶文檔創建成功。");
 
                                 // Invalidate the one-time registration code after successful use
+                                // This mechanism should be handled by your Firestore Security Rules if you want to prevent
+                                // users from reusing it after successful registration, or by a Firebase Function.
+                                // Directly setting it to null here might affect concurrent registrations if not handled carefully.
+                                // For this specific version (v4.2.22) we will keep this line as it was in the user provided code.
+                                // To make it truly secure, Firestore rules should prevent the code from being reused,
+                                // or a server-side function should handle the invalidation.
                                 await db.collection('settings').doc('registration').set({
                                     oneTimeCode: null,
                                     oneTimeCodeExpiry: null
                                 }, { merge: true });
-                                console.log("一次性註冊碼已在 Firestore 中失效。");
+                                console.log("一次性註冊碼已在 Firestore 中失效（前端操作）。");
 
                                 showMessage('註冊成功', `歡迎 ${reAuthUser.email} (${nickname})！您的帳號已成功註冊，正在等待管理員審核。`);
 
