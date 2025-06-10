@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>地圖 v4.2.23</title>
+  <title>地圖 v4.2.22</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -479,7 +479,6 @@
         font-size: 15px;
         border-radius: 8px;
         border: 1px solid #dcdcdc;
-        transition: border-color 0.3s, box-shadow 0.3s;
         width: calc(100% - 24px);
         box-sizing: border-box;
         margin-bottom: 15px;
@@ -679,7 +678,7 @@
         font-size: 14px;
         width: auto;
         flex-shrink: 0;
-        background-color: #007bff; /* 藍色 */
+        background-color: #28a745; /* 綠色 */
         color: white;
         border: none;
         border-radius: 8px;
@@ -688,7 +687,7 @@
         transition: background-color 0.2s, transform 0.2s;
     }
     .user-card-row-2 .change-role-btn:hover {
-        background-color: #0056b3; /* 懸停時顏色加深 */
+        background-color: #218838; /* 懸停時顏色加深 */
         transform: translateY(-1px);
     }
     .user-card-row-2 .change-role-btn:disabled {
@@ -714,7 +713,7 @@
 </head>
 <body>
   <div id="title">
-    我的地圖系統 v4.2.23
+    我的地圖系統 v4.2.22
     <button id="editButton">編輯</button>
   </div>
 
@@ -1300,7 +1299,7 @@
                     currentKmlLayers.push({ id: kmlId, name: kmlName });
                 });
 
-                if (currentKmlLayers.length > 0) {
+                if (currentKMLayers.length > 0) {
                     if (canEdit && deleteSelectedKmlBtn) {
                         deleteSelectedKmlBtn.disabled = false; 
                     }
@@ -1578,7 +1577,8 @@
                 } else {
                     showMessage('登入成功', `歡迎回來 ${user.email}！`);
                 }
-            } catch (error) {
+            }
+            catch (error) {
                 console.error("Google 登入失敗:", error);
                 loginMessage.textContent = `登入失敗: ${error.message}`;
                 showMessage('登入失敗', `Google 登入時發生錯誤: ${error.message}`);
@@ -1589,7 +1589,7 @@
         logoutBtn.addEventListener('click', async () => {
             try {
                 await auth.signOut();
-                showMessage('登出成功', '用戶已登出。'); // 登出訊息已修改
+                showMessage('登出成功', '您已成功登出。');
             } catch (error) {
                 console.error("登出失敗:", error);
                 showMessage('登出失敗', `登出時發生錯誤: ${error.message}`);
