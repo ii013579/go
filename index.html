@@ -270,22 +270,22 @@
     /* 搜尋結果彈出框樣式 */
     #searchResults {
       position: absolute;
-      top: 0; /* 將由 JS 動態調整 */
-      left: 0; /* 將由 JS 動態調整 */
-      width: auto; /* 將由 JS 動態調整 */
+      top: 100%; /* 貼著搜尋框底部 */
+      left: 0; /* 貼著搜尋框左側 */
+      width: 100%; /* 與搜尋框同寬 */
       max-height: 300px;
       background: rgba(255, 255, 255, 0.98);
       overflow-y: auto;
       border: 1px solid #ddd;
-      border-top: none;
+      border-top: none; /* 移除上方邊框，與搜尋框視覺連結 */
       border-bottom-left-radius: 8px;
       border-bottom-right-radius: 8px;
       box-shadow: 0 6px 16px rgba(0,0,0,0.18);
       font-size: 15px;
       display: none; /* 預設隱藏 */
       z-index: 1100; /* 確保在最上層 */
-      grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); /* 顯示三欄 */
-      gap: 8px;
+      grid-template-columns: repeat(3, 1fr); /* 固定為三欄 */
+      gap: 8px; /* 項目間距 */
       padding: 10px;
       box-sizing: border-box;
     }
@@ -307,6 +307,17 @@
       background-color: #e6f0ff;
       transform: translateY(-2px);
     }
+    /* 當結果少於三欄時，讓它們填充整行 */
+    #searchResults .result-item:nth-last-child(1):nth-child(odd) {
+      grid-column: span 3;
+    }
+    #searchResults .result-item:nth-last-child(2):nth-child(even) {
+      grid-column: span 2;
+    }
+    #searchResults .result-item:last-child:nth-child(odd):last-of-type {
+      grid-column: span 3;
+    }
+
 
     /* 地圖容器樣式 */
     #map {
@@ -1821,19 +1832,12 @@
                         );
                     }
 
-                    // 動態定位搜尋結果框，避開左上方地圖控制項
+                    // 動態定位搜尋結果框，讓它緊貼搜尋框下方，且與搜尋框同寬
                     const searchBoxRect = searchBox.getBoundingClientRect();
-                    const mapControlsContainer = document.querySelector('.leaflet-control-container .leaflet-top.leaflet-left');
-                    let controlsRightEdge = 0;
-
-                    if (mapControlsContainer) {
-                        const mapControlsRect = mapControlsContainer.getBoundingClientRect();
-                        controlsRightEdge = mapControlsRect.right;
-                    }
                     
                     searchResults.style.position = 'absolute';
                     searchResults.style.top = `${searchBoxRect.bottom}px`;
-                    searchResults.style.left = `${Math.max(searchBoxRect.left, controlsRightEdge + 10)}px`; 
+                    searchResults.style.left = `${searchBoxRect.left}px`; 
                     searchResults.style.width = `${searchBoxRect.width}px`;
 
                     searchResults.style.display = 'grid';
@@ -1842,6 +1846,7 @@
                         const noResult = document.createElement('div');
                         noResult.className = 'result-item';
                         noResult.textContent = '沒有找到結果';
+                        // 讓「沒有找到結果」訊息橫跨三欄
                         noResult.style.gridColumn = 'span 3'; 
                         searchResults.appendChild(noResult);
                     } else {
