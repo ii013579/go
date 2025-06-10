@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>地圖 v4.2.18 (優化縮放與定位按鈕，搜尋三欄顯示)</title>
+  <title>地圖 v4.2.19 (單一縮放與定位按鈕，搜尋三欄對齊，註冊碼新規則)</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -257,7 +257,7 @@
     #searchResults {
       position: absolute;
       top: calc(100% + 5px); /* 緊貼搜尋框下方 */
-      left: 0;
+      left: 0; /* 這裡改為 0，使其相對於父元素對齊左側 */
       width: 100%; /* 與搜尋框同寬 */
       max-height: 300px;
       background: rgba(255, 255, 255, 0.98);
@@ -271,7 +271,7 @@
       display: none; /* 預設隱藏，有結果才顯示 */
       z-index: 1100;
       /* Adjusted for three columns */
-      grid-template-columns: repeat(3, 1fr); /* 顯示三欄 */
+      grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); /* 顯示三欄，minmax 確保在小螢幕也能適應 */
       gap: 8px;
       padding: 10px;
       box-sizing: border-box;
@@ -647,7 +647,7 @@
 </head>
 <body>
   <div id="title">
-    我的地圖系統 v4.2.18
+    我的地圖系統 v4.2.19
     <button id="editButton">編輯</button>
   </div>
 
@@ -1727,6 +1727,23 @@
             }
         });
 
+        // Function to generate the alphanumeric code (3 letters + 5 digits)
+        function generateRegistrationAlphanumericCode() {
+            let result = '';
+            const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+            const digits = '0123456789';
+
+            // Generate 3 random letters
+            for (let i = 0; i < 3; i++) {
+                result += letters.charAt(Math.floor(Math.random() * letters.length));
+            }
+            // Generate 5 random digits
+            for (let i = 0; i < 5; i++) {
+                result += digits.charAt(Math.floor(Math.random() * digits.length));
+            }
+            return result;
+        }
+
         // 事件監聽器：生成一次性註冊碼 (Owner Only)
         generateRegistrationCodeBtn.addEventListener('click', async () => {
             if (window.currentUserRole !== 'owner') {
@@ -1741,7 +1758,7 @@
             }
 
             try {
-                const code = Math.random().toString(36).substring(2, 10).toUpperCase();
+                const code = generateRegistrationAlphanumericCode(); // 使用新的生成函數
                 let countdownSeconds = 60; // 註冊碼有效時間 60 秒
                 const expiryDate = new Date();
                 expiryDate.setSeconds(expiryDate.getSeconds() + countdownSeconds); 
@@ -1847,12 +1864,21 @@
                         );
                     }
 
+                    // 動態定位搜尋結果框 (移除舊的錯誤定位邏輯)
+                    // const searchBoxRect = searchBox.getBoundingClientRect(); // 不再需要基於 viewport 的計算
+                    // searchResults.style.top = `${searchBoxRect.bottom}px`; // 依然保持相對定位
+                    // searchResults.style.left = `${searchBoxRect.left}px`; // 移除這行，改用 CSS left: 0;
+                    // searchResults.style.width = `${searchBoxRect.width}px`; // 移除這行，改用 CSS width: 100%;
+
+
                     searchResults.style.display = 'grid'; // 顯示為 grid
 
                     if (results.length === 0) {
                         const noResult = document.createElement('div');
                         noResult.className = 'result-item';
                         noResult.textContent = '沒有找到結果';
+                        // Span all three columns for "No results" message
+                        noResult.style.gridColumn = 'span 3'; 
                         searchResults.appendChild(noResult);
                     } else {
                         results.forEach(f => {
