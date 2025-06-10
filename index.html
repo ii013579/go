@@ -589,7 +589,7 @@
     });
 
     // Handle location error event
-    map.on('locationerror', function(e) {
+    map.on('locationerror', function(e) 
         showMessageBox('定位失敗', e.message);
         console.error("Location error:", e.message);
     });
