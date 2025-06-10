@@ -1454,9 +1454,9 @@
 
                         registrationSettingsSection.style.display = isOwner ? 'flex' : 'none'; 
                         generateRegistrationCodeBtn.disabled = !isOwner;
-                        registrationCodeDisplay.style.display = 'none';
-                        registrationCodeCountdown.style.display = 'none';
-                        registrationExpiryDisplay.style.display = 'none';
+                        registrationCodeDisplay.style.display = 'inline-block'; // Changed from 'none' to 'inline-block' for visibility
+                        registrationCodeCountdown.style.display = 'inline-block'; // Changed from 'none' to 'inline-block' for visibility
+                        registrationExpiryDisplay.style.display = 'none'; // This remains 'none' until the timer starts.
 
                         userManagementSection.style.display = isOwner ? 'block' : 'none';
                         refreshUsersBtn.disabled = !isOwner;
