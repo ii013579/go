@@ -699,3 +699,59 @@ body {
     font-weight: bold;
     color: #007bff;
 }
+
+/* Confirmation Modal Styles (與 message-box-overlay 類似) */
+.confirmation-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 2000;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.3s ease, visibility 0.3s ease;
+}
+.confirmation-modal-overlay.visible {
+    opacity: 1;
+    visibility: visible;
+}
+.confirmation-modal-content {
+    background: #fff;
+    padding: 30px;
+    border-radius: 12px;
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+    text-align: center;
+    max-width: 400px;
+    width: 90%;
+    transform: translateY(-20px);
+    transition: transform 0.3s ease;
+}
+.confirmation-modal-overlay.visible .confirmation-modal-content {
+    transform: translateY(0);
+}
+.confirmation-modal-content h3 {
+    margin-top: 0;
+    color: #333;
+    font-size: 22px;
+    margin-bottom: 15px;
+}
+.confirmation-modal-content p {
+    color: #555;
+    font-size: 16px;
+    line-height: 1.6;
+    margin-bottom: 25px;
+}
+.confirmation-modal-content .button-group {
+    display: flex;
+    justify-content: center;
+    gap: 15px;
+}
+.confirmation-modal-content .action-buttons {
+    flex: 1;
+    max-width: 120px; /* 調整按鈕寬度 */
+}
