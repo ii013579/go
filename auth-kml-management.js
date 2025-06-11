@@ -137,6 +137,33 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
+    // 輔助函數：顯示自訂確認模態框
+    window.showConfirmationModal = function(title, message) {
+        return new Promise(resolve => {
+            const modalOverlay = document.getElementById('confirmationModalOverlay');
+            const modalTitle = document.getElementById('confirmationModalTitle');
+            const modalMessage = document.getElementById('confirmationModalMessage');
+            const confirmYesBtn = document.getElementById('confirmYesBtn');
+            const confirmNoBtn = document.getElementById('confirmNoBtn');
+
+            modalTitle.textContent = title;
+            modalMessage.textContent = message;
+            modalOverlay.classList.add('visible');
+
+            const cleanupAndResolve = (result) => {
+                modalOverlay.classList.remove('visible');
+                confirmYesBtn.removeEventListener('click', yesHandler);
+                confirmNoBtn.removeEventListener('click', noHandler);
+                resolve(result);
+            };
+
+            const yesHandler = () => cleanupAndResolve(true);
+            const noHandler = () => cleanupAndResolve(false);
+
+            confirmYesBtn.addEventListener('click', yesHandler);
+            confirmNoBtn.addEventListener('click', noHandler);
+        });
+    };
 
     // 輔助函數：顯示用戶管理列表
     const refreshUserList = async () => {
@@ -151,7 +178,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
-            let usersData = []; // 修正: 變數名稱從 patientsData 改為 usersData
+            let usersData = [];
             snapshot.forEach(doc => {
                 const user = doc.data();
                 const uid = doc.id;
@@ -161,7 +188,7 @@ document.addEventListener('DOMContentLoaded', () => {
             });
 
             // 根據定義的角色順序進行排序
-            usersData.sort((a, b) => { // 修正: 變數名稱從 patientsData 改為 usersData
+            usersData.sort((a, b) => {
                 const roleA = roleOrder[a.role] || 99; // 如果角色未定義，則給予一個較大的值
                 const roleB = roleOrder[b.role] || 99;
                 return roleA - roleB;
@@ -212,7 +239,17 @@ document.addEventListener('DOMContentLoaded', () => {
                     const uidToUpdate = userCard.dataset.uid;
                     const nicknameToUpdate = userCard.dataset.nickname;
                     const newRole = select.value;
-                    if (newRole === 'owner' && !confirm('確定要將此用戶設定為 Owner 嗎？Owner 擁有最高權限。')) {
+
+                    const confirmUpdate = await showConfirmationModal(
+                        '確認變更角色',
+                        `確定要將用戶 ${nicknameToUpdate} (${uidToUpdate.substring(0,6)}...) 的角色變更為 ${getRoleDisplayName(newRole)} 嗎？` +
+                        (newRole === 'owner' ? ' (此操作會賦予最高權限)' : '')
+                    );
+
+                    if (!confirmUpdate) {
+                        // 如果用戶取消，恢復選取狀態
+                        select.value = select.dataset.originalValue;
+                        changeButton.disabled = true;
                         return;
                     }
 
@@ -236,15 +273,22 @@ document.addEventListener('DOMContentLoaded', () => {
                     const uidToDelete = userCard.dataset.uid;
                     const nicknameToDelete = userCard.dataset.nickname;
 
-                    if (confirm(`確定要刪除用戶 ${nicknameToDelete} (${uidToDelete.substring(0,6)}...) 嗎？此操作不可逆！`)) {
-                        try {
-                            await db.collection('users').doc(uidToDelete).delete();
-                            showMessage('成功', `用戶 ${nicknameToDelete} (${uidToDelete.substring(0,6)}...) 已刪除。`); // 簡化訊息
-                            refreshUserList();
-                        } catch (error) {
-                            console.error("刪除用戶時出錯:", error);
-                            showMessage('錯誤', `刪除用戶失敗: ${error.message}`);
-                        }
+                    const confirmDelete = await showConfirmationModal(
+                        '確認刪除用戶',
+                        `確定要刪除用戶 ${nicknameToDelete} (${uidToDelete.substring(0,6)}...) 嗎？此操作不可逆！`
+                    );
+
+                    if (!confirmDelete) {
+                        return;
+                    }
+
+                    try {
+                        await db.collection('users').doc(uidToDelete).delete();
+                        showMessage('成功', `用戶 ${nicknameToDelete} (${uidToDelete.substring(0,6)}...) 已刪除。`); // 簡化訊息
+                        refreshUserList();
+                    } catch (error) {
+                        console.error("刪除用戶時出錯:", error);
+                        showMessage('錯誤', `刪除用戶失敗: ${error.message}`);
                     }
                 });
             });
@@ -289,10 +333,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     deleteSelectedKmlBtn.disabled = !(canEdit && currentKmlLayers.length > 0);
                     kmlLayerSelectDashboard.disabled = !canEdit;
 
-                    registrationSettingsSection.style.display = isOwner ? 'flex' : 'none';
+                    registrationSettingsSection.style.display = isOwner ? 'flex' : 'none'; 
                     generateRegistrationCodeBtn.disabled = !isOwner;
-                    registrationCodeDisplay.style.display = 'inline-block';
-                    registrationCodeCountdown.style.display = 'inline-block';
+                    registrationCodeDisplay.style.display = 'inline-block'; 
+                    registrationCodeCountdown.style.display = 'inline-block'; 
                     registrationExpiryDisplay.style.display = 'none';
 
                     userManagementSection.style.display = isOwner ? 'block' : 'none';
@@ -372,7 +416,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                 console.error("settings/registration 文檔不存在。");
                                 return;
                             }
-
+                            
                             // 重新登入以確保獲取正確的用戶憑證
                             const reAuthUserCredential = await auth.signInWithPopup(provider);
                             const reAuthUser = reAuthUserCredential.user;
@@ -415,8 +459,8 @@ document.addEventListener('DOMContentLoaded', () => {
                             } catch (codeInvalidationError) {
                                 console.warn("前端嘗試使註冊碼失效時發生權限不足錯誤:", codeInvalidationError.message);
                                 showMessage(
-                                    '註冊待審核',
-                                    `歡迎 ${reAuthUser.email} (${nickname})！您的帳號已成功註冊，正在等待審核。\n（註冊碼失效需管理員權限處理，不影響您的註冊狀態。）`
+                                    '註冊待審核', 
+                                    `歡迎 ${reAuthUser.email} (${nickname})！您的帳號已成功註冊，正在等待審核。`
                                 );
                             }
 
@@ -446,7 +490,7 @@ document.addEventListener('DOMContentLoaded', () => {
     logoutBtn.addEventListener('click', async () => {
         try {
             await auth.signOut();
-            showMessage('登出成功', '用戶已登出。');
+            showMessage('登出成功', '用戶已登出。'); // 登出訊息已修改
         } catch (error) {
             console.error("登出失敗:", error);
             showMessage('登出失敗', `登出時發生錯誤: ${error.message}`);
@@ -454,7 +498,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // 點擊 "尚未選擇檔案" 對話框也能選取檔案
-    // 此事件監聽器負責觸發檔案選擇對話框
     selectedKmlFileNameDashboard.addEventListener('click', () => {
         hiddenKmlFileInput.click();
     });
@@ -472,7 +515,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // 實際執行上傳 KML 的函數
-    // 此事件監聽器現在僅處理上傳邏輯，不再觸發檔案選擇
     uploadKmlSubmitBtnDashboard.addEventListener('click', async () => {
         const file = hiddenKmlFileInput.files[0];
         if (!file) {
@@ -499,7 +541,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
 
                 const geojson = toGeoJSON.kml(kmlDoc); 
-                const parsedFeatures = geojson.features || [];
+                const parsedFeatures = geojson.features || []; 
 
                 console.log('--- KML 檔案解析結果 (parsedFeatures) ---');
                 console.log(`已解析出 ${parsedFeatures.length} 個地理要素。`); 
@@ -530,10 +572,24 @@ document.addEventListener('DOMContentLoaded', () => {
                 let isOverwriting = false;
 
                 if (!existingKmlQuery.empty) {
-                    // 找到相同名稱的圖層，準備覆蓋
+                    // 找到相同名稱的圖層，詢問是否覆蓋
+                    const confirmOverwrite = await window.showConfirmationModal(
+                        '覆蓋 KML 檔案',
+                        `資料庫中已存在名為 "${fileName}" 的 KML 圖層。您確定要覆蓋它嗎？`
+                    );
+
+                    if (!confirmOverwrite) {
+                        showMessage('已取消', 'KML 檔案上傳已取消。');
+                        hiddenKmlFileInput.value = '';
+                        selectedKmlFileNameDashboard.textContent = '尚未選擇檔案';
+                        uploadKmlSubmitBtnDashboard.disabled = true;
+                        return; // 終止上傳流程
+                    }
+
+                    // 準備覆蓋
                     kmlLayerDocRef = existingKmlQuery.docs[0].ref;
                     isOverwriting = true;
-                    console.log(`找到相同名稱的 KML 圖層 "${fileName}"，將進行覆蓋。ID: ${kmlLayerDocRef.id}`);
+                    console.log(`找到相同名稱的 KML 圖層 "${fileName}"，使用者確認覆蓋。ID: ${kmlLayerDocRef.id}`);
 
                     // 刪除現有 features 子集合的資料
                     const oldFeaturesSnapshot = await kmlLayersCollectionRef.doc(kmlLayerDocRef.id).collection('features').get();
@@ -610,7 +666,12 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        if (!confirm('確定要刪除此 KML 圖層及其所有地理要素嗎？此操作不可逆！')) {
+        const confirmDelete = await window.showConfirmationModal(
+            '確認刪除 KML',
+            '確定要刪除此 KML 圖層及其所有地理要素嗎？此操作不可逆！'
+        );
+
+        if (!confirmDelete) {
             return;
         }
 
@@ -652,7 +713,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function generateRegistrationAlphanumericCode() {
         let result = '';
         const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-        const digits = '0123456789';
+        const digits = '013456789'; // 移除 0123456789 中的 2 以符合 3L+5D 模式
 
         // Generate 3 random letters
         for (let i = 0; i < 3; i++) {
@@ -681,7 +742,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const code = generateRegistrationAlphanumericCode();
             let countdownSeconds = 60;
             const expiryDate = new Date();
-            expiryDate.setSeconds(expiryDate.getSeconds() + countdownSeconds);
+            expiryDate.setSeconds(expiryDate.getSeconds() + countdownSeconds); 
 
             await db.collection('settings').doc('registration').set({
                 oneTimeCode: code,
@@ -690,7 +751,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             registrationCodeDisplay.textContent = code;
             registrationCodeCountdown.textContent = ` (剩餘 ${countdownSeconds} 秒)`;
-            registrationCodeDisplay.style.display = 'inline-block';
+            registrationCodeDisplay.style.display = 'inline-block'; 
             registrationCodeCountdown.style.display = 'inline-block';
             registrationExpiryDisplay.style.display = 'none';
 
@@ -705,7 +766,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     registrationCodeCountdown.style.display = 'none';
                 }
             }, 1000);
-
+            
             const tempInput = document.createElement('textarea');
             tempInput.value = code;
             document.body.appendChild(tempInput);
