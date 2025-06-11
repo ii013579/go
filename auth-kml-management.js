@@ -502,7 +502,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     throw new Error(`KML XML 解析錯誤: ${errorText}。請確保您的 KML 檔案是有效的 XML。`);
                 }
 
-                // *** 修正: 將 kmlDoc 改為 kmlString，直接傳遞 KML 原始字串 ***
+                // 修正: 確保 omnivore.kml 接收 KML 原始字串
                 const tempOmnivoreLayer = omnivore.kml(kmlString);
                 if (!tempOmnivoreLayer) {
                     throw new Error("無法從解析的 KML 字串創建 Omnivore KML 圖層。");
@@ -513,8 +513,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 console.log(`KML 檔案已解析。找到 ${parsedFeatures.length} 個 features。`);
 
                 if (parsedFeatures.length === 0) {
-                    showMessage('KML 載入', 'KML 檔案中沒有找到任何地標 (Point features)。');
-                    console.warn("KML 檔案不包含任何可用的 Point 類型 feature。");
+                    // 調整錯誤訊息，使其更通用
+                    showMessage('KML 載入', 'KML 檔案中沒有找到任何可顯示的地理要素 (點、線、多邊形)。');
+                    console.warn("KML 檔案不包含任何可用的 Point、LineString 或 Polygon 類型 feature。");
                     return;
                 }
 
@@ -531,20 +532,21 @@ document.addEventListener('DOMContentLoaded', () => {
                 let addedCount = 0;
                 console.log(`開始批量寫入 ${parsedFeatures.length} 個 features。`);
                 for (const f of parsedFeatures) {
-                    if (f.geometry && f.properties && f.geometry.type === 'Point') {
+                    // 修正: 移除僅篩選 Point 類型的條件，現在保存所有有效的幾何類型
+                    if (f.geometry && f.properties && f.geometry.coordinates) {
                         batch.set(featuresSubCollectionRef.doc(), {
                             geometry: f.geometry,
                             properties: f.properties
                         });
                         addedCount++;
                     } else {
-                        console.warn("上傳時跳過非 Point 類型或無座標的 feature:", f.geometry ? f.geometry.type : '無幾何資訊', f);
+                        console.warn("上傳時跳過無效或無座標的 feature:", f.geometry ? f.geometry.type : '無幾何資訊', f);
                     }
                 }
                 await batch.commit();
                 console.log(`批量提交成功。已添加 ${addedCount} 個 features。`);
 
-                showMessage('成功', `KML 檔案 "${fileName}" 已成功上傳並儲存 ${addedCount} 個地標。`);
+                showMessage('成功', `KML 檔案 "${fileName}" 已成功上傳並儲存 ${addedCount} 個地理要素。`);
                 hiddenKmlFileInput.value = '';
                 selectedKmlFileNameDashboard.textContent = '尚未選擇檔案';
                 uploadKmlSubmitBtnDashboard.disabled = true;
@@ -570,7 +572,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        if (!confirm('確定要刪除此 KML 圖層及其所有地標嗎？此操作不可逆！')) {
+        if (!confirm('確定要刪除此 KML 圖層及其所有地理要素嗎？此操作不可逆！')) {
             return;
         }
 
@@ -598,7 +600,7 @@ document.addEventListener('DOMContentLoaded', () => {
             await kmlLayerDocRef.delete();
             console.log(`已刪除父 KML 圖層文檔: ${kmlIdToDelete}`);
 
-            showMessage('成功', `KML 圖層 "${fileName}" 已成功刪除，共刪除 ${deletedFeaturesCount} 個地標。`);
+            showMessage('成功', `KML 圖層 "${fileName}" 已成功刪除，共刪除 ${deletedFeaturesCount} 個地理要素。`);
             updateKmlLayerSelects();
             window.clearAllKmlLayers();
         }
