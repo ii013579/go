@@ -403,7 +403,7 @@ body {
 }
 
 /* 訊息框和註冊模態框樣式 */
-.message-box-overlay, .registration-modal-overlay {
+.message-box-overlay, .registration-modal-overlay, .confirmation-modal-overlay {
     position: fixed;
     top: 0;
     left: 0;
@@ -418,11 +418,11 @@ body {
     visibility: hidden;
     transition: opacity 0.3s ease, visibility 0.3s ease;
 }
-.message-box-overlay.visible, .registration-modal-overlay.visible {
+.message-box-overlay.visible, .registration-modal-overlay.visible, .confirmation-modal-overlay.visible {
     opacity: 1;
     visibility: visible;
 }
-.message-box-content, .registration-modal-content {
+.message-box-content, .registration-modal-content, .confirmation-modal-content {
     background: #fff;
     padding: 30px;
     border-radius: 12px;
@@ -434,22 +434,23 @@ body {
     transition: transform 0.3s ease;
 }
 .message-box-overlay.visible .message-box-content,
-.registration-modal-overlay.visible .registration-modal-content {
+.registration-modal-overlay.visible .registration-modal-content,
+.confirmation-modal-overlay.visible .confirmation-modal-content {
     transform: translateY(0);
 }
-.message-box-content h3, .registration-modal-content h3 {
+.message-box-content h3, .registration-modal-content h3, .confirmation-modal-content h3 {
     margin-top: 0;
     color: #333;
     font-size: 22px;
     margin-bottom: 15px;
 }
-.message-box-content p, .registration-modal-content p {
+.message-box-content p, .registration-modal-content p, .confirmation-modal-content p {
     color: #555;
     font-size: 16px;
     line-height: 1.6;
     margin-bottom: 25px;
 }
-.message-box-content button, .registration-modal-content button {
+.message-box-content button, .registration-modal-content button, .confirmation-modal-content button {
     background-color: #4a90e2;
     color: white;
     border: none;
@@ -460,7 +461,7 @@ body {
     font-weight: 600;
     transition: background-color 0.2s, transform 0.2s;
 }
-.message-box-content button:hover, .registration-modal-content button:hover {
+.message-box-content button:hover, .registration-modal-content button:hover, .confirmation-modal-content button:hover {
     background-color: #357ABD;
     transform: translateY(-1px);
 }
@@ -473,11 +474,16 @@ body {
     box-sizing: border-box;
     margin-bottom: 15px;
 }
-.registration-modal-content .button-group {
+.registration-modal-content .button-group, .confirmation-modal-content .button-group {
     display: flex;
     justify-content: center;
     gap: 15px;
 }
+.confirmation-modal-content .action-buttons {
+    flex: 1;
+    max-width: 120px; /* 調整按鈕寬度 */
+}
+
 
 /* 通用操作按鈕樣式 */
 .action-buttons, .admin-option-button {
@@ -698,60 +704,4 @@ body {
     font-size: 16px;
     font-weight: bold;
     color: #007bff;
-}
-
-/* Confirmation Modal Styles (與 message-box-overlay 類似) */
-.confirmation-modal-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(0, 0, 0, 0.5);
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    z-index: 2000;
-    opacity: 0;
-    visibility: hidden;
-    transition: opacity 0.3s ease, visibility 0.3s ease;
-}
-.confirmation-modal-overlay.visible {
-    opacity: 1;
-    visibility: visible;
-}
-.confirmation-modal-content {
-    background: #fff;
-    padding: 30px;
-    border-radius: 12px;
-    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
-    text-align: center;
-    max-width: 400px;
-    width: 90%;
-    transform: translateY(-20px);
-    transition: transform 0.3s ease;
-}
-.confirmation-modal-overlay.visible .confirmation-modal-content {
-    transform: translateY(0);
-}
-.confirmation-modal-content h3 {
-    margin-top: 0;
-    color: #333;
-    font-size: 22px;
-    margin-bottom: 15px;
-}
-.confirmation-modal-content p {
-    color: #555;
-    font-size: 16px;
-    line-height: 1.6;
-    margin-bottom: 25px;
-}
-.confirmation-modal-content .button-group {
-    display: flex;
-    justify-content: center;
-    gap: 15px;
-}
-.confirmation-modal-content .action-buttons {
-    flex: 1;
-    max-width: 120px; /* 調整按鈕寬度 */
 }
