@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>地圖 v4.2.25</title>
+  <title>地圖 v4.2.24</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -713,7 +713,7 @@
 </head>
 <body>
   <div id="title">
-    我的地圖系統 v4.2.25
+    我的地圖系統 v4.2.24
     <button id="editButton">編輯</button>
   </div>
 
@@ -1457,7 +1457,7 @@
                         if (confirm(`確定要刪除用戶 ${nicknameToDelete} (${uidToDelete.substring(0,6)}...) 嗎？此操作不可逆！`)) {
                             try {
                                 await db.collection('users').doc(uidToDelete).delete();
-                                showMessage('成功', `用戶 ${nicknameToDelete} (${uidToDelete.substring(0,6)}...) 已刪除。`); // 簡化訊息
+                                showMessage('成功', `用戶 ${nicknameToDelete} (${uidToDelete.substring(0,6)}...) 已刪除（請確保在 Firebase Authentication 中也同步刪除）。`);
                                 refreshUserList();
                             } catch (error) {
                                 console.error("刪除用戶時出錯:", error);
@@ -1479,8 +1479,7 @@
             if (user) {
                 loginForm.style.display = 'none';
                 loggedInDashboard.style.display = 'block';
-                // 顯示用戶郵箱和角色
-                userEmailDisplay.textContent = `${user.email} (${getRoleDisplayName(window.currentUserRole)})`;
+                userEmailDisplay.textContent = user.email;
                 userEmailDisplay.style.display = 'block';
 
                 db.collection('users').doc(user.uid).onSnapshot(async (doc) => {
@@ -1489,8 +1488,6 @@
                         window.currentUserRole = userData.role || 'unapproved';
 
                         console.log("用戶角色:", window.currentUserRole);
-                        // 更新用戶郵箱和角色顯示
-                        userEmailDisplay.textContent = `${user.email} (${getRoleDisplayName(window.currentUserRole)})`;
 
                         const canEdit = (window.currentUserRole === 'owner' || window.currentUserRole === 'editor');
                         const isOwner = (window.currentUserRole === 'owner');
@@ -1629,12 +1626,13 @@
                                         oneTimeCodeExpiry: null
                                     }, { merge: true });
                                     console.log("一次性註冊碼已在 Firestore 中失效（前端嘗試操作）。");
-                                    showMessage('註冊成功', `歡迎 ${reAuthUser.email} (${nickname})！您的帳號已成功註冊，正在等待審核。`);
+                                    showMessage('註冊成功', `歡迎 ${reAuthUser.email} (${nickname})！您的帳號已成功註冊，正在等待管理員審核。`);
                                 } catch (codeInvalidationError) {
                                     console.warn("前端嘗試使註冊碼失效時發生權限不足錯誤:", codeInvalidationError.message);
                                     showMessage(
                                         '註冊待審核', 
-                                        `歡迎 ${reAuthUser.email} (${nickname})！您的帳號已成功註冊，正在等待審核。`
+                                        `歡迎 ${reAuthUser.email} (${nickname})！您的帳號已成功註冊，正在等待管理員審核。
+                                        （註冊碼失效需管理員權限處理，不影響您的註冊狀態。）`
                                     );
                                 }
 
@@ -1818,8 +1816,7 @@
                 showMessage('成功', `KML 圖層 "${fileName}" 已成功刪除，共刪除 ${deletedFeaturesCount} 個地標。`);
                 updateKmlLayerSelects();
                 window.clearAllKmlLayers();
-            }
-            catch (error) {
+            } catch (error) {
                 console.error("刪除 KML 失敗:", error);
                 showMessage('刪除失敗', `刪除 KML 圖層時發生錯誤: ${error.message}`);
             }
