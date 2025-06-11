@@ -512,7 +512,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 console.log('--- KML 檔案解析結果 (parsedFeatures) ---');
                 if (parsedFeatures.length === 0) {
-                    console.warn('omnivore.kml() 未能從 KML 檔案中識別出任何地理要素。請確認 KML 包含 <Point>, <LineString>, <Polygon> 及其有效座標和名稱。');
+                    console.warn('omnivore.kml() 未能從 KML 檔案中識別出任何地理要素。請確認 KML 包含 <Placemark> 內的 <Point>, <LineString>, <Polygon> 及其有效座標和名稱。');
                 } else {
                     parsedFeatures.forEach((f, index) => {
                         console.log(`Feature ${index + 1}:`);
@@ -527,7 +527,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 if (parsedFeatures.length === 0) {
                     // 調整錯誤訊息，使其更通用
-                    showMessage('KML 載入', 'KML 檔案中沒有找到任何可顯示的地理要素 (點、線、多邊形)。請確認 KML 檔案內容及其格式。');
+                    showMessage('KML 載入', 'KML 檔案中沒有找到任何可顯示的地理要素 (點、線、多邊形)。請確認 KML 檔案內容包含 <Placemark> 及其有效的地理要素。');
                     console.warn("KML 檔案不包含任何可用的 Point、LineString 或 Polygon 類型 feature。");
                     return;
                 }
