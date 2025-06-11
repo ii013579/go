@@ -239,7 +239,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (confirm(`確定要刪除用戶 ${nicknameToDelete} (${uidToDelete.substring(0,6)}...) 嗎？此操作不可逆！`)) {
                         try {
                             await db.collection('users').doc(uidToDelete).delete();
-                            showMessage('成功', `用戶 ${nicknameToDelete} (${uidToDelete.substring(0,6)}...) 已刪除。`);
+                            showMessage('成功', `用戶 ${nicknameToDelete} (${uidToDelete.substring(0,6)}...) 已刪除。`); // 簡化訊息
                             refreshUserList();
                         } catch (error) {
                             console.error("刪除用戶時出錯:", error);
@@ -502,10 +502,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     throw new Error(`KML XML 解析錯誤: ${errorText}。請確保您的 KML 檔案是有效的 XML。`);
                 }
 
-                // Temporary layer for parsing GeoJSON. Requires omnivore library loaded.
-                const tempOmnivoreLayer = omnivore.kml(kmlDoc);
+                // *** 修正: 將 kmlDoc 改為 kmlString，直接傳遞 KML 原始字串 ***
+                const tempOmnivoreLayer = omnivore.kml(kmlString);
                 if (!tempOmnivoreLayer) {
-                    throw new Error("無法從解析的 XML 文檔創建 Omnivore KML 圖層。");
+                    throw new Error("無法從解析的 KML 字串創建 Omnivore KML 圖層。");
                 }
                 const geojson = tempOmnivoreLayer.toGeoJSON();
                 const parsedFeatures = geojson.features || [];
