@@ -1629,12 +1629,12 @@
                                         oneTimeCodeExpiry: null
                                     }, { merge: true });
                                     console.log("一次性註冊碼已在 Firestore 中失效（前端嘗試操作）。");
-                                    showMessage('註冊成功', `歡迎 ${reAuthUser.email} (${nickname})！您的帳號已成功註冊，正在等待管理員審核。`);
+                                    showMessage('註冊成功', `歡迎 ${reAuthUser.email} (${nickname})！您的帳號已成功註冊，正在等待審核。`);
                                 } catch (codeInvalidationError) {
                                     console.warn("前端嘗試使註冊碼失效時發生權限不足錯誤:", codeInvalidationError.message);
                                     showMessage(
                                         '註冊待審核', 
-                                        `歡迎 ${reAuthUser.email} (${nickname})！您的帳號已成功註冊，正在等待管理員審核。
+                                        `歡迎 ${reAuthUser.email} (${nickname})！您的帳號已成功註冊，正在等待審核。
                                         （註冊碼失效需管理員權限處理，不影響您的註冊狀態。）`
                                     );
                                 }
