@@ -510,11 +510,24 @@ document.addEventListener('DOMContentLoaded', () => {
                 const geojson = tempOmnivoreLayer.toGeoJSON();
                 const parsedFeatures = geojson.features || [];
 
-                console.log(`KML 檔案已解析。找到 ${parsedFeatures.length} 個 features。`);
+                console.log('--- KML 檔案解析結果 (parsedFeatures) ---');
+                if (parsedFeatures.length === 0) {
+                    console.warn('omnivore.kml() 未能從 KML 檔案中識別出任何地理要素。請確認 KML 包含 <Point>, <LineString>, <Polygon> 及其有效座標和名稱。');
+                } else {
+                    parsedFeatures.forEach((f, index) => {
+                        console.log(`Feature ${index + 1}:`);
+                        console.log(`  類型 (geometry.type): ${f.geometry ? f.geometry.type : 'N/A (無幾何資訊)'}`);
+                        console.log(`  名稱 (properties.name): ${f.properties ? (f.properties.name || '未命名') : 'N/A (無屬性)'}`);
+                        console.log(`  座標 (geometry.coordinates):`, f.geometry ? f.geometry.coordinates : 'N/A');
+                        // 您可以在這裡添加更多需要檢查的 KML 屬性
+                    });
+                }
+                console.log('--- KML 檔案解析結果結束 ---');
+
 
                 if (parsedFeatures.length === 0) {
                     // 調整錯誤訊息，使其更通用
-                    showMessage('KML 載入', 'KML 檔案中沒有找到任何可顯示的地理要素 (點、線、多邊形)。');
+                    showMessage('KML 載入', 'KML 檔案中沒有找到任何可顯示的地理要素 (點、線、多邊形)。請確認 KML 檔案內容及其格式。');
                     console.warn("KML 檔案不包含任何可用的 Point、LineString 或 Polygon 類型 feature。");
                     return;
                 }
