@@ -1,4 +1,4 @@
-// auth-kml-management.js
+// auth-kml-management.js v4.2.31
 
 document.addEventListener('DOMContentLoaded', () => {
     // 獲取所有相關的 DOM 元素
@@ -598,7 +598,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         deleteBatch.delete(doc.ref);
                     });
                     await deleteBatch.commit();
-                    console.log(`已刪除舊圖層 ${kmlLayerDocRef.id} 的所有 ${oldFeaturesSnapshot.size} 個 features。`);
+                    console.log(`已從子集合中刪除 ${oldFeaturesSnapshot.size} 個 features。`);
 
                     // 更新主 KML 圖層文件的元數據
                     await kmlLayerDocRef.update({
