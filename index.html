@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>地圖 v4.2.23</title>
+  <title>地圖 v4.2.24</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -713,7 +713,7 @@
 </head>
 <body>
   <div id="title">
-    我的地圖系統 v4.2.23
+    我的地圖系統 v4.2.24
     <button id="editButton">編輯</button>
   </div>
 
@@ -1218,9 +1218,11 @@
         const loginMessage = document.getElementById('loginMessage');
         const userEmailDisplay = document.getElementById('userEmailDisplay');
 
-        const hiddenKmlFileInput = document.getElementById('hiddenKmlFileInput');
+        const kmlControlsDashboard = document.getElementById('kmlControlsDashboard'); // 新增 KML 控制區塊
+        const uploadKmlSectionDashboard = document.getElementById('uploadKmlSectionDashboard');
         const selectedKmlFileNameDashboard = document.getElementById('selectedKmlFileNameDashboard');
         const uploadKmlSubmitBtnDashboard = document.getElementById('uploadKmlSubmitBtnDashboard');
+        const deleteKmlSectionDashboard = document.getElementById('deleteKmlSectionDashboard'); // 新增 KML 刪除區塊
         const kmlLayerSelectDashboard = document.getElementById('kmlLayerSelectDashboard');
         const deleteSelectedKmlBtn = document.getElementById('deleteSelectedKmlBtn');
 
@@ -1270,6 +1272,15 @@
             kmlLayerSelect.disabled = false;
             
             const canEdit = (window.currentUserRole === 'owner' || window.currentUserRole === 'editor');
+            
+            // 控制 KML 上傳和刪除區塊的顯示
+            if (uploadKmlSectionDashboard) {
+                uploadKmlSectionDashboard.style.display = canEdit ? 'flex' : 'none';
+            }
+            if (deleteKmlSectionDashboard) {
+                deleteKmlSectionDashboard.style.display = canEdit ? 'flex' : 'none';
+            }
+
             if (kmlLayerSelectDashboard) kmlLayerSelectDashboard.disabled = !canEdit;
             if (uploadKmlSubmitBtnDashboard) uploadKmlSubmitBtnDashboard.disabled = !canEdit;
 
@@ -1481,6 +1492,14 @@
                         const canEdit = (window.currentUserRole === 'owner' || window.currentUserRole === 'editor');
                         const isOwner = (window.currentUserRole === 'owner');
 
+                        // 控制 KML 上傳和刪除區塊的顯示
+                        if (uploadKmlSectionDashboard) {
+                            uploadKmlSectionDashboard.style.display = canEdit ? 'flex' : 'none';
+                        }
+                        if (deleteKmlSectionDashboard) {
+                            deleteKmlSectionDashboard.style.display = canEdit ? 'flex' : 'none';
+                        }
+
                         uploadKmlSubmitBtnDashboard.disabled = !canEdit;
                         deleteSelectedKmlBtn.disabled = !(canEdit && currentKmlLayers.length > 0);
                         kmlLayerSelectDashboard.disabled = !canEdit;
@@ -1511,9 +1530,14 @@
                         showMessage('帳號資料異常', '您的帳號資料有誤或已被移除，請重新登入或聯繫管理員。');
                     }
                 }, (error) => {
-                    console.error("監聽用戶角色時出錯:", error);
-                    showMessage('錯誤', `獲取用戶角色失敗: ${error.message}`);
-                    auth.signOut();
+                    // 檢查是否為登出導致的權限錯誤，如果是則不顯示訊息
+                    if (!auth.currentUser && error.code === 'permission-denied') {
+                        console.warn("因登出導致的權限錯誤，已忽略訊息。");
+                    } else {
+                        console.error("監聽用戶角色時出錯:", error);
+                        showMessage('錯誤', `獲取用戶角色失敗: ${error.message}`);
+                        auth.signOut();
+                    }
                 });
 
             } else {
@@ -1596,13 +1620,21 @@
                                 // 由後端函數安全地將 `settings/registration` 中的 `oneTimeCode` 設為 `null`。
                                 // 這樣可以確保安全且不會因前端權限問題而失敗。
                                 // 為了保持此版本的功能，我們將保留此行，但請注意其權限限制。
-                                await db.collection('settings').doc('registration').set({
-                                    oneTimeCode: null,
-                                    oneTimeCodeExpiry: null
-                                }, { merge: true });
-                                console.log("一次性註冊碼已在 Firestore 中失效（前端嘗試操作，可能因權限不足而失敗）。");
-
-                                showMessage('註冊成功', `歡迎 ${reAuthUser.email} (${nickname})！您的帳號已成功註冊，正在等待管理員審核。`);
+                                try {
+                                    await db.collection('settings').doc('registration').set({
+                                        oneTimeCode: null,
+                                        oneTimeCodeExpiry: null
+                                    }, { merge: true });
+                                    console.log("一次性註冊碼已在 Firestore 中失效（前端嘗試操作）。");
+                                    showMessage('註冊成功', `歡迎 ${reAuthUser.email} (${nickname})！您的帳號已成功註冊，正在等待管理員審核。`);
+                                } catch (codeInvalidationError) {
+                                    console.warn("前端嘗試使註冊碼失效時發生權限不足錯誤:", codeInvalidationError.message);
+                                    showMessage(
+                                        '註冊待審核', 
+                                        `歡迎 ${reAuthUser.email} (${nickname})！您的帳號已成功註冊，正在等待管理員審核。
+                                        （註冊碼失效需管理員權限處理，不影響您的註冊狀態。）`
+                                    );
+                                }
 
                             } catch (error) {
                                 console.error("使用註冊碼登入/註冊失敗:", error);
