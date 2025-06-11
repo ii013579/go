@@ -236,7 +236,8 @@ document.addEventListener('DOMContentLoaded', () => {
     window.createNavButton = function(latlng, name) {
         navButtons.clearLayers();
 
-        const googleMapsUrl = `http://maps.google.com/maps?q=$${latlng.lat},${latlng.lng}`;
+        // 修正經度前的 '$' 符號，確保經緯度格式正確
+        const googleMapsUrl = `http://maps.google.com/maps?q=${latlng.lat},${latlng.lng}`;
 
         const buttonHtml = `
             <div class="nav-button-content" onclick="window.open('${googleMapsUrl}', '_blank'); event.stopPropagation();">
