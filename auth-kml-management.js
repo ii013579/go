@@ -161,7 +161,7 @@ document.addEventListener('DOMContentLoaded', () => {
             });
 
             // 根據定義的角色順序進行排序
-            usersData.sort((a, b) => {
+            patientsData.sort((a, b) => {
                 const roleA = roleOrder[a.role] || 99; // 如果角色未定義，則給予一個較大的值
                 const roleB = roleOrder[b.role] || 99;
                 return roleA - roleB;
@@ -453,8 +453,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // 事件監聽器：上傳 KML (Dashboard 上的按鈕，觸發文件選擇)
-    uploadKmlSubmitBtnDashboard.addEventListener('click', () => {
+    // 點擊 "尚未選擇檔案" 對話框也能選取檔案
+    // 此事件監聽器負責觸發檔案選擇對話框
+    selectedKmlFileNameDashboard.addEventListener('click', () => {
         hiddenKmlFileInput.click();
     });
 
@@ -463,20 +464,15 @@ document.addEventListener('DOMContentLoaded', () => {
         const file = event.target.files[0];
         if (file) {
             selectedKmlFileNameDashboard.textContent = file.name;
-            uploadKmlSubmitBtnDashboard.disabled = false;
+            uploadKmlSubmitBtnDashboard.disabled = false; // 啟用上傳按鈕
         } else {
             selectedKmlFileNameDashboard.textContent = '尚未選擇檔案';
-            uploadKmlSubmitBtnDashboard.disabled = true;
+            uploadKmlSubmitBtnDashboard.disabled = true; // 禁用上傳按鈕
         }
     });
 
-    // 點擊 "尚未選擇檔案" 對話框也能選取檔案
-    selectedKmlFileNameDashboard.addEventListener('click', () => {
-        hiddenKmlFileInput.click();
-    });
-
-
     // 實際執行上傳 KML 的函數
+    // 此事件監聽器現在僅處理上傳邏輯，不再觸發檔案選擇
     uploadKmlSubmitBtnDashboard.addEventListener('click', async () => {
         const file = hiddenKmlFileInput.files[0];
         if (!file) {
