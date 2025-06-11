@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>地圖 v4.2.22</title>
+  <title>地圖 v4.2.23</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -678,7 +678,7 @@
         font-size: 14px;
         width: auto;
         flex-shrink: 0;
-        background-color: #28a745; /* 綠色 */
+        background-color: #007bff; /* 藍色 */
         color: white;
         border: none;
         border-radius: 8px;
@@ -687,7 +687,7 @@
         transition: background-color 0.2s, transform 0.2s;
     }
     .user-card-row-2 .change-role-btn:hover {
-        background-color: #218838; /* 懸停時顏色加深 */
+        background-color: #0056b3; /* 懸停時顏色加深 */
         transform: translateY(-1px);
     }
     .user-card-row-2 .change-role-btn:disabled {
@@ -713,7 +713,7 @@
 </head>
 <body>
   <div id="title">
-    我的地圖系統 v4.2.22
+    我的地圖系統 v4.2.23
     <button id="editButton">編輯</button>
   </div>
 
@@ -1250,6 +1250,14 @@
             }
         };
 
+        // 輔助函數：定義角色排序
+        const roleOrder = {
+            'unapproved': 1,
+            'user': 2,
+            'editor': 3,
+            'owner': 4
+        };
+
         // 輔助函數：更新 KML 圖層選單
         const updateKmlLayerSelects = async () => {
             const kmlLayerSelect = document.getElementById('kmlLayerSelect');
@@ -1267,8 +1275,8 @@
 
 
             try {
-                // IMPORTANT: Ensure Firebase Security Rules allow 'read' access to this path for authenticated users.
-                // Example rule:
+                // IMPORTANT: 確保 Firebase 安全規則已正確設定，允許讀取以下路徑。
+                // 範例規則：
                 // match /artifacts/{appId}/public/data/kmlLayers/{kmlLayerId} {
                 //   allow read: if request.auth != null;
                 //   allow create, update, delete: if isEditorOrOwner();
@@ -1350,11 +1358,25 @@
                     return;
                 }
 
+                let usersData = [];
                 snapshot.forEach(doc => {
                     const user = doc.data();
                     const uid = doc.id;
-                    if (uid === auth.currentUser.uid) return;
+                    if (uid !== auth.currentUser.uid) { // 不顯示當前登入用戶
+                        usersData.push({ id: uid, ...user });
+                    }
+                });
 
+                // 根據定義的角色順序進行排序
+                usersData.sort((a, b) => {
+                    const roleA = roleOrder[a.role] || 99; // 如果角色未定義，則給予一個較大的值
+                    const roleB = roleOrder[b.role] || 99;
+                    return roleA - roleB;
+                });
+
+
+                usersData.forEach(user => {
+                    const uid = user.id;
                     const userCard = document.createElement('div');
                     userCard.className = 'user-card';
                     userCard.dataset.nickname = user.name || 'N/A';
@@ -1465,9 +1487,9 @@
 
                         registrationSettingsSection.style.display = isOwner ? 'flex' : 'none'; 
                         generateRegistrationCodeBtn.disabled = !isOwner;
-                        registrationCodeDisplay.style.display = 'inline-block'; // Changed from 'none' to 'inline-block' for visibility
-                        registrationCodeCountdown.style.display = 'inline-block'; // Changed from 'none' to 'inline-block' for visibility
-                        registrationExpiryDisplay.style.display = 'none'; // This remains 'none' until the timer starts.
+                        registrationCodeDisplay.style.display = 'inline-block'; 
+                        registrationCodeCountdown.style.display = 'inline-block'; 
+                        registrationExpiryDisplay.style.display = 'none';
 
                         userManagementSection.style.display = isOwner ? 'block' : 'none';
                         refreshUsersBtn.disabled = !isOwner;
@@ -1513,7 +1535,7 @@
 
                 const userDoc = await db.collection('users').doc(user.uid).get();
                 if (!userDoc.exists) {
-                    await auth.signOut();
+                    await auth.signOut(); // 登出新註冊但尚未驗證角色的用戶
                     window.showRegistrationCodeModal(async (result) => {
                         if (result) {
                             const code = result.code;
@@ -1542,6 +1564,7 @@
                                     return;
                                 }
                                 
+                                // 重新登入以確保獲取正確的用戶憑證
                                 const reAuthUserCredential = await auth.signInWithPopup(provider);
                                 const reAuthUser = reAuthUserCredential.user;
 
@@ -1549,7 +1572,7 @@
                                     uid: reAuthUser.uid,
                                     email: reAuthUser.email,
                                     name: nickname,
-                                    role: 'unapproved',
+                                    role: 'unapproved', // 預設為未審核
                                     createdAt: firebase.firestore.FieldValue.serverTimestamp(),
                                     registeredWithCode: true,
                                     registrationCodeUsed: code
@@ -1565,18 +1588,19 @@
                                 });
                                 console.log("新用戶文檔創建成功。");
 
-                                // Invalidate the one-time registration code after successful use
-                                // This mechanism should be handled by your Firestore Security Rules if you want to prevent
-                                // users from reusing it after successful registration, or by a Firebase Function.
-                                // Directly setting it to null here might affect concurrent registrations if not handled carefully.
-                                // For this specific version (v4.2.22) we will keep this line as it was in the user provided code.
-                                // To make it truly secure, Firestore rules should prevent the code from being reused,
-                                // or a server-side function should handle the invalidation.
+                                // 重要提示：前端嘗試使一次性註冊碼失效。
+                                // 這需要觸發此操作的用戶擁有對 `settings/registration` 文檔的寫入權限。
+                                // 通常，新註冊的用戶（role: 'unapproved'）不會有這種權限，這會導致 "Missing or insufficient permissions" 錯誤。
+                                // 推薦的解決方案是使用 Firebase Cloud Functions：
+                                // 在用戶成功註冊後（例如，觸發 `onCreate` 用戶事件），
+                                // 由後端函數安全地將 `settings/registration` 中的 `oneTimeCode` 設為 `null`。
+                                // 這樣可以確保安全且不會因前端權限問題而失敗。
+                                // 為了保持此版本的功能，我們將保留此行，但請注意其權限限制。
                                 await db.collection('settings').doc('registration').set({
                                     oneTimeCode: null,
                                     oneTimeCodeExpiry: null
                                 }, { merge: true });
-                                console.log("一次性註冊碼已在 Firestore 中失效（前端操作）。");
+                                console.log("一次性註冊碼已在 Firestore 中失效（前端嘗試操作，可能因權限不足而失敗）。");
 
                                 showMessage('註冊成功', `歡迎 ${reAuthUser.email} (${nickname})！您的帳號已成功註冊，正在等待管理員審核。`);
 
@@ -1606,7 +1630,7 @@
         logoutBtn.addEventListener('click', async () => {
             try {
                 await auth.signOut();
-                showMessage('登出成功', '您已成功登出。');
+                showMessage('登出成功', '用戶已登出。'); // 登出訊息已修改
             } catch (error) {
                 console.error("登出失敗:", error);
                 showMessage('登出失敗', `登出時發生錯誤: ${error.message}`);
