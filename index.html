@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>地圖 v4.2.28</title>
+  <title>地圖 v4.2.29</title>
   <!-- 網址列ICO -->
   <link rel="icon" href="logo.ico" type="image/x-icon" />
   <link rel="shortcut icon" href="logo.ico" type="image/x-icon" />
@@ -15,14 +15,14 @@
 </head>
 <body>
   <div id="title">
-    我的地圖系統 v4.2.28
+    我的地圖系統 v4.2.29
     <button id="editButton">編輯</button>
   </div>
 
   <div id="controls">
-    <div style="display: flex; gap: 10px; align-items: center;">
-        <label for="kmlLayerSelect" style="font-size: 15px; font-weight: 500; white-space: nowrap;">選擇資料庫圖層:</label>
-        <select id="kmlLayerSelect" style="flex-grow: 1;">
+    <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+        <label for="kmlLayerSelect">選擇資料庫圖層:</label>
+        <select id="kmlLayerSelect">
             <option value="">-- 請選擇 KML 圖層 --</option>
         </select>
     </div>
@@ -40,22 +40,24 @@
         <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google icon" />
         使用 Google 登入
       </button>
-      <p id="loginMessage" style="color: red; font-size: 14px; text-align: center; margin-top: 5px;"></p>
+      <p id="loginMessage"></p>
     </div>
 
     <div id="loggedInDashboard" style="display: none;">
-      <h3 id="userEmailDisplay" style="text-align: center; margin-bottom: 10px;"></h3>
+      <h3 id="userEmailDisplay"></h3>
 
       <div id="kmlControlsDashboard">
           <div id="uploadKmlSectionDashboard">
-              <label for="hiddenKmlFileInput" style="white-space: nowrap;">上傳 KML:</label>
+              <label for="hiddenKmlFileInput">上傳 KML:</label>
+              <!-- hiddenKmlFileInput 僅用於程式碼邏輯，不直接顯示 -->
               <input type="file" id="hiddenKmlFileInput" accept=".kml" style="display: none;" />
-              <span id="selectedKmlFileNameDashboard" style="flex-grow: 1; text-align: left;">尚未選擇檔案</span>
+              <!-- 這個 span 用於顯示選擇的檔案名稱，並透過點擊觸發 hiddenKmlFileInput -->
+              <span id="selectedKmlFileNameDashboard">尚未選擇檔案</span>
               <button id="uploadKmlSubmitBtnDashboard" class="action-buttons upload-btn" disabled>上傳</button>
           </div>
           <div id="deleteKmlSectionDashboard">
-              <label for="kmlLayerSelectDashboard" style="white-space: nowrap;">刪除 KML:</label>
-              <select id="kmlLayerSelectDashboard" style="flex-grow: 1;" disabled>
+              <label for="kmlLayerSelectDashboard">刪除 KML:</label>
+              <select id="kmlLayerSelectDashboard" disabled>
                   <option value="">-- 請選擇 KML 圖層 --</option>
               </select>
               <button id="deleteSelectedKmlBtn" class="action-buttons delete-btn">刪除</button>
@@ -64,22 +66,23 @@
 
       <div id="registrationSettingsSection" style="display: none;">
           <div class="registration-code-display-group">
-            <button id="generateRegistrationCodeBtn" class="action-buttons" style="background-color: #28a745;">產生一次性註冊碼</button>
+            <button id="generateRegistrationCodeBtn" class="action-buttons">產生一次性註冊碼</button>
             <div class="registration-code-content-wrapper">
                 <span id="registrationCodeDisplay" style="display: none;"></span>
                 <span id="registrationCodeCountdown" style="display: none;"></span>
             </div>
           </div>
-          <p id="registrationExpiryDisplay" style="display: none; font-size: 12px; color: #888; text-align: center; margin-top: -5px;"></p>
+          <p id="registrationExpiryDisplay" style="display: none;"></p>
       </div>
 
-      <div id="userManagementSection" style="display: none; margin-top: 10px;">
-          <button id="refreshUsersBtn" class="action-buttons" style="background-color: #17a2b8; margin-bottom: 10px;">使用者管理</button>
-          <div id="userList" style="font-size: 14px;">
+      <div id="userManagementSection" style="display: none;">
+          <button id="refreshUsersBtn" class="action-buttons">使用者管理</button>
+          <div id="userList">
+            <!-- 使用者列表會由 JavaScript 動態填充 -->
           </div>
       </div>
 
-      <button id="logoutBtn" class="action-buttons" style="background-color: #f44336; margin-top: 15px;">登出</button>
+      <button id="logoutBtn" class="action-buttons">登出</button>
     </div>
   </div>
 
@@ -99,9 +102,9 @@
       <p id="registrationModalMessage">請輸入管理員提供的一次性註冊碼。</p>
       <input type="text" id="registrationCodeInput" placeholder="註冊碼" />
       <input type="text" id="nicknameInput" placeholder="您的暱稱" />
-      <div class="button-group" style="display: flex; justify-content: center; gap: 15px;">
-          <button id="confirmRegistrationCodeBtn" class="action-buttons" style="background-color: #28a745;">確認</button>
-          <button id="cancelRegistrationCodeBtn" class="action-buttons" style="background-color: #6c757d;">取消</button>
+      <div class="button-group">
+          <button id="confirmRegistrationCodeBtn" class="action-buttons">確認</button>
+          <button id="cancelRegistrationCodeBtn" class="action-buttons">取消</button>
       </div>
     </div>
   </div>
