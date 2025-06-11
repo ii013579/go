@@ -1,13 +1,17 @@
+
 <!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>地圖 v4.1.0</title>
+  <title>地圖 v4.2.13 (重新整理用戶列表錯誤修正)</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.locatecontrol/dist/L.Control.Locate.min.css" />
+
   <style>
+    /* 這裡放置所有 CSS 樣式 */
     html, body {
       margin: 0;
       padding: 0;
@@ -32,6 +36,7 @@
       border-bottom-left-radius: 12px;
       border-bottom-right-radius: 12px;
       position: relative;
+      z-index: 1001;
     }
     #editButton {
       position: absolute;
@@ -48,23 +53,25 @@
       cursor: pointer;
       transition: background-color 0.3s, transform 0.2s, box-shadow 0.2s;
       box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+      z-index: 1003;
     }
     #editButton:hover {
       background-color: #e0e0e0;
       transform: translateY(-50%) scale(1.03);
       box-shadow: 0 4px 8px rgba(0,0,0,0.25);
     }
-    /* 認證面板樣式 */
+
+    /* 認證面板樣式 - 預設隱藏，點擊編輯顯示 */
     #authSection {
       background: #fff;
-      padding: 15px 20px;
+      padding: 15px; /* 統一 padding */
       box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-      border-bottom: 1px solid #eee;
-      display: none; /* 初始狀態為隱藏 */
+      border-bottom: 1px solid #eee; /* 底部邊框 */
+      display: none; /* 預設隱藏，由 JS 控制 */
       flex-direction: column;
-      gap: 15px;
-      position: relative;
-      z-index: 1001;
+      gap: 15px; /* 增加內部元素間距 */
+      position: relative; /* 確保在正常文檔流中 */
+      z-index: 1001; /* 確保在 controls 之上 */
     }
     #authSection h3 {
       margin: 0;
@@ -72,97 +79,134 @@
       color: #333;
       text-align: center;
     }
+    #authSection input {
+      padding: 10px 12px;
+      font-size: 16px;
+      border-radius: 8px;
+      border: 1px solid #dcdcdc;
+      width: calc(100% - 24px); /* 考慮 padding */
+      box-sizing: border-box; /* 確保寬度包含 padding */
+    }
     #loginForm, #loggedInDashboard {
         display: flex;
         flex-direction: column;
         gap: 10px;
     }
     #loggedInDashboard {
-        text-align: center;
+        text-align: center; /* 調整為置中對齊 */
     }
-    #loggedInDashboard p {
-        margin: 0;
-        color: #555;
-    }
-    #userEmailDisplay {
+    #userEmailDisplay { /* Email 顯示樣式 */
         font-size: 18px;
         font-weight: 600;
         color: #2193b0;
         margin-bottom: 5px;
+        text-align: center; /* 確保 Email 自身置中 */
     }
-    #controls {
-      padding: 15px;
-      background: #fff;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-      position: relative;
-      z-index: 1000;
-      display: flex;
+    /* KML 管理區塊內的樣式 */
+    #kmlControlsDashboard, #registrationSettingsSection, #userManagementSection {
+        border-top: 1px solid #eee;
+        padding-top: 10px;
+        margin-top: 10px;
+        display: flex; /* 確保其內部元素在有內容時能正確顯示 */
+        flex-direction: column;
+        gap: 10px;
     }
-    /* KML 控制項預設是隱藏的，由 JS 控制顯示 */
-    #kmlControls {
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-    }
-    /* 上傳 KML 區塊，預設隱藏 (JS控制) */
-    #uploadKmlSectionDashboard {
-        display: none;
-        flex-direction: row; /* Flex for horizontal layout */
+    /* 調整上傳和刪除按鈕佈局 */
+    #uploadKmlSectionDashboard, #deleteKmlSectionDashboard {
+        display: flex;
+        flex-direction: row;
         align-items: center;
         gap: 8px;
     }
-    #uploadKmlSectionDashboard label {
-        font-size: 15px;
-        font-weight: 500;
-        white-space: nowrap;
-        flex-shrink: 0; /* Prevent label from shrinking */
-    }
-    /* 修改後的 selectedKmlFileNameDashboard 樣式 */
-    #selectedKmlFileNameDashboard {
-        flex-grow: 1; /* Allow file name to take available space */
-        font-size: 15px;
-        color: #555;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        /* 新增邊框樣式 */
-        border: 1px solid #dcdcdc;
-        padding: 10px 12px;
-        border-radius: 8px;
-        background-color: #f9f9f9;
-        /* 保持一致的過渡效果 */
-        transition: border-color 0.3s, box-shadow 0.3s;
-        box-sizing: border-box; /* 確保 padding 和 border 不會增加元素總寬度 */
-        height: 40px; /* 與 select 保持一致的高度 */
-        display: flex; /* 讓內容居中 */
-        align-items: center; /* 讓內容垂直居中 */
-    }
-    /* 刪除 KML 區塊，預設隱藏 (JS控制) */
-    #deleteKmlSectionDashboard {
-        display: none;
-        flex-direction: row; /* Flex for horizontal layout */
-        align-items: center;
-        gap: 8px;
-    }
-    #deleteKmlSectionDashboard label {
-        font-size: 15px;
+    #uploadKmlSectionDashboard label, #deleteKmlSectionDashboard label {
+        font-size: 14px;
         font-weight: 500;
         white-space: nowrap;
         flex-shrink: 0;
     }
+    #selectedKmlFileNameDashboard {
+        flex-grow: 1;
+        font-size: 14px;
+        color: #555;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        border: 1px solid #dcdcdc;
+        padding: 8px 10px;
+        border-radius: 6px;
+        background-color: #f9f9f9;
+        transition: border-color 0.3s, box-shadow 0.3s;
+        box-sizing: border-box;
+        height: 36px;
+        display: flex;
+        align-items: center;
+        cursor: pointer; /* 讓它看起來可點擊 */
+    }
+    #selectedKmlFileNameDashboard:hover {
+        border-color: #4a90e2; /* 懸停時邊框變色 */
+        box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.1); /* 懸停時增加陰影 */
+    }
+    /* 調整上傳和刪除按鈕寬度 */
+    #uploadKmlSubmitBtnDashboard, #deleteSelectedKmlBtn {
+        width: 80px; /* 固定按鈕寬度 */
+        flex-shrink: 0; /* 防止按鈕縮小 */
+    }
 
-    #kmlInput, #searchBox, #kmlLayerSelect, #kmlLayerSelectDashboard { /* 新增 #kmlLayerSelectDashboard */
+    /* 註冊碼顯示區域的 flex 佈局 */
+    .registration-code-display-group {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap; /* 允許換行在小螢幕上 */
+    }
+    .registration-code-display-group button {
+        flex-shrink: 0; /* 按鈕不縮小 */
+    }
+    #registrationCodeDisplay {
+        background-color: #e6f0ff;
+        padding: 8px;
+        border-radius: 5px;
+        word-break: break-all;
+        text-align: center;
+        flex-grow: 1; /* 讓代碼顯示區塊佔據剩餘空間 */
+        user-select: text; /* 允許選擇文字 */
+    }
+    #registrationCodeCountdown { /* 新增的倒數計時顯示 */
+        font-weight: bold;
+        color: #007bff;
+        white-space: nowrap; /* 不換行 */
+        min-width: 80px; /* 最小寬度，避免閃爍 */
+        text-align: right;
+    }
+
+    /* controls 樣式 - 預設顯示 */
+    #controls {
+      padding: 15px;
+      background: #fff;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      display: flex; /* 預設顯示 */
+      flex-direction: column;
+      gap: 10px;
+      position: relative; /* 為了 searchResults 絕對定位 */
+      z-index: 1000;
+    }
+    /* 確保 KML 控制項預設是隱藏的，由 JS 控制顯示 */
+    #kmlControls {
+      display: flex; /* 內部保持 flex */
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    #kmlInput, #searchBox, #kmlLayerSelect, #kmlLayerSelectDashboard, #registrationCodeInput { /* 統一輸入框樣式 */
       padding: 10px 12px;
       font-size: 15px;
       border-radius: 8px;
       border: 1px solid #dcdcdc;
       transition: border-color 0.3s, box-shadow 0.3s;
-      height: 40px; /* 確保 select 也有相同高度 */
+      width: calc(100% - 24px); /* 讓輸入框佔滿父容器寬度 */
+      box-sizing: border-box;
     }
-    #kmlInput:focus, #searchBox:focus, #kmlLayerSelect:focus, #kmlLayerSelectDashboard:focus { /* 新增 #kmlLayerSelectDashboard */
+    #kmlInput:focus, #searchBox:focus, #kmlLayerSelect:focus, #kmlLayerSelectDashboard:focus {
       border-color: #4a90e2;
       box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.2);
       outline: none;
@@ -176,6 +220,7 @@
       padding: 0 12px;
       background-color: #fff;
       box-shadow: inset 0 1px 3px rgba(0,0,0,0.05);
+      position: relative; /* 為了 searchResults 絕對定位 */
     }
     .material-symbols-outlined {
       font-variation-settings:
@@ -197,26 +242,26 @@
       box-sizing: border-box;
       height: 44px;
     }
-    /* 調整 #searchResults 的樣式 */
     #searchResults {
-      position: fixed; /* 固定定位，使其浮動在頁面內容之上 */
+      position: absolute;
+      top: calc(100% + 5px); /* 緊貼搜尋框下方 */
+      left: 0;
+      width: 100%; /* 與搜尋框同寬 */
       max-height: 300px;
       background: rgba(255, 255, 255, 0.98);
       overflow-y: auto;
       border: 1px solid #ddd;
-      border-top: none; /* 移除頂部邊框，與搜尋框視覺連結 */
+      border-top: none;
       border-bottom-left-radius: 8px;
       border-bottom-right-radius: 8px;
-      border-top-left-radius: 0; /* 移除頂部左圓角 */
-      border-top-right-radius: 0; /* 移除頂部右圓角 */
       box-shadow: 0 6px 16px rgba(0,0,0,0.18);
       font-size: 15px;
-      display: none;
-      z-index: 2000; /* 確保它疊在地圖和 Leaflet 控制項之上 */
-      /* 恢復為三欄佈局 */
-      grid-template-columns: repeat(3, 1fr); /* 這裡改為三欄 */
+      display: none; /* 預設隱藏，有結果才顯示 */
+      z-index: 1100;
+      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); /* 響應式網格 */
       gap: 8px;
       padding: 10px;
+      box-sizing: border-box;
     }
     .result-item {
       padding: 10px 12px;
@@ -240,7 +285,7 @@
       flex-grow: 1;
       border-radius: 12px;
       overflow: hidden;
-      margin: 15px;
+      margin: 15px; /* 調整外邊距 */
       box-shadow: 0 4px 12px rgba(0,0,0,0.1);
     }
     /* Marker Label Styles */
@@ -271,16 +316,18 @@
         display: flex;
         justify-content: center;
         align-items: center;
-        transform: translate(-50%, -50%);
+        /* 將按鈕稍微向上移動，避免遮擋地標 */
+        transform: translate(-50%, -100%); 
+        z-index: 999; /* 確保導航按鈕在標籤之上，但在訊息框之下 */
     }
     /* Actual Nav Button Content (Image) Styles */
     .nav-button-content img {
-      width: 48px;
-      height: 48px;
+      width: 50px; /* 根據您的需求設置為 50px */
+      height: 50px; /* 根據您的需求設置為 50px */
       cursor: pointer;
       display: block;
       border-radius: 50%;
-      background-color: rgba(255, 255, 255, 0.8);
+      background-color: rgba(255, 255, 255, 0.9); /* 稍微不透明 */
       box-shadow: 0 2px 8px rgba(0,0,0,0.2);
       transition: transform 0.2s ease-in-out;
     }
@@ -289,7 +336,7 @@
     }
     /* Custom Dot Icon Styles */
     .custom-dot-icon {
-        background-color: #e74c3c;
+        background-color: #e74c3c; /* 紅點 */
         border: 2px solid white;
         border-radius: 50%;
         width: 18px;
@@ -300,8 +347,9 @@
         margin-top: -9px;
         box-shadow: 0 2px 5px rgba(0,0,0,0.2);
     }
-    /* Message Box Styles */
-    .message-box-overlay {
+
+    /* Message Box Styles (統一為 modal 樣式) */
+    .message-box-overlay, .registration-modal-overlay {
         position: fixed;
         top: 0;
         left: 0;
@@ -311,16 +359,16 @@
         display: flex;
         justify-content: center;
         align-items: center;
-        z-index: 2002; /* Changed from 2000 to 2002 */
+        z-index: 2000;
         opacity: 0;
         visibility: hidden;
         transition: opacity 0.3s ease, visibility 0.3s ease;
     }
-    .message-box-overlay.visible {
+    .message-box-overlay.visible, .registration-modal-overlay.visible {
         opacity: 1;
         visibility: visible;
     }
-    .message-box-content {
+    .message-box-content, .registration-modal-content {
         background: #fff;
         padding: 30px;
         border-radius: 12px;
@@ -331,22 +379,23 @@
         transform: translateY(-20px);
         transition: transform 0.3s ease;
     }
-    .message-box-overlay.visible .message-box-content {
+    .message-box-overlay.visible .message-box-content,
+    .registration-modal-overlay.visible .registration-modal-content {
         transform: translateY(0);
     }
-    .message-box-content h3 {
+    .message-box-content h3, .registration-modal-content h3 {
         margin-top: 0;
         color: #333;
         font-size: 22px;
         margin-bottom: 15px;
     }
-    .message-box-content p {
+    .message-box-content p, .registration-modal-content p {
         color: #555;
         font-size: 16px;
         line-height: 1.6;
         margin-bottom: 25px;
     }
-    .message-box-content button {
+    .message-box-content button, .registration-modal-content button {
         background-color: #4a90e2;
         color: white;
         border: none;
@@ -357,13 +406,29 @@
         font-weight: 600;
         transition: background-color 0.2s, transform 0.2s;
     }
-    .message-box-content button:hover {
+    .message-box-content button:hover, .registration-modal-content button:hover {
         background-color: #357ABD;
         transform: translateY(-1px);
     }
-    /* Action Buttons */
-    .action-buttons {
-      background-color: #28a745;
+    .registration-modal-content input[type="text"] {
+        padding: 10px 12px;
+        font-size: 15px;
+        border-radius: 8px;
+        border: 1px solid #dcdcdc;
+        transition: border-color 0.3s, box-shadow 0.3s;
+        width: calc(100% - 24px);
+        box-sizing: border-box;
+        margin-bottom: 15px;
+    }
+    .registration-modal-content .button-group {
+        display: flex;
+        justify-content: center;
+        gap: 15px;
+    }
+
+    /* Action Buttons (通用樣式，用於各種功能按鈕) */
+    .action-buttons, .admin-option-button {
+      background-color: #28a745; /* Default green */
       color: white;
       border: none;
       padding: 10px 20px;
@@ -372,54 +437,50 @@
       font-size: 15px;
       font-weight: 600;
       transition: background-color 0.2s, transform 0.2s;
+      width: 100%; /* 讓按鈕佔滿父容器寬度 */
+      box-sizing: border-box;
     }
-    .action-buttons:hover {
+    .action-buttons:hover, .admin-option-button:hover {
       transform: translateY(-1px);
     }
-    .action-buttons:disabled {
+    .action-buttons:disabled, .admin-option-button:disabled {
         background-color: #cccccc;
         cursor: not-allowed;
         transform: none;
         box-shadow: none;
     }
-    .action-buttons.upload-btn {
+    .action-buttons.google-btn { /* Google 登入按鈕 */
+      background-color: #4285F4;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+    }
+    .action-buttons.google-btn img {
+      width: 20px;
+      height: 20px;
+    }
+    .action-buttons.upload-btn { /* 上傳 KML 按鈕 */
       background-color: #007bff;
     }
-    .action-buttons.delete-btn {
+    .action-buttons.delete-btn { /* 刪除 KML 按鈕 */
       background-color: #dc3545;
     }
-    /* Admin Option Buttons (for dashboard) */
-    .admin-option-button {
-        background-color: #28a745;
-        color: white;
-        padding: 12px 20px;
-        border: none;
-        border-radius: 8px;
-        cursor: pointer;
-        font-size: 16px;
-        font-weight: 600;
-        transition: background-color 0.2s, transform 0.2s;
-        width: 100%;
-        box-sizing: border-box;
-    }
-    .admin-option-button:hover {
-        background-color: #218838;
-        transform: translateY(-1px);
+
+    /* Admin Option Buttons (Dashboard 內部按鈕) */
+    .admin-option-button.upload-kml-dashboard-btn {
+        background-color: #007bff; /* Blue for Upload KML */
     }
     .admin-option-button.delete-kml-dashboard-btn {
-        background-color: #dc3545;
+        background-color: #dc3545; /* Red for Delete KML */
     }
-    .admin-option-button.delete-kml-dashboard-btn:hover {
-        background-color: #c82333;
-    }
-    .admin-option-button.add-user-dashboard-btn { /* 這個類別現在可能會用於其他管理按鈕 */
-        background-color: #17a2b8;
+    .admin-option-button.add-user-dashboard-btn {
+        background-color: #17a2b8; /* Info blue for Add User */
     }
     .admin-option-button.add-user-dashboard-btn:hover {
         background-color: #138496;
     }
-    /* 新增的註冊設定區塊樣式 */
-    #registrationSettingsSection {
+    #addUserSection {
         border-top: 1px solid #eee;
         padding-top: 15px;
         margin-top: 15px;
@@ -427,72 +488,48 @@
         flex-direction: column;
         gap: 10px;
     }
-    #registrationSettingsSection h4 {
+    #addUserSection h4 {
         margin-top: 0;
         margin-bottom: 5px;
         font-size: 18px;
         color: #555;
     }
-    #registrationSettingsSection input[type="datetime-local"] {
-        padding: 10px 12px;
-        font-size: 15px;
+
+    /* Custom Locate Button */
+    .leaflet-control-container .leaflet-top.leaflet-left {
+        top: auto; /* 重置 top */
+        left: 15px; /* 調整左側邊距 */
+        bottom: 15px; /* 固定在底部 */
+        top: initial;
+    }
+    .leaflet-control-locate {
+        background-color: #fff;
         border-radius: 8px;
-        border: 1px solid #dcdcdc;
-        width: calc(100% - 24px); /* 考慮 padding */
-        box-sizing: border-box;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     }
-    #registrationSettingsSection input[type="checkbox"] {
-        width: auto;
-        margin-right: 5px;
+    .leaflet-control-locate a {
+        border-radius: 8px;
+        color: #4a90e2 !important;
+        line-height: 30px;
+        height: 30px;
+        width: 30px;
     }
-    #registrationSettingsSection label {
-        font-size: 15px;
-        font-weight: 500;
-        display: flex;
-        align-items: center;
-        gap: 5px;
-    }
-    #registrationCodeDisplay {
-        font-size: 18px;
-        font-weight: 600;
-        color: #2193b0;
+    .leaflet-control-locate a.active, .leaflet-control-locate a.active:hover {
         background-color: #e6f0ff;
-        padding: 10px;
-        border-radius: 8px;
-        text-align: center;
-        margin-bottom: 10px;
-        word-break: break-all; /* 避免長代碼溢出 */
+        color: #0056b3 !important;
     }
-    #registrationExpiryDisplay { /* 新增樣式 */
-        font-size: 14px;
-        color: #888;
-        text-align: center;
-        margin-top: -8px;
-        margin-bottom: 10px;
-    }
-    /* Style for the custom locate button */
-    .leaflet-control-custom-locate {
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        margin-top: 10px; /* Add some margin below the zoom controls */
-        cursor: pointer;
-        /* Inherits other styles like background, border-radius, shadow from leaflet-bar */
-    }
-    .leaflet-control-custom-locate span {
-        color: #4a90e2; /* Blue color for the icon */
-    }
-    .leaflet-control-custom-locate:hover {
+    .leaflet-control-locate a:hover {
         background-color: #f4f4f4;
     }
-    /* Style for the user's current location dot marker */
+
+    /* User Location Dot */
     .user-location-dot {
-        background-color: #1a73e8; /* Google Blue */
+        background-color: #1a73e8;
         border: 2px solid white;
         border-radius: 50%;
         width: 16px;
         height: 16px;
-        box-shadow: 0 0 0 3px rgba(26, 115, 232, 0.4); /* Pulsing effect */
+        box-shadow: 0 0 0 3px rgba(26, 115, 232, 0.4);
         animation: pulse 1.5s infinite ease-out;
     }
     @keyframes pulse {
@@ -506,226 +543,1249 @@
             box-shadow: 0 0 0 0 rgba(26, 115, 232, 0);
         }
     }
-    /* Google Sign-In Button Style */
-    #googleSignInBtn {
-        background-color: #4285F4; /* Google Blue */
-        color: white;
+    /* User list specific styles */
+    .user-list-item {
         display: flex;
+        justify-content: space-between;
         align-items: center;
-        justify-content: center;
-        gap: 10px;
-        padding: 12px 20px;
-        border: none;
-        border-radius: 8px;
-        cursor: pointer;
-        font-size: 16px;
-        font-weight: 600;
-        transition: background-color 0.2s, transform 0.2s;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        padding: 8px 0;
+        border-bottom: 1px solid #eee;
     }
-    #googleSignInBtn:hover {
-        background-color: #357ae8;
-        transform: translateY(-1px);
+    .user-list-item:last-child {
+        border-bottom: none;
     }
-    #googleSignInBtn img {
-        width: 24px;
-        height: 24px;
-    }
-    /* Registration Code Modal Styles */
-    #registrationCodeModalOverlay {
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: rgba(0, 0, 0, 0.6);
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        z-index: 2001; /* 比 messageBoxOverlay 高 */
-        opacity: 0;
-        visibility: hidden;
-        transition: opacity 0.3s ease, visibility 0.3s ease;
-    }
-    #registrationCodeModalOverlay.visible {
-        opacity: 1;
-        visibility: visible;
-    }
-    .registration-modal-content {
-        background: #fff;
-        padding: 30px;
-        border-radius: 12px;
-        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
-        text-align: center;
-        max-width: 450px;
-        width: 90%;
-        transform: translateY(-30px);
-        transition: transform 0.3s ease;
-    }
-    #registrationCodeModalOverlay.visible .registration-modal-content {
-        transform: translateY(0);
-    }
-    .registration-modal-content h3 {
-        margin-top: 0;
-        color: #333;
-        font-size: 24px;
-        margin-bottom: 20px;
-    }
-    .registration-modal-content p {
+    .user-list-item span {
+        flex-grow: 1;
+        margin-right: 10px;
+        font-size: 14px;
         color: #555;
-        font-size: 16px;
-        line-height: 1.6;
-        margin-bottom: 20px;
     }
-    .registration-modal-content input[type="text"] {
-        padding: 12px 15px;
-        font-size: 18px;
-        border-radius: 8px;
+    .user-list-item .user-role-select { /* 角色選擇器樣式 */
+        margin-left: 5px;
+        padding: 6px 8px;
+        border-radius: 6px;
         border: 1px solid #dcdcdc;
-        width: calc(100% - 30px); /* 考慮 padding */
-        box-sizing: border-box;
-        margin-bottom: 20px;
-        text-align: center;
+        font-size: 14px;
+        flex-shrink: 0;
     }
-    .registration-modal-content .button-group {
-        display: flex;
-        justify-content: center;
-        gap: 15px;
-    }
-    .registration-modal-content button {
-        padding: 12px 25px;
-        border-radius: 8px;
-        cursor: pointer;
-        font-size: 16px;
-        font-weight: 600;
-        transition: background-color 0.2s, transform 0.2s;
+    .user-list-item .change-role-btn { /* 變更按鈕樣式 */
+        padding: 6px 10px;
+        font-size: 14px;
+        margin-left: 8px;
+        width: auto; /* 不強制佔滿寬度 */
+        flex-shrink: 0;
+        background-color: #007bff; /* 藍色 */
+        color: white;
         border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: background-color 0.2s, transform 0.2s;
     }
-    .registration-modal-content button.confirm-btn {
-        background-color: #28a745;
-        color: white;
-    }
-    .registration-modal-content button.confirm-btn:hover {
-        background-color: #218838;
+    .user-list-item .change-role-btn:hover {
+        background-color: #0056b3;
         transform: translateY(-1px);
     }
-    .registration-modal-content button.cancel-btn {
-        background-color: #6c757d;
-        color: white;
+    .user-list-item .change-role-btn:disabled {
+        background-color: #cccccc;
+        cursor: not-allowed;
     }
-    .registration-modal-content button.cancel-btn:hover {
-        background-color: #5a6268;
-        transform: translateY(-1px);
+    .user-list-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 10px;
+    }
+    .user-list-table th, .user-list-table td {
+        border: 1px solid #eee;
+        padding: 8px;
+        text-align: left;
+    }
+    .user-list-table th {
+        background-color: #f5f5f5;
+        font-weight: 600;
+    }
+    /* Registration Code Modal Timer */
+    #registrationModalMessage.countdown {
+        font-size: 16px;
+        font-weight: bold;
+        color: #007bff;
     }
   </style>
 </head>
 <body>
-  <div id="title">地圖 v4.1.0</div>
+  <div id="title">
+    我的地圖系統 v4.2.13
+    <button id="editButton">編輯</button>
+  </div>
+
+  <div id="controls">
+    <div style="display: flex; gap: 10px; align-items: center;">
+        <label for="kmlLayerSelect" style="font-size: 15px; font-weight: 500; white-space: nowrap;">選擇資料庫圖層:</label>
+        <select id="kmlLayerSelect" style="flex-grow: 1;">
+            <option value="">-- 請選擇 KML 圖層 --</option>
+        </select>
+    </div>
+    <div id="searchContainer">
+        <span class="material-symbols-outlined">search</span>
+        <input type="text" id="searchBox" placeholder="搜尋地點..." autocomplete="off" />
+        <div id="searchResults"></div>
+    </div>
+  </div>
 
   <div id="authSection">
     <div id="loginForm">
-        <h3>用戶登入</h3>
-        <div class="input-group">
-            <input type="email" id="loginEmail" placeholder="Email" required>
-        </div>
-        <div class="input-group">
-            <input type="password" id="loginPassword" placeholder="密碼" required>
-        </div>
-        <button id="emailLoginBtn" class="action-buttons">Email 登入</button>
-        <button id="googleSignInBtn" class="action-buttons">
-            <img src="https://img.icons8.com/color/24/000000/google-logo.png" alt="Google icon">
-            使用 Google 登入
-        </button>
-        <button id="showRegisterFormBtn" class="action-buttons" style="background-color: #17a2b8;">註冊新帳號</button>
-        <p id="loginMessage" style="color: red;"></p>
+      <h3>請登入</h3>
+      <button id="googleSignInBtn" class="action-buttons google-btn">
+        <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google icon" />
+        使用 Google 登入
+      </button>
+      <p id="loginMessage" style="color: red; font-size: 14px; text-align: center; margin-top: 5px;"></p>
     </div>
 
     <div id="loggedInDashboard" style="display: none;">
-        <h3>歡迎使用</h3>
-        <p id="userEmailDisplay"></p>
-        <p>您的角色: <span id="userRoleDisplay"></span></p>
+      <h3 id="userEmailDisplay" style="text-align: center; margin-bottom: 10px;"></h3> 
+      
+      <div id="kmlControlsDashboard">
+          <div id="uploadKmlSectionDashboard">
+              <label for="hiddenKmlFileInput" style="white-space: nowrap;">上傳 KML:</label>
+              <input type="file" id="hiddenKmlFileInput" accept=".kml" style="display: none;" />
+              <span id="selectedKmlFileNameDashboard" style="flex-grow: 1; text-align: left;">尚未選擇檔案</span>
+              <button id="uploadKmlSubmitBtnDashboard" class="action-buttons upload-btn" disabled>上傳</button>
+          </div>
+          <div id="deleteKmlSectionDashboard">
+              <label for="kmlLayerSelectDashboard" style="white-space: nowrap;">刪除 KML:</label>
+              <select id="kmlLayerSelectDashboard" style="flex-grow: 1;" disabled>
+                  <option value="">-- 請選擇 KML 圖層 --</option>
+              </select>
+              <button id="deleteSelectedKmlBtn" class="action-buttons delete-btn">刪除</button>
+          </div>
+      </div>
 
-        <div id="kmlControls" style="display: none;">
-            <h4>KML 資料管理</h4>
-            <div id="uploadKmlSectionDashboard">
-                <label for="kmlFileInputDashboard">上傳 KML:</label>
-                <input type="file" id="kmlFileInputDashboard" accept=".kml" style="display: none;" />
-                <span id="selectedKmlFileNameDashboard">未選擇檔案</span>
-                <button id="selectKmlFileBtn" class="action-buttons upload-btn">選擇檔案</button>
-                <button id="uploadKmlBtn" class="action-buttons upload-btn">上傳</button>
-            </div>
-            <div id="deleteKmlSectionDashboard">
-                <label for="kmlLayerSelectDashboard">刪除 KML:</label>
-                <select id="kmlLayerSelectDashboard">
-                    <option value="">-- 選擇要刪除的 KML --</option>
-                </select>
-                <button id="deleteSelectedKmlBtn" class="action-buttons delete-btn">刪除</button>
-            </div>
-        </div>
+      <div id="registrationSettingsSection" style="display: none;">
+          <div class="registration-code-display-group">
+            <button id="generateRegistrationCodeBtn" class="action-buttons" style="background-color: #28a745;">產生一次性註冊碼</button>
+            <span id="registrationCodeDisplay" style="display: none;"></span> 
+            <span id="registrationCodeCountdown" style="display: none;"></span>
+          </div>
+          <p id="registrationExpiryDisplay" style="display: none; font-size: 12px; color: #888; text-align: center; margin-top: -5px;"></p>
+      </div>
 
-        <div id="registrationSettingsSection" style="display: none;">
-            <h4>註冊設定</h4>
-            <button id="generateRegistrationCodeBtn" class="admin-option-button">產生一次性註冊碼</button>
-            <p id="registrationCodeDisplay" style="display: none;"></p>
-            <p id="registrationExpiryDisplay" style="display: none;"></p>
-            <label>
-                <input type="checkbox" id="allowDirectRegistration" disabled> 允許直接註冊 (非一次性)
-            </label>
-        </div>
+      <div id="userManagementSection" style="display: none; margin-top: 10px;">
+          <button id="refreshUsersBtn" class="action-buttons" style="background-color: #17a2b8; margin-bottom: 10px;">重新整理用戶列表</button>
+          <div id="userList" style="font-size: 14px;">
+          </div>
+      </div>
 
-        <div id="userManagementSection" style="display: none;">
-            <h4>用戶管理</h4>
-            <button id="refreshUsersBtn" class="admin-option-button add-user-dashboard-btn">重新整理用戶列表</button>
-            <div id="userList" style="margin-top: 10px;">
-                </div>
-        </div>
-
-        <button id="logoutBtn" class="action-buttons delete-btn">登出</button>
+      <button id="logoutBtn" class="action-buttons" style="background-color: #f44336; margin-top: 15px;">登出</button>
     </div>
   </div>
 
   <div id="map"></div>
 
-  <div class="search-container" style="top: 100px; /* 調整以避開 authSection */">
-    <input type="text" id="searchBox" placeholder="搜尋地標..." />
-    <div id="searchResults"></div>
-  </div>
-
-  <div class="nav-buttons-container">
-    </div>
-
   <div id="messageBoxOverlay" class="message-box-overlay">
     <div class="message-box-content">
-        <h3 id="messageBoxTitle"></h3>
-        <p id="messageBoxContent"></p>
-        <button id="messageBoxCloseBtn">關閉</button>
+      <h3 id="messageBoxTitle"></h3>
+      <p id="messageBoxMessage"></p>
+      <button id="messageBoxCloseBtn">確定</button>
     </div>
   </div>
 
   <div id="registrationCodeModalOverlay" class="registration-modal-overlay">
     <div class="registration-modal-content">
-        <h3>輸入註冊碼</h3>
-        <p>請輸入管理員提供的一次性註冊碼。</p>
-        <input type="text" id="registrationCodeInput" placeholder="註冊碼" />
-        <p id="registrationModalMessage" style="color: red; font-size: 14px;"></p>
-        <div class="button-group">
-            <button id="confirmRegistrationCodeBtn" class="confirm-btn">確認</button>
-            <button id="cancelRegistrationCodeBtn" class="cancel-btn">取消</button>
-        </div>
+      <h3>輸入註冊碼</h3>
+      <p id="registrationModalMessage">請輸入管理員提供的一次性註冊碼。</p>
+      <input type="text" id="registrationCodeInput" placeholder="註冊碼" />
+      <div class="button-group" style="display: flex; justify-content: center; gap: 15px;">
+          <button id="confirmRegistrationCodeBtn" class="action-buttons" style="background-color: #28a745;">確認</button>
+          <button id="cancelRegistrationCodeBtn" class="action-buttons" style="background-color: #6c757d;">取消</button>
+      </div>
     </div>
   </div>
 
   <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-storage.js"></script> <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-storage.js"></script>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet-omnivore/0.3.4/leaflet-omnivore.min.js"></script>
   <script src="https://unpkg.com/leaflet.locatecontrol/dist/L.Control.Locate.min.js" charset="utf-8"></script>
-  <link rel="stylesheet" href="https://unpkg.com/leaflet.locatecontrol/dist/L.Control.Locate.min.css" />
 
-  <script src="js/firebase-init.js"></script>
-  <script src="js/map-app.js"></script>
-  <script src="js/auth.js"></script>
+  <script>
+    // ====================================================================================
+    // 1. Firebase 初始化 和 全局函數
+    // ====================================================================================
 
+    // Firebase 配置 (請替換為您自己的 Firebase 專案配置)
+    // 從 Firebase Console -> 專案設定 -> 您的應用程式 -> SDK 設定與配置 中獲取
+    const firebaseConfig = {
+      apiKey: "AIzaSyC-uaCnvgtYacPf_7BtwbwdDUw-WMx4d8s",
+      authDomain: "kmldata-d22fb.firebaseapp.com",
+      projectId: "kmldata-d22fb",
+      storageBucket: "kmldata-d22fb.firebasestorage.app",
+      messagingSenderId: "6673236901",
+      appId: "1:6673236901:web:5aac773cbb512a14b8de4c", 
+      measurementId: "G-TJFH5SXNJX" 
+    };
+
+    // 初始化 Firebase
+    firebase.initializeApp(firebaseConfig);
+
+    // 獲取 Firebase 服務實例
+    const auth = firebase.auth();
+    const db = firebase.firestore();
+    const storage = firebase.storage();
+
+    // 根據 Canvas 環境提供的 __app_id 或是 Firebase 配置中的 projectId 來確定 appId
+    // 這對於構建 artifacts 集合路徑至關重要
+    const appId = typeof __app_id !== 'undefined' ? __app_id : firebaseConfig.projectId;
+    console.log("Using App ID for Firestore path:", appId);
+
+
+    // 定義 showMessage 函數以便全局使用
+    window.showMessage = function(title, message, callback) {
+        const messageBoxOverlay = document.getElementById('messageBoxOverlay');
+        const messageBoxTitle = document.getElementById('messageBoxTitle');
+        const messageBoxMessage = document.getElementById('messageBoxMessage');
+        const messageBoxCloseBtn = document.getElementById('messageBoxCloseBtn');
+
+        messageBoxTitle.textContent = title;
+        messageBoxMessage.textContent = message;
+        messageBoxOverlay.classList.add('visible'); // 顯示彈窗
+
+        const closeHandler = () => {
+            messageBoxOverlay.classList.remove('visible'); // 隱藏彈窗
+            messageBoxCloseBtn.removeEventListener('click', closeHandler);
+            if (callback) {
+                callback();
+            }
+        };
+        messageBoxCloseBtn.addEventListener('click', closeHandler);
+    };
+
+    // 定義 showRegistrationCodeModal 函數以便全局使用，增加計時器功能
+    window.showRegistrationCodeModal = function(callback) {
+        const modalOverlay = document.getElementById('registrationCodeModalOverlay');
+        const registrationCodeInput = document.getElementById('registrationCodeInput');
+        const confirmBtn = document.getElementById('confirmRegistrationCodeBtn');
+        const cancelBtn = document.getElementById('cancelRegistrationCodeBtn');
+        const modalMessage = document.getElementById('registrationModalMessage');
+
+        registrationCodeInput.value = ''; // 清空輸入框
+        modalMessage.textContent = '請輸入管理員提供的一次性註冊碼。'; // 重設訊息
+        modalMessage.classList.remove('countdown'); // 移除計時器樣式
+        modalOverlay.classList.add('visible'); // 顯示模態框
+
+        let countdown = 60; // 60秒計時 (從 30 秒修改為 60 秒)
+        let timerInterval;
+
+        const updateTimer = () => {
+            modalMessage.textContent = `請輸入管理員提供的一次性註冊碼。剩餘時間: ${countdown} 秒`;
+            modalMessage.classList.add('countdown');
+            if (countdown <= 0) {
+                clearInterval(timerInterval);
+                modalOverlay.classList.remove('visible'); // 隱藏模態框
+                // 移除註冊碼過期提示，依據使用者需求
+                cleanupListeners();
+                callback(null); // 表示時間到，自動取消
+            }
+            countdown--;
+        };
+
+        const cleanupListeners = () => {
+            clearInterval(timerInterval);
+            confirmBtn.removeEventListener('click', confirmHandler);
+            cancelBtn.removeEventListener('click', cancelHandler);
+        };
+
+        const confirmHandler = () => {
+            const code = registrationCodeInput.value.trim();
+            if (code) {
+                modalOverlay.classList.remove('visible'); // 隱藏模態框
+                cleanupListeners();
+                callback(code);
+            } else {
+                modalMessage.textContent = '請輸入註冊碼。';
+                modalMessage.classList.remove('countdown');
+            }
+        };
+
+        const cancelHandler = () => {
+            modalOverlay.classList.remove('visible'); // 隱藏模態框
+            cleanupListeners();
+            callback(null); // 表示取消
+        };
+
+        // 啟動計時器
+        timerInterval = setInterval(updateTimer, 1000);
+        updateTimer(); // 立即執行一次以顯示初始時間
+
+        confirmBtn.addEventListener('click', confirmHandler);
+        cancelBtn.addEventListener('click', cancelHandler);
+    };
+
+    // ====================================================================================
+    // 2. 地圖應用程式邏輯
+    // ====================================================================================
+
+    let map;
+    let markers = L.featureGroup(); // 用於儲存所有標記以便管理
+    let navButtons = L.featureGroup(); // 用於儲存導航按鈕
+
+    // 新增一個全局變數，用於儲存所有地圖上 KML Point Features 的數據，供搜尋使用
+    window.allKmlFeatures = [];
+
+    document.addEventListener('DOMContentLoaded', () => {
+        // 初始化地圖
+        map = L.map('map').setView([23.6, 120.9], 8); // 台灣中心經緯度
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
+
+        // 添加定位控制項
+        L.control.locate({
+            position: 'bottomleft', // 定位按鈕位置調整
+            strings: {
+                title: "顯示我的位置"
+            },
+            locateOptions: {
+                enableHighAccuracy: true,
+                maxZoom: 16 // 定位後縮放級別
+            },
+            markerStyle: {
+                className: 'user-location-dot' // 自定義用戶位置標記樣式
+            },
+            circleStyle: {
+                color: '#1a73e8', // 藍色圈
+                fillColor: '#1a73e8',
+                fillOpacity: 0.15
+            },
+            icon: 'material-symbols-outlined',
+            iconLoading: 'material-symbols-outlined'
+        }).addTo(map);
+
+        // 將 markers 和 navButtons 添加到地圖
+        markers.addTo(map);
+        navButtons.addTo(map);
+
+        // 全局函數：添加標記到地圖
+        window.addMarkers = function(featuresToDisplay) {
+            markers.clearLayers(); // 清除現有標記
+            // navButtons.clearLayers(); // 不在這裡清除導航按鈕，因為點擊地標時會清除
+
+            if (!featuresToDisplay || featuresToDisplay.length === 0) {
+                console.log("No features to display.");
+                return;
+            }
+            console.log(`Adding ${featuresToDisplay.length} markers to map.`);
+            featuresToDisplay.forEach(f => {
+                if (f.geometry.type === 'Point') {
+                    const [lon, lat] = f.geometry.coordinates;
+                    const name = f.properties.name || '未命名';
+                    const labelLatLng = L.latLng(lat, lon + 0.00015); // 稍微偏移以避免重疊
+
+                    // 自定義圓點圖標
+                    const dotIcon = L.divIcon({
+                        className: 'custom-dot-icon',
+                        iconSize: [18, 18],
+                        iconAnchor: [9, 9]
+                    });
+                    const customDotMarker = L.marker(L.latLng(lat, lon), {
+                        icon: dotIcon,
+                        interactive: true // 允許點擊
+                    });
+
+                    // 永久顯示的文字標籤
+                    const label = L.marker(labelLatLng, {
+                        icon: L.divIcon({
+                            className: 'marker-label',
+                            html: `<span>${name}</span>`,
+                            iconSize: [null, null], // 自動調整大小
+                            iconAnchor: [0, 0], // 定位在左上角
+                        }),
+                        interactive: false // 標籤不響應點擊
+                    });
+
+                    // 點擊圓點標記時創建導航按鈕
+                    customDotMarker.on('click', (e) => {
+                        L.DomEvent.stopPropagation(e); // 阻止事件冒泡到地圖
+                        window.createNavButton(L.latLng(lat, lon), name); // 創建導航按鈕
+                    });
+
+                    // 將圓點標記和文字標籤添加到 markers FeatureGroup
+                    markers.addLayer(customDotMarker);
+                    markers.addLayer(label);
+                }
+            });
+        };
+
+        // 全局函數：載入 KML 圖層
+        window.loadKmlLayerFromFirestore = async function(kmlId) {
+            if (!kmlId) {
+                console.log("未提供 KML ID，不載入。");
+                window.clearAllKmlLayers(); // 如果沒有選中 KML，則清除所有
+                return;
+            }
+
+            // 移除現有 KML 圖層和所有標記 (包括導航按鈕)
+            window.clearAllKmlLayers();
+
+            try {
+                // 從 Firestore 獲取 KML 文件的元數據
+                const doc = await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('kmlLayers').doc(kmlId).get();
+                if (!doc.exists) {
+                    console.error('KML Layer document not found for ID:', kmlId);
+                    showMessage('錯誤', '找不到指定的 KML 圖層資料。'); 
+                    return;
+                }
+                const kmlData = doc.data(); 
+
+                console.log(`載入 KML Features for layer: ${kmlData.name || kmlId}`);
+
+                // 從 kmlLayers/{kmlId}/features 子集合中獲取所有 GeoJSON features
+                const featuresSubCollectionRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('kmlLayers').doc(kmlId).collection('features');
+                const querySnapshot = await featuresSubCollectionRef.get();
+                
+                const loadedFeatures = [];
+                if (querySnapshot.empty) {
+                    console.log(`KML 圖層 "${kmlData.name}" 的 features 子集合為空。`);
+                } else {
+                    querySnapshot.forEach(featureDoc => {
+                        const feature = featureDoc.data();
+                        // 僅處理 Point 類型的 feature，並進行基本的數據驗證
+                        if (feature.geometry && feature.geometry.type === 'Point' && feature.geometry.coordinates && feature.properties) {
+                            loadedFeatures.push(feature);
+                        } else {
+                            console.warn('Skipping invalid or non-Point feature from Firestore:', feature);
+                        }
+                    });
+                }
+
+                window.allKmlFeatures = loadedFeatures; // 更新全局搜尋數據
+                window.addMarkers(window.allKmlFeatures); // 將地標添加到地圖
+
+                if (window.allKmlFeatures.length > 0) {
+                    // 如果有地標，設定地圖視角以包含所有地標，使用 markers.getBounds()
+                    if (markers.getLayers().length > 0 && markers.getBounds().isValid()) {
+                        map.fitBounds(markers.getBounds());
+                    } else {
+                        console.warn("Markers exist, but their bounds are not valid for fitting map view.");
+                    }
+                } else {
+                    console.log(`KML 圖層 "${kmlData.name}" 載入完成，但沒有找到地標。`);
+                }
+
+            } catch (error) {
+                console.error("獲取 KML Features 或載入 KML 時出錯:", error);
+                showMessage('錯誤', `無法載入 KML 圖層: ${error.message}`);
+            }
+        };
+
+        // 全局函數：清除所有 KML 圖層、標記和導航按鈕
+        window.clearAllKmlLayers = function() {
+            // currentKmlLayer = null; // 移除 omnivore 層（如果之前有添加）
+            markers.clearLayers(); // 清除所有 Leaflet 標記和它們的標籤
+            navButtons.clearLayers(); // 清除所有導航按鈕
+            window.allKmlFeatures = []; // 清空搜尋數據
+            console.log("所有 KML 圖層、標記和導航按鈕已清除。");
+        };
+
+        // 全局函數：創建導航按鈕
+        window.createNavButton = function(latlng, name) {
+            // 清除現有的導航按鈕，確保每次只顯示一個
+            navButtons.clearLayers();
+
+            // 更正 Google Maps URL 格式
+            const googleMapsUrl = `http://maps.google.com/maps?q=${latlng.lat},${latlng.lng}`; 
+            
+            // 導航按鈕的 HTML 內容，包含直接的 onclick 事件和停止事件冒泡
+            const buttonHtml = `        
+                <div class="nav-button-content" onclick="window.open('${googleMapsUrl}', '_blank'); event.stopPropagation();">          
+                    <img src="https://i0.wp.com/canadasafetycouncil.org/wp-content/uploads/2018/08/offroad.png" alt="導航" />        
+                </div>      
+            `;      
+            const buttonIcon = L.divIcon({        
+                className: 'nav-button-icon',        
+                html: buttonHtml,        
+                iconSize: [50, 50],        
+                iconAnchor: [25, 25]      
+            });      
+            
+            // 創建導航標記並添加到 navButtons FeatureGroup
+            const navMarker = L.marker(latlng, { // 使用傳入的 latlng 作為定位
+                icon: buttonIcon,        
+                interactive: true      
+            }).addTo(navButtons);      
+            
+            console.log(`Nav button created for ${name} at ${latlng.lat}, ${latlng.lng}`);    
+        };
+
+
+        // 處理地圖上的點擊事件，隱藏搜尋結果
+        map.on('click', () => {
+            const searchResults = document.getElementById('searchResults');
+            if (searchResults) {
+                searchResults.style.display = 'none';
+            }
+            const searchBox = document.getElementById('searchBox');
+            if (searchBox) {
+                searchBox.value = '';
+            }
+            // 當點擊地圖其他地方時，也清除導航按鈕
+            navButtons.clearLayers();
+        });
+    });
+
+    // ====================================================================================
+    // 3. 身份驗證和 KML 管理邏輯
+    // ====================================================================================
+
+    document.addEventListener('DOMContentLoaded', () => {
+        // 獲取所有相關的 DOM 元素
+        const authSection = document.getElementById('authSection');
+        const loginForm = document.getElementById('loginForm');
+        const loggedInDashboard = document.getElementById('loggedInDashboard');
+        const googleSignInBtn = document.getElementById('googleSignInBtn');
+        const logoutBtn = document.getElementById('logoutBtn');
+        const loginMessage = document.getElementById('loginMessage');
+        const userEmailDisplay = document.getElementById('userEmailDisplay');
+
+        const hiddenKmlFileInput = document.getElementById('hiddenKmlFileInput');
+        const selectedKmlFileNameDashboard = document.getElementById('selectedKmlFileNameDashboard');
+        const uploadKmlSubmitBtnDashboard = document.getElementById('uploadKmlSubmitBtnDashboard');
+        const kmlLayerSelectDashboard = document.getElementById('kmlLayerSelectDashboard');
+        const deleteSelectedKmlBtn = document.getElementById('deleteSelectedKmlBtn');
+
+        const registrationSettingsSection = document.getElementById('registrationSettingsSection');
+        const generateRegistrationCodeBtn = document.getElementById('generateRegistrationCodeBtn');
+        const registrationCodeDisplay = document.getElementById('registrationCodeDisplay');
+        const registrationCodeCountdown = document.getElementById('registrationCodeCountdown'); // 新增
+        const registrationExpiryDisplay = document.getElementById('registrationExpiryDisplay'); // 繼續保留，雖然現在內容會被 countdown 取代
+
+        const userManagementSection = document.getElementById('userManagementSection');
+        const refreshUsersBtn = document.getElementById('refreshUsersBtn');
+        const userListDiv = document.getElementById('userList');
+
+        // 全局變數
+        window.currentUserRole = null;
+        let currentKmlLayers = []; // 用於存儲 KML 圖層的 ID 和名稱
+        let registrationCodeTimer = null; // 用於儲存註冊碼計時器的實例
+
+        // 輔助函數：將角色英文轉換為中文
+        const getRoleDisplayName = (role) => {
+            switch (role) {
+                case 'unapproved': return '未審核';
+                case 'user': return '一般用戶';
+                case 'editor': return '編輯者';
+                case 'owner': return '擁有者';
+                default: return role;
+            }
+        };
+
+        // 輔助函數：更新 KML 圖層選單
+        const updateKmlLayerSelects = async () => {
+            const kmlLayerSelect = document.getElementById('kmlLayerSelect'); // 主地圖上的選擇器
+            // 清空並重置選單
+            kmlLayerSelect.innerHTML = '<option value="">-- 請選擇 KML 圖層 --</option>';
+            // Dashboard 的 KML 選擇器
+            const kmlLayerSelectDashboard = document.getElementById('kmlLayerSelectDashboard');
+            kmlLayerSelectDashboard.innerHTML = '<option value="">-- 請選擇 KML 圖層 --</option>';
+            const deleteSelectedKmlBtn = document.getElementById('deleteSelectedKmlBtn');
+            if (deleteSelectedKmlBtn) deleteSelectedKmlBtn.disabled = true; // 預設禁用刪除按鈕
+
+            // KML 選擇器始終啟用，無論登入狀態，因為所有人都必須能讀取 KML
+            kmlLayerSelect.disabled = false; 
+            
+            // 只有 owner 或 editor 才能操作 dashboard 上的 KML 選擇器和按鈕
+            const canEdit = (window.currentUserRole === 'owner' || window.currentUserRole === 'editor');
+            if (kmlLayerSelectDashboard) kmlLayerSelectDashboard.disabled = !canEdit;
+            if (uploadKmlSubmitBtnDashboard) uploadKmlSubmitBtnDashboard.disabled = !canEdit;
+
+
+            try {
+                // 修改 collection name (修正路徑)
+                const kmlRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('kmlLayers');
+                let snapshot;
+
+                if (window.currentUserRole === 'editor' && auth.currentUser && auth.currentUser.email) {
+                    // 對於編輯者，只顯示他們自己上傳的 KMLs
+                    snapshot = await kmlRef.where('uploadedBy', '==', auth.currentUser.email).get();
+                } else {
+                    // 對於擁有者或未登入用戶，顯示所有 KMLs
+                    snapshot = await kmlRef.get();
+                }
+
+                currentKmlLayers = []; // 清空現有列表
+
+                if (snapshot.empty) {
+                    console.log("沒有 KML 圖層資料。");
+                    return;
+                }
+
+                snapshot.forEach(doc => {
+                    const data = doc.data();
+                    const kmlId = doc.id;
+                    const kmlName = data.name || `KML_${kmlId.substring(0, 8)}`;
+                    const option = document.createElement('option');
+                    option.value = kmlId;
+                    option.textContent = kmlName;
+                    kmlLayerSelect.appendChild(option);
+
+                    const optionDashboard = document.createElement('option');
+                    optionDashboard.value = kmlId;
+                    optionDashboard.textContent = kmlName;
+                    kmlLayerSelectDashboard.appendChild(optionDashboard);
+
+                    currentKmlLayers.push({ id: kmlId, name: kmlName });
+                });
+
+                if (currentKmlLayers.length > 0) {
+                    if (canEdit && deleteSelectedKmlBtn) {
+                        // 只有 editor 或 owner 且有 KML 可刪除時才啟用刪除按鈕
+                        deleteSelectedKmlBtn.disabled = false; 
+                    }
+                }
+
+                // 為 KML 圖層選擇器添加事件監聽器（確保只添加一次，或者在每次更新時重新添加）
+                kmlLayerSelect.removeEventListener('change', handleKmlLayerSelectChange); // 移除舊的
+                kmlLayerSelect.addEventListener('change', handleKmlLayerSelectChange); // 添加新的
+
+
+            } catch (error) {
+                console.error("更新 KML 圖層列表時出錯:", error);
+                showMessage('錯誤', '無法載入 KML 圖層列表。');
+            }
+        };
+
+        // KML 層選擇器變更處理函數
+        const handleKmlLayerSelectChange = (event) => {
+            const kmlId = event.target.value;
+            if (kmlId && typeof window.loadKmlLayerFromFirestore === 'function') {
+                window.loadKmlLayerFromFirestore(kmlId);
+            } else if (typeof window.clearAllKmlLayers === 'function') {
+                window.clearAllKmlLayers(); // 如果選擇空選項則清除所有 KML
+            }
+        };
+
+
+        // 輔助函數：顯示用戶管理列表
+        const refreshUserList = async () => {
+            userListDiv.innerHTML = '載入中...';
+            try {
+                const usersRef = db.collection('users');
+                const snapshot = await usersRef.get();
+                userListDiv.innerHTML = ''; // 清空
+
+                if (snapshot.empty) {
+                    userListDiv.innerHTML = '<p>目前沒有註冊用戶。</p>';
+                    return;
+                }
+
+                const table = document.createElement('table');
+                table.className = 'user-list-table'; // 使用新的表格樣式
+                const thead = document.createElement('thead');
+                thead.innerHTML = `
+                    <tr>
+                        <th>Email</th>
+                        <th>角色</th>
+                        <th>動作</th>
+                    </tr>
+                `;
+                const tbody = document.createElement('tbody');
+
+                snapshot.forEach(doc => {
+                    const user = doc.data();
+                    const uid = doc.id;
+                    if (uid === auth.currentUser.uid) return; // 不顯示自己
+
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td>${user.email || 'N/A'}</td>
+                        <td>
+                            <select data-uid="${uid}" class="user-role-select">
+                                <option value="unapproved" ${user.role === 'unapproved' ? 'selected' : ''}>${getRoleDisplayName('unapproved')}</option>
+                                <option value="user" ${user.role === 'user' ? 'selected' : ''}>${getRoleDisplayName('user')}</option>
+                                <option value="editor" ${user.role === 'editor' ? 'selected' : ''}>${getRoleDisplayName('editor')}</option>
+                                <option value="owner" ${user.role === 'owner' ? 'selected' : ''} ${window.currentUserRole !== 'owner' ? 'disabled' : ''}>${getRoleDisplayName('owner')}</option>
+                            </select>
+                        </td>
+                        <td>
+                            <button class="change-role-btn" data-uid="${uid}" disabled>變更</button>
+                            <button class="delete-user-btn action-buttons delete-btn" data-uid="${uid}" style="padding: 6px 10px; font-size: 14px;">刪除</button>
+                        </td>
+                    `;
+                    tbody.appendChild(row);
+                });
+                table.appendChild(thead);
+                table.appendChild(tbody);
+                userListDiv.appendChild(table);
+
+                // 為角色選擇器添加事件監聽器
+                userListDiv.querySelectorAll('.user-role-select').forEach(select => {
+                    select.dataset.originalValue = select.value; // 保存原始值
+                    // 修正：從父元素 `row` 中查找按鈕，而不是從 `td`
+                    const changeButton = select.closest('tr').querySelector('.change-role-btn'); 
+                    
+                    select.addEventListener('change', (event) => {
+                        // 角色變更時啟用 "變更" 按鈕
+                        changeButton.disabled = (event.target.value === select.dataset.originalValue);
+                    });
+
+                    changeButton.addEventListener('click', async (event) => {
+                        const uidToUpdate = event.target.dataset.uid;
+                        const newRole = select.value;
+                        if (newRole === 'owner' && !confirm('確定要將此用戶設定為 Owner 嗎？Owner 擁有最高權限。')) {
+                            return;
+                        }
+
+                        try {
+                            await db.collection('users').doc(uidToUpdate).update({ role: newRole });
+                            showMessage('成功', `用戶 ${uidToUpdate} 的角色已更新為 ${getRoleDisplayName(newRole)}。`);
+                            select.dataset.originalValue = newRole; // 更新原始值
+                            changeButton.disabled = true; // 變更成功後禁用按鈕
+                        } catch (error) {
+                            console.error("更新用戶角色時出錯:", error);
+                            showMessage('錯誤', `更新用戶角色失敗: ${error.message}`);
+                            select.value = select.dataset.originalValue; // 失敗時恢復原值
+                            changeButton.disabled = true; // 失敗時也禁用按鈕
+                        }
+                    });
+                });
+
+                // 為刪除按鈕添加事件監聽器
+                userListDiv.querySelectorAll('.delete-user-btn').forEach(button => {
+                    button.addEventListener('click', async (event) => {
+                        const uidToDelete = event.target.dataset.uid;
+                        if (confirm(`確定要刪除用戶 ${uidToDelete} 嗎？此操作不可逆！`)) {
+                            try {
+                                // 先刪除 Firestore 文檔
+                                await db.collection('users').doc(uidToDelete).delete();
+                                // 然後嘗試刪除 Authentication 中的用戶（這需要管理員 SDK，前端無法直接執行）
+                                // 這一步通常在後端（Cloud Functions）完成，因為前端無法直接訪問 admin SDK
+                                showMessage('成功', `用戶 ${uidToDelete} 已刪除（請確保在 Firebase Authentication 中也同步刪除）。`);
+                                refreshUserList(); // 重新整理列表
+                            } catch (error) {
+                                console.error("刪除用戶時出錯:", error);
+                                showMessage('錯誤', `刪除用戶失敗: ${error.message}`);
+                            }
+                        }
+                    });
+                });
+
+            } catch (error) {
+                console.error("載入用戶列表時出錯:", error);
+                userListDiv.innerHTML = `<p style="color: red;">載入用戶列表失敗: ${error.message}</p>`;
+            }
+        };
+
+
+        // Firestore 實時監聽器
+        // 監聽用戶的權限變化
+        auth.onAuthStateChanged(async (user) => {
+            if (user) {
+                loginForm.style.display = 'none';
+                loggedInDashboard.style.display = 'block';
+                userEmailDisplay.textContent = user.email;
+                userEmailDisplay.style.display = 'block'; // 確保顯示 email
+
+                // 獲取用戶角色
+                // 使用 onSnapshot 監聽用戶角色，這樣角色變更時會即時更新 UI
+                db.collection('users').doc(user.uid).onSnapshot(async (doc) => {
+                    if (doc.exists) {
+                        const userData = doc.data();
+                        window.currentUserRole = userData.role || 'unapproved'; // 新用戶預設為 unapproved
+
+                        console.log("用戶角色:", window.currentUserRole);
+
+                        // 根據角色禁用/啟用功能
+                        const canEdit = (window.currentUserRole === 'owner' || window.currentUserRole === 'editor');
+                        const isOwner = (window.currentUserRole === 'owner');
+
+                        // Dashboard KML 功能 (僅限 editor 或 owner)
+                        uploadKmlSubmitBtnDashboard.disabled = !canEdit;
+                        deleteSelectedKmlBtn.disabled = !(canEdit && currentKmlLayers.length > 0);
+                        kmlLayerSelectDashboard.disabled = !canEdit;
+
+                        // 註冊設定 (Owner Only)
+                        registrationSettingsSection.style.display = isOwner ? 'flex' : 'none'; 
+                        generateRegistrationCodeBtn.disabled = !isOwner;
+                        registrationCodeDisplay.style.display = 'none'; // 預設隱藏
+                        registrationCodeCountdown.style.display = 'none'; // 預設隱藏
+                        registrationExpiryDisplay.style.display = 'none'; // 預設隱藏
+
+                        // 用戶管理 (Owner Only)
+                        userManagementSection.style.display = isOwner ? 'block' : 'none';
+                        refreshUsersBtn.disabled = !isOwner;
+
+
+                        if (isOwner) {
+                            refreshUserList(); // 重新整理用戶列表
+                        }
+
+                        // 如果用戶是 'unapproved' 狀態，顯示提示訊息
+                        if (window.currentUserRole === 'unapproved') {
+                            showMessage('帳號審核中', '您的帳號正在等待管理員審核。在審核通過之前，您將無法上傳或刪除 KML。');
+                        }
+
+                        // 無論角色如何，都更新 KML 圖層選單
+                        updateKmlLayerSelects();
+
+                    } else {
+                        console.log("用戶數據不存在，為新註冊用戶創建預設數據。");
+                        // 如果用戶數據不存在，則可能是新註冊的用戶
+                        // 由於 Firestore 安全規則會阻止自行創建帶有 'role' 的用戶
+                        // 所以這裡只會顯示登入狀態，而實際的角色會透過後端或管理員設定後才能生效
+                        // 這裡可以選擇登出或者顯示一個等待審核的訊息
+                        // 如果用戶文檔被刪除了，則視為未通過審核，導回登入介面
+                         auth.signOut(); // 強制登出
+                         showMessage('帳號資料異常', '您的帳號資料有誤或已被移除，請重新登入或聯繫管理員。');
+                    }
+                }, (error) => {
+                    console.error("監聽用戶角色時出錯:", error);
+                    showMessage('錯誤', `獲取用戶角色失敗: ${error.message}`);
+                    auth.signOut(); // 監聽失敗也強制登出
+                });
+
+            } else { // 未登入狀態
+                loginForm.style.display = 'block';
+                loggedInDashboard.style.display = 'none';
+                userEmailDisplay.textContent = '';
+                userEmailDisplay.style.display = 'none';
+                window.currentUserRole = null;
+                updateKmlLayerSelects(); // 更新 KML 選單 (它會自動處理權限)
+            }
+        });
+
+        // 事件監聽器：Google 登入/註冊
+        googleSignInBtn.addEventListener('click', async () => {
+            try {
+                const provider = new firebase.auth.GoogleAuthProvider();
+                const userCredential = await auth.signInWithPopup(provider);
+                const user = userCredential.user;
+
+                // 檢查用戶是否是第一次登入 (新註冊)
+                const userDoc = await db.collection('users').doc(user.uid).get();
+                if (!userDoc.exists) {
+                    // 新用戶，僅能透過註冊碼註冊 (因為已移除直接註冊選項)
+                    await auth.signOut(); // 先登出，因為沒有註冊碼無法完成註冊
+                    window.showRegistrationCodeModal(async (code) => {
+                        if (code) {
+                            try {
+                                const regDoc = await db.collection('settings').doc('registration').get();
+                                console.log("註冊嘗試: 用戶輸入的註冊碼:", code);
+                                if (regDoc.exists) {
+                                    console.log("Firestore 註冊設定數據:", regDoc.data());
+                                    const storedCode = regDoc.data().oneTimeCode;
+                                    const expiryTime = regDoc.data().oneTimeCodeExpiry ? regDoc.data().oneTimeCodeExpiry.toDate() : null;
+                                    const currentTime = new Date();
+                                    console.log(`儲存的註冊碼: ${storedCode}, 過期時間: ${expiryTime}, 目前時間: ${currentTime}`);
+                                    console.log(`註冊碼是否匹配: ${storedCode === code}, 是否過期: ${expiryTime && currentTime > expiryTime}`);
+
+
+                                    if (!storedCode || storedCode !== code || (expiryTime && currentTime > expiryTime)) {
+                                        showMessage('註冊失敗', '無效或過期的註冊碼。');
+                                        console.error(`註冊失敗: 註冊碼不匹配或已過期。`);
+                                        return;
+                                    }
+                                } else {
+                                    showMessage('註冊失敗', '註冊系統未啟用或無效的註冊碼。請聯繫管理員。');
+                                    console.error("settings/registration 文檔不存在。");
+                                    return;
+                                }
+                                // 重新登入以完成註冊 (因為上次為了模態框而登出了)
+                                const reAuthUserCredential = await auth.signInWithPopup(provider);
+                                const reAuthUser = reAuthUserCredential.user;
+
+                                console.log("嘗試創建新用戶文檔:", {
+                                    uid: reAuthUser.uid,
+                                    email: reAuthUser.email,
+                                    role: 'unapproved',
+                                    registeredWithCode: true,
+                                    registrationCodeUsed: code
+                                });
+
+                                await db.collection('users').doc(reAuthUser.uid).set({
+                                    email: reAuthUser.email,
+                                    role: 'unapproved',
+                                    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                                    registeredWithCode: true,
+                                    registrationCodeUsed: code
+                                });
+                                console.log("新用戶文檔創建成功。");
+
+                                showMessage('註冊成功', `歡迎 ${reAuthUser.email}！您的帳號已成功註冊，正在等待管理員審核。`);
+
+                            } catch (error) {
+                                console.error("使用註冊碼登入/註冊失敗:", error);
+                                // 更詳細的錯誤輸出
+                                if (error.code) {
+                                    console.error(`Firebase Error Code: ${error.code}`);
+                                }
+                                showMessage('註冊失敗', `使用註冊碼登入/註冊時發生錯誤: ${error.message} (請檢查安全規則)`);
+                            }
+                        } else {
+                            showMessage('取消', '您已取消註冊。');
+                        }
+                    });
+                } else {
+                    // 已存在的用戶，正常登入
+                    showMessage('登入成功', `歡迎回來 ${user.email}！`);
+                }
+            } catch (error) {
+                console.error("Google 登入失敗:", error);
+                loginMessage.textContent = `登入失敗: ${error.message}`;
+                showMessage('登入失敗', `Google 登入時發生錯誤: ${error.message}`);
+            }
+        });
+
+        // 事件監聽器：登出
+        logoutBtn.addEventListener('click', async () => {
+            try {
+                await auth.signOut();
+                showMessage('登出成功', '您已成功登出。');
+            } catch (error) {
+                console.error("登出失敗:", error);
+                showMessage('登出失敗', `登出時發生錯誤: ${error.message}`);
+            }
+        });
+
+        // 事件監聽器：上傳 KML (Dashboard 上的按鈕，觸發文件選擇)
+        uploadKmlSubmitBtnDashboard.addEventListener('click', () => {
+            // 觸發隱藏的文件輸入框
+            hiddenKmlFileInput.click();
+        });
+
+        // 監聽實際的文件選擇變化
+        hiddenKmlFileInput.addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            if (file) {
+                selectedKmlFileNameDashboard.textContent = file.name;
+                uploadKmlSubmitBtnDashboard.disabled = false;
+            } else {
+                selectedKmlFileNameDashboard.textContent = '尚未選擇檔案';
+                uploadKmlSubmitBtnDashboard.disabled = true;
+            }
+        });
+
+        // 點擊 "尚未選擇檔案" 對話框也能選取檔案
+        selectedKmlFileNameDashboard.addEventListener('click', () => {
+            hiddenKmlFileInput.click();
+        });
+
+
+        // 實際執行上傳 KML 的函數 (由 hiddenKmlFileInput 選擇檔案後觸發)
+        uploadKmlSubmitBtnDashboard.addEventListener('click', async () => {
+            const file = hiddenKmlFileInput.files[0];
+            if (!file) {
+                showMessage('提示', '請先選擇 KML 檔案。');
+                return;
+            }
+            if (!auth.currentUser || (window.currentUserRole !== 'owner' && window.currentUserRole !== 'editor')) {
+                showMessage('錯誤', '您沒有權限上傳 KML，請登入或等待管理員審核。');
+                return;
+            }
+
+            const fileName = file.name;
+            const reader = new FileReader();
+            reader.onload = async () => {
+                console.log(`Processing KML file: ${file.name}`);
+                try {
+                    const kmlString = reader.result;
+                    // 使用 DOMParser 將 KML 字符串解析為 XML Document
+                    const parser = new DOMParser();
+                    const kmlDoc = parser.parseFromString(kmlString, 'text/xml');
+
+                    // 檢查解析錯誤
+                    if (kmlDoc.getElementsByTagName('parsererror').length > 0) {
+                        const errorText = kmlDoc.getElementsByTagName('parsererror')[0].textContent;
+                        throw new Error(`KML XML parsing error: ${errorText}. Please ensure your KML file is valid XML.`);
+                    }
+
+                    // 將 XML Document 傳遞給 omnivore.kml
+                    const tempOmnivoreLayer = omnivore.kml(kmlDoc); 
+                    if (!tempOmnivoreLayer) {
+                        throw new Error("Failed to create Omnivore KML layer from parsed XML document.");
+                    }
+                    const geojson = tempOmnivoreLayer.toGeoJSON(); 
+                    const parsedFeatures = geojson.features || []; 
+
+                    console.log(`KML file parsed. Found ${parsedFeatures.length} features.`);
+
+                    if (parsedFeatures.length === 0) {
+                        showMessage('KML 載入', 'KML 檔案中沒有找到任何地標 (Point features)。');
+                        console.warn("KML file contains no usable point features.");
+                        return;
+                    }
+
+                    // 使用新的 Firestore 集合路徑 (修正路徑)
+                    const kmlLayersCollectionRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('kmlLayers');
+                    const kmlLayerDocRef = await kmlLayersCollectionRef.add({
+                        name: fileName,
+                        uploadTime: firebase.firestore.FieldValue.serverTimestamp(),
+                        uploadedBy: auth.currentUser.email || auth.currentUser.uid,
+                        uploadedByRole: window.currentUserRole // 記錄上傳者角色
+                    });
+
+                    // features 子集合路徑 (修正路徑)
+                    const featuresSubCollectionRef = kmlLayersCollectionRef.doc(kmlLayerDocRef.id).collection('features');
+                    const batch = db.batch();
+                    let addedCount = 0;
+                    console.log(`Starting batch write for ${parsedFeatures.length} features.`);
+                    for (const f of parsedFeatures) {
+                        // 僅儲存 Point 類型的地標
+                        if (f.geometry && f.properties && f.geometry.type === 'Point') {
+                            batch.set(featuresSubCollectionRef.doc(), { // 自動生成 ID
+                                geometry: f.geometry,
+                                properties: f.properties
+                            });
+                            addedCount++;
+                        } else {
+                            console.warn("Skipping non-Point feature during upload:", f.geometry ? f.geometry.type : 'No Geometry', f);
+                        }
+                    }
+                    await batch.commit();
+                    console.log(`Batch commit successful. Added ${addedCount} features.`);
+
+                    showMessage('成功', `KML 檔案 "${fileName}" 已成功上傳並儲存 ${addedCount} 個地標。`);
+                    hiddenKmlFileInput.value = ''; // 清空檔案選擇
+                    selectedKmlFileNameDashboard.textContent = '尚未選擇檔案';
+                    uploadKmlSubmitBtnDashboard.disabled = true;
+                    updateKmlLayerSelects(); // 更新列表
+                } catch (error) {
+                    console.error("Error processing KML file or uploading to Firebase:", error);
+                    showMessage('KML 處理錯誤', `處理 KML 檔案或上傳時發生錯誤：${error.message}`);
+                }
+            };
+            reader.readAsText(file);
+        });
+
+
+        // 事件監聽器：刪除 KML (Dashboard 上的按鈕)
+        deleteSelectedKmlBtn.addEventListener('click', async () => {
+            const kmlIdToDelete = kmlLayerSelectDashboard.value;
+            if (!kmlIdToDelete) {
+                showMessage('提示', '請先選擇要刪除的 KML 圖層。');
+                return;
+            }
+            if (!auth.currentUser || (window.currentUserRole !== 'owner' && window.currentUserRole !== 'editor')) {
+                showMessage('錯誤', '您沒有權限刪除 KML。');
+                return;
+            }
+
+            if (!confirm('確定要刪除此 KML 圖層及其所有地標嗎？此操作不可逆！')) {
+                return;
+            }
+
+            try {
+                // 修改 collection name (修正路徑)
+                const kmlLayerDocRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('kmlLayers').doc(kmlIdToDelete);
+                const kmlDoc = await kmlLayerDocRef.get();
+                if (!kmlDoc.exists) {
+                    showMessage('錯誤', '找不到該 KML 圖層。');
+                    return;
+                }
+                const kmlData = kmlDoc.data();
+                const fileName = kmlData.name;
+
+                // 刪除子集合中的所有地標 (路徑已修正)
+                const featuresSubCollectionRef = kmlLayerDocRef.collection('features');
+                const featuresSnapshot = await featuresSubCollectionRef.get();
+                const batch = db.batch();
+                let deletedFeaturesCount = 0;
+                featuresSnapshot.forEach(docRef => {
+                    batch.delete(docRef.ref);
+                    deletedFeaturesCount++;
+                });
+                await batch.commit();
+                console.log(`Deleted ${deletedFeaturesCount} features from subcollection.`);
+
+                // 然後刪除主 KML 圖層文檔 (路徑已修正)
+                await kmlLayerDocRef.delete();
+                console.log(`Deleted parent KML layer document: ${kmlIdToDelete}`);
+                
+                showMessage('成功', `KML 圖層 "${fileName}" 已成功刪除，共刪除 ${deletedFeaturesCount} 個地標。`);
+                updateKmlLayerSelects(); // 更新列表
+                window.clearAllKmlLayers(); // 清除地圖上的標記
+            } catch (error) {
+                console.error("刪除 KML 失敗:", error);
+                showMessage('刪除失敗', `刪除 KML 圖層時發生錯誤: ${error.message}`);
+            }
+        });
+
+        // 事件監聽器：生成一次性註冊碼 (Owner Only)
+        generateRegistrationCodeBtn.addEventListener('click', async () => {
+            if (window.currentUserRole !== 'owner') {
+                showMessage('權限不足', '只有管理員才能生成註冊碼。');
+                return;
+            }
+
+            // 清除現有計時器（如果存在）
+            if (registrationCodeTimer) {
+                clearInterval(registrationCodeTimer);
+                registrationCodeTimer = null;
+            }
+
+            try {
+                const code = Math.random().toString(36).substring(2, 10).toUpperCase();
+                let countdownSeconds = 60; // 註冊碼有效時間 60 秒
+                const expiryDate = new Date();
+                expiryDate.setSeconds(expiryDate.getSeconds() + countdownSeconds); 
+
+                await db.collection('settings').doc('registration').set({
+                    oneTimeCode: code,
+                    oneTimeCodeExpiry: firebase.firestore.Timestamp.fromDate(expiryDate)
+                }, { merge: true });
+
+                registrationCodeDisplay.textContent = code; // 只顯示註冊碼
+                registrationCodeCountdown.textContent = ` (剩餘 ${countdownSeconds} 秒)`; // 顯示倒數計時
+                registrationCodeDisplay.style.display = 'inline-block'; 
+                registrationCodeCountdown.style.display = 'inline-block';
+                registrationExpiryDisplay.style.display = 'none'; // 隱藏原有的過期時間提示
+
+                // 啟動新的計時器
+                registrationCodeTimer = setInterval(() => {
+                    countdownSeconds--;
+                    if (countdownSeconds >= 0) {
+                        registrationCodeCountdown.textContent = ` (剩餘 ${countdownSeconds} 秒)`;
+                    } else {
+                        clearInterval(registrationCodeTimer);
+                        registrationCodeTimer = null;
+                        registrationCodeDisplay.textContent = '註冊碼已過期';
+                        registrationCodeCountdown.style.display = 'none'; // 隱藏倒數計時
+                    }
+                }, 1000);
+                
+                // 複製到剪貼簿 (在生成後立即複製)
+                const tempInput = document.createElement('textarea');
+                tempInput.value = code;
+                document.body.appendChild(tempInput);
+                tempInput.select();
+                document.execCommand('copy');
+                document.body.removeChild(tempInput);
+
+                showMessage('成功', `一次性註冊碼已生成並複製到剪貼簿，設定為 ${countdownSeconds} 秒後過期！`);
+            } catch (error) {
+                console.error("生成註冊碼時出錯:", error);
+                showMessage('錯誤', `生成註冊碼失敗: ${error.message}`);
+            }
+        });
+
+        // 事件監聽器：重新整理用戶列表 (Owner Only)
+        refreshUsersBtn.addEventListener('click', () => {
+            if (window.currentUserRole === 'owner') {
+                refreshUserList();
+            } else {
+                showMessage('權限不足', '只有管理員才能重新整理用戶列表。');
+            }
+        });
+    });
+
+
+    // ====================================================================================
+    // 4. 主要 UI 互動邏輯
+    // ====================================================================================
+
+    document.addEventListener('DOMContentLoaded', () => {
+        const editButton = document.getElementById('editButton');
+        const authSection = document.getElementById('authSection');
+        const controls = document.getElementById('controls');
+        const searchBox = document.getElementById('searchBox');
+        const searchResults = document.getElementById('searchResults');
+        
+        // 初始狀態：controls 顯示，authSection 隱藏
+        authSection.style.display = 'none'; // 預設隱藏登入/管理面板
+        controls.style.display = 'flex';   // 預設顯示 KML 圖層選擇和搜尋
+
+        // 編輯按鈕點擊事件：切換 authSection 和 controls 的顯示狀態
+        if (editButton && authSection && controls) {
+            editButton.addEventListener('click', () => {
+                const isAuthSectionVisible = authSection.style.display === 'flex';
+                if (isAuthSectionVisible) {
+                    // 如果 authSection 顯示，則隱藏 authSection，顯示 controls
+                    authSection.style.display = 'none';
+                    controls.style.display = 'flex';
+                    editButton.textContent = '編輯';
+                } else {
+                    // 如果 controls 顯示，則隱藏 controls，顯示 authSection
+                    controls.style.display = 'none';
+                    authSection.style.display = 'flex';
+                    editButton.textContent = '關閉';
+                }
+            });
+        } else {
+            console.error('Error: editButton, authSection or controls not found.');
+        }
+
+
+        // 監聽搜尋框的輸入事件
+        if (searchBox && searchResults) {
+            searchBox.addEventListener('input', async (e) => {
+                const query = e.target.value.trim().toLowerCase(); // 將查詢字串轉為小寫以便不區分大小寫搜尋
+                searchResults.innerHTML = ''; // 清空之前的結果
+
+                if (query.length > 0) {
+                    let results = [];
+                    // 從 window.allKmlFeatures 中篩選結果 
+                    if (window.allKmlFeatures && window.allKmlFeatures.length > 0) {
+                        results = window.allKmlFeatures.filter(feature =>
+                            feature.properties && feature.properties.name && typeof feature.properties.name === 'string' && feature.properties.name.toLowerCase().includes(query)
+                        );
+                    }
+
+                    searchResults.style.display = 'grid'; // 顯示為 grid
+
+                    if (results.length === 0) {
+                        const noResult = document.createElement('div');
+                        noResult.className = 'result-item';
+                        noResult.textContent = '沒有找到結果';
+                        searchResults.appendChild(noResult);
+                    } else {
+                        results.forEach(f => {
+                            const name = f.properties.name || '未命名';
+                            // 檢查 geometry 類型，確保是 Point
+                            if (f.geometry && f.geometry.type === 'Point' && f.geometry.coordinates) {
+                                const [lon, lat] = f.geometry.coordinates;
+                                const item = document.createElement('div');
+                                item.className = 'result-item';
+                                item.textContent = name;
+                                item.title = name;
+                                item.addEventListener('click', () => {
+                                    const originalLatLng = L.latLng(lat, lon);
+                                    map.setView(originalLatLng, 16);
+                                    // 點擊搜尋結果時創建導航按鈕，並清除舊的
+                                    window.createNavButton(originalLatLng, name); 
+                                    searchResults.style.display = 'none';
+                                    searchBox.value = '';
+                                    console.log(`Clicked search result: ${name}, zooming to map.`);
+                                });
+                                searchResults.appendChild(item);
+                            } else {
+                                console.warn("Skipping non-Point feature or feature without coordinates for search:", f);
+                            }
+                        });
+                    }
+                } else {
+                    searchResults.style.display = 'none';
+                }
+            });
+
+            // 點擊搜尋結果框外部時隱藏搜尋結果
+            document.addEventListener('click', (event) => {
+                if (!searchResults.contains(event.target) && event.target !== searchBox) {
+                    searchResults.style.display = 'none';
+                }
+            });
+
+            // 監聽 ESC 鍵以隱藏搜尋結果
+            document.addEventListener('keydown', (event) => {
+                if (event.key === 'Escape') {
+                    searchResults.style.display = 'none';
+                    searchBox.value = ''; // 清空搜尋框
+                }
+            });
+        }
+    });
+
+  </script>
 </body>
 </html>
