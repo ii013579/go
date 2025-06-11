@@ -151,7 +151,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
-            let usersData = [];
+            let usersData = []; // 修正: 變數名稱從 patientsData 改為 usersData
             snapshot.forEach(doc => {
                 const user = doc.data();
                 const uid = doc.id;
@@ -161,7 +161,7 @@ document.addEventListener('DOMContentLoaded', () => {
             });
 
             // 根據定義的角色順序進行排序
-            patientsData.sort((a, b) => {
+            usersData.sort((a, b) => { // 修正: 變數名稱從 patientsData 改為 usersData
                 const roleA = roleOrder[a.role] || 99; // 如果角色未定義，則給予一個較大的值
                 const roleB = roleOrder[b.role] || 99;
                 return roleA - roleB;
@@ -491,7 +491,6 @@ document.addEventListener('DOMContentLoaded', () => {
             try {
                 const kmlString = reader.result;
                 const parser = new DOMParser();
-                // 使用 DOMParser 解析 KML 字串為 Document 物件
                 const kmlDoc = parser.parseFromString(kmlString, 'text/xml');
 
                 if (kmlDoc.getElementsByTagName('parsererror').length > 0) {
@@ -499,7 +498,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     throw new Error(`KML XML 解析錯誤: ${errorText}。請確保您的 KML 檔案是有效的 XML。`);
                 }
 
-                // 修正: 恢復使用 togeojson.kml 處理 DOM 物件
                 const geojson = toGeoJSON.kml(kmlDoc); 
                 const parsedFeatures = geojson.features || [];
 
@@ -525,19 +523,51 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
 
                 const kmlLayersCollectionRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('kmlLayers');
-                const kmlLayerDocRef = await kmlLayersCollectionRef.add({
-                    name: fileName,
-                    uploadTime: firebase.firestore.FieldValue.serverTimestamp(),
-                    uploadedBy: auth.currentUser.email || auth.currentUser.uid,
-                    uploadedByRole: window.currentUserRole
-                });
+                
+                // 查詢是否存在相同名稱的 KML 圖層
+                const existingKmlQuery = await kmlLayersCollectionRef.where('name', '==', fileName).get();
+                let kmlLayerDocRef;
+                let isOverwriting = false;
+
+                if (!existingKmlQuery.empty) {
+                    // 找到相同名稱的圖層，準備覆蓋
+                    kmlLayerDocRef = existingKmlQuery.docs[0].ref;
+                    isOverwriting = true;
+                    console.log(`找到相同名稱的 KML 圖層 "${fileName}"，將進行覆蓋。ID: ${kmlLayerDocRef.id}`);
+
+                    // 刪除現有 features 子集合的資料
+                    const oldFeaturesSnapshot = await kmlLayersCollectionRef.doc(kmlLayerDocRef.id).collection('features').get();
+                    const deleteBatch = db.batch();
+                    oldFeaturesSnapshot.forEach(doc => {
+                        deleteBatch.delete(doc.ref);
+                    });
+                    await deleteBatch.commit();
+                    console.log(`已刪除舊圖層 ${kmlLayerDocRef.id} 的所有 ${oldFeaturesSnapshot.size} 個 features。`);
+
+                    // 更新主 KML 圖層文件的元數據
+                    await kmlLayerDocRef.update({
+                        uploadTime: firebase.firestore.FieldValue.serverTimestamp(),
+                        uploadedBy: auth.currentUser.email || auth.currentUser.uid,
+                        uploadedByRole: window.currentUserRole
+                    });
+                    console.log(`已更新主 KML 圖層文件 ${kmlLayerDocRef.id} 的元數據。`);
+
+                } else {
+                    // 沒有找到相同名稱的圖層，新增一個
+                    kmlLayerDocRef = await kmlLayersCollectionRef.add({
+                        name: fileName,
+                        uploadTime: firebase.firestore.FieldValue.serverTimestamp(),
+                        uploadedBy: auth.currentUser.email || auth.currentUser.uid,
+                        uploadedByRole: window.currentUserRole
+                    });
+                    console.log(`沒有找到相同名稱的 KML 圖層，已新增一個。ID: ${kmlLayerDocRef.id}`);
+                }
 
                 const featuresSubCollectionRef = kmlLayersCollectionRef.doc(kmlLayerDocRef.id).collection('features');
                 const batch = db.batch();
                 let addedCount = 0;
-                console.log(`開始批量寫入 ${parsedFeatures.length} 個 features。`);
+                console.log(`開始批量寫入 ${parsedFeatures.length} 個 features 到 ${kmlLayerDocRef.id} 的子集合。`);
                 for (const f of parsedFeatures) {
-                    // 現在保存所有有效的幾何類型
                     if (f.geometry && f.properties && f.geometry.coordinates) {
                         batch.set(featuresSubCollectionRef.doc(), {
                             geometry: f.geometry,
@@ -551,11 +581,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 await batch.commit();
                 console.log(`批量提交成功。已添加 ${addedCount} 個 features。`);
 
-                showMessage('成功', `KML 檔案 "${fileName}" 已成功上傳並儲存 ${addedCount} 個地理要素。`);
+                const successMessage = isOverwriting ? 
+                    `KML 檔案 "${fileName}" 已成功覆蓋並儲存 ${addedCount} 個地理要素。` :
+                    `KML 檔案 "${fileName}" 已成功上傳並儲存 ${addedCount} 個地理要素。`;
+                showMessage('成功', successMessage);
                 hiddenKmlFileInput.value = '';
                 selectedKmlFileNameDashboard.textContent = '尚未選擇檔案';
                 uploadKmlSubmitBtnDashboard.disabled = true;
-                updateKmlLayerSelects();
+                updateKmlLayerSelects(); // 重新整理 KML 選單
             } catch (error) {
                 console.error("處理 KML 檔案或上傳到 Firebase 時出錯:", error);
                 showMessage('KML 處理錯誤', `處理 KML 檔案或上傳時發生錯誤：${error.message}`);
