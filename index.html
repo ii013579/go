@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>地圖 v4.2.27</title>
+  <title>地圖 v4.2.28</title>
   <!-- 網址列ICO -->
   <link rel="icon" href="logo.ico" type="image/x-icon" />
   <link rel="shortcut icon" href="logo.ico" type="image/x-icon" />
@@ -15,7 +15,7 @@
 </head>
 <body>
   <div id="title">
-    我的地圖系統 v4.2.27
+    我的地圖系統 v4.2.28
     <button id="editButton">編輯</button>
   </div>
 
@@ -114,7 +114,8 @@
 
   <!-- Leaflet CDN 載入 -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet-omnivore/0.3.4/leaflet-omnivore.min.js"></script>
+  <!-- 恢復使用 togeojson 函式庫 -->
+  <script src="https://unpkg.com/togeojson"></script> 
 
   <!-- 自定義 JS 檔案載入 -->
   <!-- 順序很重要，請確保依賴的檔案先載入 -->
