@@ -511,6 +511,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const parsedFeatures = geojson.features || [];
 
                 console.log('--- KML 檔案解析結果 (parsedFeatures) ---');
+                console.log(`已解析出 ${parsedFeatures.length} 個地理要素。`); // 新增的偵錯日誌
                 if (parsedFeatures.length === 0) {
                     console.warn('omnivore.kml() 未能從 KML 檔案中識別出任何地理要素。請確認 KML 包含 <Placemark> 內的 <Point>, <LineString>, <Polygon> 及其有效座標和名稱。');
                 } else {
