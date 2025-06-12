@@ -43,7 +43,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }).addTo(map);
 
     // 自定義定位控制項
-    const LocateMeControl = L.Control.extend({
+    const LocateMeControl = L.Control.extend({ // 定義了 LocateMeControl 這個構造函數
         _userLocationMarker: null, // 用於儲存使用者位置標記
         _userLocationCircle: null, // 用於儲存使用者位置精度圓
 
@@ -109,7 +109,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     // 實例化並添加到地圖
     L.control.locateMe = function(opts) {
-        return new L.Control.LocateMe(opts);
+        return new LocateMeControl(opts); // <-- 修正這裡：使用 LocateMeControl
     };
     L.control.locateMe({position: 'topright'}).addTo(map); // 放置在右上角
 
