@@ -575,6 +575,19 @@ body {
     color: #333;
     font-size: 20px;
 }
+/* Leaflet 圖層控制面板的展開/收起按鈕樣式 */
+.leaflet-control-layers-toggle {
+    /* 這裡的樣式會覆蓋 Leaflet 預設的按鈕大小和背景圖 */
+    width: 30px;   /* 設定與定位按鈕相同的寬度 */
+    height: 30px;  /* 設定與定位按鈕相同的高度 */
+    border-radius: 4px; /* 保持與定位按鈕一致的圓角 */
+    box-shadow: 0 1px 5px rgba(0,0,0,0.65); /* 保持與定位按鈕一致的陰影 */
+    background-color: #fff; /* 保持與定位按鈕一致的背景色 */
+    background-position: center center; /* 確保內置圖標居中，如果Leaflet預設有背景圖 */
+    background-repeat: no-repeat;
+    /* 如果您想替換成 Material Symbols 或其他圖標，需要調整 background 屬性或使用 ::before / ::after */
+    transition: background-color 0.2s, box-shadow 0.2s;
+}
 
 /* 用戶位置點樣式 (脈衝動畫) */
 .user-location-dot {
