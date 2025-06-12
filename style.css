@@ -306,17 +306,6 @@ body {
   background-color: #e6f0ff;
   transform: translateY(-2px);
 }
-/* 當結果少於三欄時，讓它們填充整行 */
-#searchResults .result-item:nth-last-child(1):nth-child(odd) {
-  grid-column: span 3;
-}
-#searchResults .result-item:nth-last-child(2):nth-child(even) {
-  grid-column: span 2;
-}
-#searchResults .result-item:last-child:nth-child(odd):last-of-type {
-  grid-column: span 3;
-}
-
 
 /* 地圖容器樣式 */
 #map {
