@@ -3,48 +3,54 @@
 let map;
 let baseLayers;
 let currentLayer = null;
-let currentLayerFeatures = []; // Àx¦s·í«eÅã¥Ü¹Ï¼hªº features
+let currentLayerFeatures = []; // å„²å­˜ç•¶å‰é¡¯ç¤ºåœ–å±¤çš„ features
+let markerLabelsGroup = L.featureGroup(); // ç”¨æ–¼å„²å­˜é»æ“Šæ™‚é¡¯ç¤ºçš„æ¨™ç±¤
+let navButtonsGroup = L.featureGroup(); // ç”¨æ–¼å„²å­˜é»æ“Šæ™‚é¡¯ç¤ºçš„å°èˆªæŒ‰éˆ•
 
 document.addEventListener('DOMContentLoaded', () => {
-  // ªì©l¤Æ¦a¹Ï
+  // åˆå§‹åŒ–åœ°åœ–
   map = L.map('map', {
-    center: [23.5, 121], // ¥xÆW¤¤¤ßÂI
+    center: [23.5, 121], // å°ç£ä¸­å¿ƒé»
     zoom: 8,
-    maxZoom: 18, // ³]©w³Ì¤jÁY©ñ¯Å§O
-    minZoom: 7,  // ³]©w³Ì¤pÁY©ñ¯Å§O
-    zoomControl: false // ¸T¥Î¹w³]ªºÁY©ñ±±¨î
+    maxZoom: 18, // è¨­å®šæœ€å¤§ç¸®æ”¾ç´šåˆ¥
+    minZoom: 7,  // è¨­å®šæœ€å°ç¸®æ”¾ç´šåˆ¥
+    zoomControl: false // ç¦ç”¨é è¨­çš„ç¸®æ”¾æ§åˆ¶
   });
 
-  // ©w¸q°ò¥»¹Ï¼h
+  // å°‡ markerLabelsGroup å’Œ navButtonsGroup æ·»åŠ åˆ°åœ°åœ–
+  markerLabelsGroup.addTo(map);
+  navButtonsGroup.addTo(map);
+
+  // å®šç¾©åŸºæœ¬åœ–å±¤
   baseLayers = {
     'OpenStreetMap': L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-    }).addTo(map), // ¹w³]¥[¤J OpenStreetMap
-    'Google µó¹D¹Ï': L.tileLayer('https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {
+    }).addTo(map), // é è¨­åŠ å…¥ OpenStreetMap
+    'Google è¡—é“åœ–': L.tileLayer('https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {
       attribution: 'Google Maps'
     }),
-    'Google ½Ã¬P¹Ï': L.tileLayer('https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
+    'Google è¡›æ˜Ÿåœ–': L.tileLayer('https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
       attribution: 'Google Maps'
     }),
-    'Google ¦a§Î¹Ï': L.tileLayer('https://mt1.google.com/vt/lyrs=p&x={x}&y={y}&z={z}', { // ·s¼W¦a§Î¹Ï
+    'Google åœ°å½¢åœ–': L.tileLayer('https://mt1.google.com/vt/lyrs=p&x={x}&y={y}&z={z}', { // æ–°å¢åœ°å½¢åœ–
       attribution: 'Google Maps'
     })
   };
 
-  // ²K¥[¦Û©w¸qÁY©ñ±±¨î (¥[¸¹©M´î¸¹«ö¶s¡A©ñ¸m¦b¥k¤W¨¤)
+  // æ·»åŠ è‡ªå®šç¾©ç¸®æ”¾æ§åˆ¶ (åŠ è™Ÿå’Œæ¸›è™ŸæŒ‰éˆ•ï¼Œæ”¾ç½®åœ¨å³ä¸Šè§’)
   L.control.zoom({
-    position: 'topright' // ©ñ¸m¦b¥k¤W¨¤
+    position: 'topright' // æ”¾ç½®åœ¨å³ä¸Šè§’
   }).addTo(map);
 
-  // ²K¥[©w¦ì«ö¶s (¨Ï¥Î Material Symbols Icon¡A©ñ¸m¦b¥k¤W¨¤)
+  // æ·»åŠ å®šä½æŒ‰éˆ• (ä½¿ç”¨ Material Symbols Iconï¼Œæ”¾ç½®åœ¨å³ä¸Šè§’)
   L.Control.LocateMe = L.Control.extend({
     onAdd: function(map) {
       const container = L.DomUtil.create('div', 'leaflet-bar leaflet-control leaflet-control-locate-me');
-      container.innerHTML = '<a href="#" title="©w¦ì¨ì§Úªº¦ì¸m" role="button"><span class="material-symbols-outlined">my_location</span></a>';
+      container.innerHTML = '<a href="#" title="å®šä½åˆ°æˆ‘çš„ä½ç½®" role="button"><span class="material-symbols-outlined">my_location</span></a>';
 
       L.DomEvent.on(container, 'click', function (e) {
         L.DomEvent.stopPropagation(e);
-        map.locate({setView: true, maxZoom: 16}); // ©w¦ì¨ÃÁY©ñ¨ì 16
+        map.locate({setView: true, maxZoom: 16}); // å®šä½ä¸¦ç¸®æ”¾åˆ° 16
       });
       return container;
     },
@@ -55,23 +61,23 @@ document.addEventListener('DOMContentLoaded', () => {
   L.control.locateMe = function(opts) {
     return new L.Control.LocateMe(opts);
   }
-  L.control.locateMe({position: 'topright'}).addTo(map); // ©ñ¸m¦b¥k¤W¨¤
+  L.control.locateMe({position: 'topright'}).addTo(map); // æ”¾ç½®åœ¨å³ä¸Šè§’
 
-  // ±N°ò¥»¹Ï¼h±±¨î²K¥[¨ì¦a¹Ï (©ñ¸m¦b©w¦ì«ö¶s¤U¤è¡A¥k¤W¨¤)
+  // å°‡åŸºæœ¬åœ–å±¤æ§åˆ¶æ·»åŠ åˆ°åœ°åœ– (æ”¾ç½®åœ¨å®šä½æŒ‰éˆ•ä¸‹æ–¹ï¼Œå³ä¸Šè§’)
   L.control.layers(baseLayers, null, { position: 'topright' }).addTo(map);
 
-  // ³B²z©w¦ì¦¨¥\¨Æ¥ó
+  // è™•ç†å®šä½æˆåŠŸäº‹ä»¶
   map.on('locationfound', function(e) {
     L.marker(e.latlng).addTo(map)
-      .bindPopup("§A²{¦b¦b³o¸Ì¡I").openPopup();
+      .bindPopup("ä½ ç¾åœ¨åœ¨é€™è£¡ï¼").openPopup();
   });
 
-  // ³B²z©w¦ì¥¢±Ñ¨Æ¥ó
+  // è™•ç†å®šä½å¤±æ•—äº‹ä»¶
   map.on('locationerror', function(e) {
-    showMessage('©w¦ì¥¢±Ñ', e.message);
+    showMessage('å®šä½å¤±æ•—', e.message);
   });
 
-  // ¦Û©w¸q¹Ï¼Ğ³Ğ«Ø¨ç¼Æ
+  // è‡ªå®šç¾©åœ–æ¨™å‰µå»ºå‡½æ•¸
   const createCustomIcon = (iconUrl, iconSize = [48, 48], iconAnchor = [24, 48], popupAnchor = [0, -48]) => {
     return L.icon({
       iconUrl: iconUrl,
@@ -81,24 +87,13 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   };
 
-  // ¸ü¤J KML ¹Ï¼hªº¨ç¦¡ (±q Firestore Àò¨ú¨ÃÅã¥Ü)
+  // è¼‰å…¥ KML åœ–å±¤çš„å‡½å¼ (å¾ Firestore ç²å–ä¸¦é¡¯ç¤º)
   window.loadKmlLayerFromFirestore = async (kmlId) => {
-    if (currentLayer) {
-      map.removeLayer(currentLayer);
-      currentLayer = null;
-      currentLayerFeatures = [];
-      // ²M°£©Ò¦³°ÊºA²K¥[ªº¾É¯è«ö¶s©M¼ĞÅÒ
-      map.eachLayer(function(layer) {
-          if (layer.options && (layer.options.isNavButton || layer.options.isMarkerLabel)) {
-              map.removeLayer(layer);
-          }
-      });
-    }
+    // æ¸…é™¤æ‰€æœ‰ç¾æœ‰çš„åœ–å±¤å’Œç›¸é—œå…ƒç´ 
+    window.clearAllKmlLayers();
 
     if (!kmlId) return;
 
-    // ²¾°£¤F "¸ü¤J¤¤" ªº°T®§
-    // showMessage('¸ü¤J¤¤', '¥¿¦b¸ü¤J KML ¹Ï¼h...');
     try {
         const kmlLayerDocRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('kmlLayers').doc(kmlId);
         const featuresCollectionRef = kmlLayerDocRef.collection('features');
@@ -115,81 +110,85 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         if (geojsonFeatures.length === 0) {
-            // ²¾°£¤F "¸ü¤J§¹¦¨" ªº°T®§
-            // showMessage('¸ü¤J§¹¦¨', '¦¹ KML ¹Ï¼h¤¤¨S¦³¥iÅã¥Üªº¦a²z­n¯À¡C');
-            return;
+            return; // ä¸é¡¯ç¤ºè¨Šæ¯
         }
 
         const geojsonLayer = L.geoJSON(geojsonFeatures, {
             pointToLayer: function (feature, latlng) {
-                // ¦pªG¦³ customIconUrl Äİ©Ê¡A¨Ï¥Î¦Û©w¸q¹Ï¼Ğ
+                // å¦‚æœæœ‰ customIconUrl å±¬æ€§ï¼Œä½¿ç”¨è‡ªå®šç¾©åœ–æ¨™
                 if (feature.properties.customIconUrl) {
                     return L.marker(latlng, { icon: createCustomIcon(feature.properties.customIconUrl) });
                 } else if (feature.properties.styleUrl && feature.properties.styleUrl.includes('icon-')) {
-                    // ÀË¬d¬O§_¬O Google My Maps ªº icon- ¼Ë¦¡¡A¨Ã¹Á¸Õ¸ÑªR¨äÃC¦â
+                    // æª¢æŸ¥æ˜¯å¦æ˜¯ Google My Maps çš„ icon- æ¨£å¼ï¼Œä¸¦å˜—è©¦è§£æå…¶é¡è‰²
                     const colorMatch = feature.properties.styleUrl.match(/icon-(\d+)-([0-9A-Fa-f]{6})/);
                     if (colorMatch) {
                         const hexColor = '#' + colorMatch[2];
                         const iconHtml = `<div class="custom-dot-icon" style="background-color: ${hexColor};"></div>`;
                         return L.marker(latlng, {
                             icon: L.divIcon({
-                                className: 'custom-div-icon', // ¥i¥H¥Î©óÃB¥~ªº CSS ¼Ë¦¡
+                                className: 'custom-div-icon', // å¯ä»¥ç”¨æ–¼é¡å¤–çš„ CSS æ¨£å¼
                                 html: iconHtml,
-                                iconSize: [18, 18], // ¶êÂIªº¤Ø¤o
-                                iconAnchor: [9, 9]   // ¶êÂIªº¤¤¤ß
+                                iconSize: [18, 18], // åœ“é»çš„å°ºå¯¸
+                                iconAnchor: [9, 9]   // åœ“é»çš„ä¸­å¿ƒ
                             })
                         });
                     }
                 }
-                // ¹w³]ªğ¦^ Marker
+                // é è¨­è¿”å› Marker
                 return L.marker(latlng);
             },
             onEachFeature: function (feature, layer) {
                 let popupContent = '';
                 if (feature.properties) {
-                    // ¹Á¸Õ±q properties.name ©Î description ¤¤Àò¨ú¦WºÙ
-                    let name = feature.properties.name || feature.properties.Name || '¥¼©R¦WÂI¦ì';
+                    let name = feature.properties.name || feature.properties.Name || 'æœªå‘½åé»ä½';
                     if (feature.properties.description) {
-                        // ±q description CDATA ¤º®e¤¤´£¨ú¸ê°T
                         const descriptionHtml = feature.properties.description;
                         const parser = new DOMParser();
                         const doc = parser.parseFromString(descriptionHtml, 'text/html');
-                        // ²¾°£©Ò¦³ <br> ¼ĞÅÒ
                         doc.querySelectorAll('br').forEach(br => br.remove());
-                        popupContent = doc.body.textContent.trim(); // ´£¨ú¯Â¤å¦r¤º®e
-                        // ±N¦WºÙ©ñ¦b²Ä¤@¦æ
-                        popupContent = `<strong>¦WºÙ: ${name}</strong><br>${popupContent}`;
+                        popupContent = doc.body.textContent.trim();
+                        popupContent = `<strong>åç¨±: ${name}</strong><br>${popupContent}`;
                     } else if (name) {
-                        popupContent = `<strong>¦WºÙ: ${name}</strong>`;
+                        popupContent = `<strong>åç¨±: ${name}</strong>`;
                     }
                     
-                    // ¦pªG¬OÂI¦ì¡A²K¥[¾É¯è«ö¶s©M¼ĞÅÒ
                     if (feature.geometry.type === 'Point') {
-                        // ³Ğ«Ø¾É¯è«ö¶s (¹Ï¤ù§Î¦¡)
-                        const navButtonIcon = L.divIcon({
-                            className: 'nav-button-icon',
-                            html: `<div class="nav-button-content"><img src="https://maps.google.com/mapfiles/kml/shapes/arrow.png" alt="¾É¯è" /></div>`,
-                            iconSize: [50, 50],
-                            iconAnchor: [25, 50] // ÁãÂI¦b¹Ï¤ù©³³¡¤¤¥¡
-                        });
-                        const navButton = L.marker(layer.getLatLng(), { icon: navButtonIcon, isNavButton: true }).addTo(map);
-                        navButton.on('click', () => {
-                            window.open(`https://www.google.com/maps/dir/?api=1&destination=${layer.getLatLng().lat},${layer.getLatLng().lng}`, '_blank');
-                        });
+                        // åœ¨é»æ“Šæ™‚æ‰é¡¯ç¤ºå°èˆªæŒ‰éˆ•å’Œæ–‡å­—æ¨™ç±¤
+                        layer.on('click', (e) => {
+                            L.DomEvent.stopPropagation(e); // é˜»æ­¢äº‹ä»¶å†’æ³¡åˆ°åœ°åœ–ï¼Œé¿å…é—œé–‰æŒ‰éˆ•
+                            
+                            // æ¸…é™¤æ‰€æœ‰èˆŠçš„å°èˆªæŒ‰éˆ•å’Œæ¨™ç±¤
+                            navButtonsGroup.clearLayers();
+                            markerLabelsGroup.clearLayers();
 
-                        // ³Ğ«Ø¤å¦r¼ĞÅÒ
-                        const markerLabel = L.marker(layer.getLatLng(), {
-                            icon: L.divIcon({
-                                className: 'marker-label',
-                                html: feature.properties.name || '', // Åã¥Ü¦WºÙ
-                                iconSize: [200, 30], // ¹w³]¤j¤p¡A¥i½Õ¾ã
-                                iconAnchor: [100, -10] // ½Õ¾ã¦ì¸m¡AÅı¤å¦rÅã¥Ü¦b¹Ï¼Ğ¤W¤è
-                            }),
-                            isMarkerLabel: true // ¼Ğ°O¬°¦Û©w¸q¼ĞÅÒ
-                        }).addTo(map);
-                        // ¸j©w¨ì¹Ï¼hªº¨Æ¥ó¡A¥H«K¦b¦a¹Ï²¾°Ê®É§ó·s¼ĞÅÒ¦ì¸m¡]¦pªG»İ­n¡^
-                        layer.on('add', function() { markerLabel.addTo(map); });
-                        layer.on('remove', function() { map.removeLayer(markerLabel); });
+                            const latlng = layer.getLatLng();
+                            
+                            // å‰µå»ºå°èˆªæŒ‰éˆ•
+                            const navButtonIcon = L.divIcon({
+                                className: 'nav-button-icon',
+                                html: `<div class="nav-button-content"><img src="https://maps.google.com/mapfiles/kml/shapes/arrow.png" alt="å°èˆª" /></div>`,
+                                iconSize: [50, 50],
+                                iconAnchor: [25, 50] // éŒ¨é»åœ¨åœ–ç‰‡åº•éƒ¨ä¸­å¤®
+                            });
+                            const navButton = L.marker(latlng, { icon: navButtonIcon }).addTo(navButtonsGroup);
+                            navButton.on('click', () => {
+                                window.open(`https://www.google.com/maps/dir/?api=1&destination=${latlng.lat},${latlng.lng}`, '_blank');
+                            });
+
+                            // å‰µå»ºæ–‡å­—æ¨™ç±¤ (é»‘è‰²æ–‡å­—)
+                            const labelLatLng = L.latLng(latlng.lat, latlng.lng); // æ¨™ç±¤èˆ‡é»ä½åŒç¶“ç·¯åº¦
+                            const markerLabel = L.marker(labelLatLng, {
+                                icon: L.divIcon({
+                                    className: 'marker-label',
+                                    html: `<span>${name}</span>`,
+                                    iconSize: [200, 30], // é è¨­å¤§å°ï¼Œå¯èª¿æ•´
+                                    iconAnchor: [100, -10] // èª¿æ•´ä½ç½®ï¼Œè®“æ–‡å­—é¡¯ç¤ºåœ¨åœ–æ¨™ä¸Šæ–¹
+                                }),
+                            }).addTo(markerLabelsGroup);
+
+                            map.setView(latlng, 16); // ç¸®æ”¾è‡³é»ä½
+                            console.log(`é»æ“Šé»ä½: ${name}ï¼Œé¡¯ç¤ºå°èˆªå’Œæ¨™ç±¤ï¼Œç¸®æ”¾è‡³åœ°åœ–ï¼Œç´šåˆ¥: 16ã€‚`);
+                        });
                     }
                 }
                 if (popupContent) {
@@ -199,46 +198,40 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         currentLayer = geojsonLayer.addTo(map);
-        currentLayerFeatures = geojsonFeatures; // ±N features Àx¦s°_¨Ó¨Ñ·j´M¨Ï¥Î
+        currentLayerFeatures = geojsonFeatures; // å°‡ features å„²å­˜èµ·ä¾†ä¾›æœå°‹ä½¿ç”¨
 
-        // ½Õ¾ã¦a¹Ïµø¹Ï¥H¥]§t©Ò¦³ features
+        // èª¿æ•´åœ°åœ–è¦–åœ–ä»¥åŒ…å«æ‰€æœ‰ features
         if (geojsonLayer.getBounds().isValid()) {
             map.fitBounds(geojsonLayer.getBounds());
         } else {
-            console.warn("GeoJSON ¼hªºÃä¬ÉµL®Ä¡AµLªk¦Û°Ê½Õ¾ã¦a¹Ïµø¹Ï¡C");
+            console.warn("GeoJSON å±¤çš„é‚Šç•Œç„¡æ•ˆï¼Œç„¡æ³•è‡ªå‹•èª¿æ•´åœ°åœ–è¦–åœ–ã€‚");
         }
-        // ²¾°£¤F "¸ü¤J¦¨¥\" ªº°T®§
-        // showMessage('¸ü¤J¦¨¥\', 'KML ¹Ï¼h¤w¦¨¥\¸ü¤J¡C');
     } catch (error) {
-        console.error("¸ü¤J KML ¹Ï¼h¥¢±Ñ:", error);
-        showMessage('¸ü¤J¥¢±Ñ', `µLªk¸ü¤J KML ¹Ï¼h: ${error.message}`);
+        console.error("è¼‰å…¥ KML åœ–å±¤å¤±æ•—:", error);
+        showMessage('è¼‰å…¥å¤±æ•—', `ç„¡æ³•è¼‰å…¥ KML åœ–å±¤: ${error.message}`);
     }
   };
 
-  // ²M°£©Ò¦³ KML ¹Ï¼h©M¬ÛÃö¤¸¯À
+  // æ¸…é™¤æ‰€æœ‰ KML åœ–å±¤å’Œç›¸é—œå…ƒç´ 
   window.clearAllKmlLayers = () => {
     if (currentLayer) {
       map.removeLayer(currentLayer);
       currentLayer = null;
       currentLayerFeatures = [];
     }
-    // ²M°£©Ò¦³°ÊºA²K¥[ªº¾É¯è«ö¶s©M¼ĞÅÒ
-    map.eachLayer(function(layer) {
-        if (layer.options && (layer.options.isNavButton || layer.options.isMarkerLabel)) {
-            map.removeLayer(layer);
-        }
-    });
-    console.log("©Ò¦³ KML ¹Ï¼h©M¬ÛÃö¤¸¯À¤w²M°£¡C");
+    navButtonsGroup.clearLayers(); // æ¸…é™¤å°èˆªæŒ‰éˆ•
+    markerLabelsGroup.clearLayers(); // æ¸…é™¤æ–‡å­—æ¨™ç±¤
+    console.log("æ‰€æœ‰ KML åœ–å±¤ã€æ¨™è¨˜ã€å°èˆªæŒ‰éˆ•å’Œæ¨™ç±¤å·²æ¸…é™¤ã€‚");
   };
 
-  // ·j´M¥\¯à - ¾ã¦X¨ì map-logic.js
+  // æœå°‹åŠŸèƒ½
   const searchBox = document.getElementById('searchBox');
   const searchResults = document.getElementById('searchResults');
   const searchContainer = document.getElementById('searchContainer');
 
   searchBox.addEventListener('input', (e) => {
       const query = e.target.value.trim().toLowerCase();
-      searchResults.innerHTML = ''; // ²MªÅ¤§«eªºµ²ªG
+      searchResults.innerHTML = ''; // æ¸…ç©ºä¹‹å‰çš„çµæœ
       
       if (!query) {
         searchResults.style.display = 'none';
@@ -246,7 +239,7 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
-      console.log(`·j´M¤¤: ${query}`);
+      console.log(`æœå°‹ä¸­: ${query}`);
       const results = currentLayerFeatures.filter(f => {
           const name = f.properties?.name?.toLowerCase();
           const description = f.properties?.description?.toLowerCase();
@@ -254,56 +247,66 @@ document.addEventListener('DOMContentLoaded', () => {
       });
 
       if (results.length === 0) {
-        searchResults.style.display = 'none';
-        searchContainer.classList.remove('search-active');
-        console.log("¥¼§ä¨ì·j´Mµ²ªG¡C");
+        const noResult = document.createElement('div');
+        noResult.className = 'result-item';
+        noResult.textContent = 'æ²’æœ‰æ‰¾åˆ°çµæœ';
+        noResult.style.gridColumn = 'span 3'; // è®“ã€Œæ²’æœ‰æ‰¾åˆ°çµæœã€è¨Šæ¯æ©«è·¨ä¸‰æ¬„
+        searchResults.appendChild(noResult);
+        searchResults.style.display = 'grid'; // ä»ç„¶é¡¯ç¤ºçµæœæ¡†ï¼Œåªæ˜¯å…§å®¹ç‚ºã€Œæ²’æœ‰æ‰¾åˆ°çµæœã€
+        searchContainer.classList.add('search-active');
+        console.log("æœªæ‰¾åˆ°æœå°‹çµæœã€‚");
         return;
       }
 
-      searchResults.style.display = 'grid'; // ½T«OÅã¥Ü¬° grid
-      searchContainer.classList.add('search-active'); // ²K¥[¬¡ÅDª¬ºAÃş§O
-      console.log(`§ä¨ì ${results.length} ­Ó·j´Mµ²ªG¡C`);
+      searchResults.style.display = 'grid'; // ç¢ºä¿é¡¯ç¤ºç‚º grid
+      searchContainer.classList.add('search-active'); // æ·»åŠ æ´»èºç‹€æ…‹é¡åˆ¥
+      console.log(`æ‰¾åˆ° ${results.length} å€‹æœå°‹çµæœã€‚`);
 
       results.forEach(f => {
-          // ½T«O feature ¬O Point Ãş«¬¨Ã¥B¦³®y¼Ğ
+          // ç¢ºä¿ feature æ˜¯ Point é¡å‹ä¸¦ä¸”æœ‰åº§æ¨™
           if (f.geometry && f.geometry.type === 'Point' && f.geometry.coordinates && f.geometry.coordinates.length >= 2) {
-              const name = f.properties?.name || '¥¼©R¦W';
-              const [lon, lat] = f.geometry.coordinates; // ¸g«×, ½n«×
+              const name = f.properties?.name || 'æœªå‘½å';
+              const [lon, lat] = f.geometry.coordinates; // ç¶“åº¦, ç·¯åº¦
 
               const item = document.createElement('div');
               item.className = 'result-item';
               item.textContent = name;
-              item.title = name; // ·Æ¹«Äa°±®ÉÅã¥Ü§¹¾ã¦WºÙ
+              item.title = name; // æ»‘é¼ æ‡¸åœæ™‚é¡¯ç¤ºå®Œæ•´åç¨±
               item.addEventListener('click', () => {
                   const originalLatLng = L.latLng(lat, lon);
-                  map.setView(originalLatLng, 16); 
+                  // é»æ“Šæœå°‹çµæœæ™‚ï¼Œæ¨¡æ“¬é»æ“Šè©²é»ä½ï¼Œè§¸ç™¼å°èˆªæŒ‰éˆ•å’Œæ¨™ç±¤é¡¯ç¤º
+                  // éœ€è¦æ‰¾åˆ°å°æ‡‰çš„ Leaflet Marker å¯¦ä¾‹ä¸¦è§¸ç™¼å…¶ click äº‹ä»¶
+                  map.eachLayer(function(layer) {
+                      if (layer instanceof L.Marker && layer.getLatLng().equals(originalLatLng)) {
+                          layer.fire('click'); // è§¸ç™¼ Leaflet Marker çš„ click äº‹ä»¶
+                          return;
+                      }
+                  });
                   searchResults.style.display = 'none';
                   searchContainer.classList.remove('search-active');
-                  searchBox.value = ''; // ²MªÅ·j´M®Ø
-                  console.log(`ÂIÀ»·j´Mµ²ªG: ${name}¡AÁY©ñ¦Ü¦a¹Ï¡A¯Å§O: 16¡C`);
+                  searchBox.value = ''; // æ¸…ç©ºæœå°‹æ¡†
+                  console.log(`é»æ“Šæœå°‹çµæœ: ${name}ï¼Œè§¸ç™¼é»ä½é»æ“Šã€‚`);
               });
               searchResults.appendChild(item);
           } else {
-              console.warn("¸õ¹L«D Point Ãş«¬©ÎµL®y¼Ğªº feature ¶i¦æ·j´M:", f);
+              console.warn("è·³éé Point é¡å‹æˆ–ç„¡åº§æ¨™çš„ feature é€²è¡Œæœå°‹:", f);
           }
       });
   });
 
-  // ÂIÀ»·j´Mµ²ªG®Ø¥~³¡®ÉÁôÂÃ·j´Mµ²ªG
-  document.addEventListener('click', (event) => {
-      if (!searchResults.contains(event.target) && event.target !== searchBox && !searchContainer.contains(event.target)) {
+  // è™•ç†åœ°åœ–é»æ“Šäº‹ä»¶ï¼Œéš±è—æœå°‹çµæœå’Œå°èˆªæŒ‰éˆ•
+  map.on('click', () => {
+      const searchResults = document.getElementById('searchResults');
+      const searchContainer = document.getElementById('searchContainer');
+      if (searchResults) {
           searchResults.style.display = 'none';
-          searchContainer.classList.remove('search-active'); // ²¾°£¬¡ÅDª¬ºAÃş§O
+          searchContainer.classList.remove('search-active');
       }
-  });
-
-  // ºÊÅ¥ ESC Áä¥HÁôÂÃ·j´Mµ²ªG
-  document.addEventListener('keydown', (event) => {
-      if (event.key === 'Escape') {
-          searchResults.style.display = 'none';
-          searchContainer.classList.remove('search-active'); // ²¾°£¬¡ÅDª¬ºAÃş§O
-          searchBox.blur(); // Åı·j´M®Ø¥¢¥hµJÂI
+      const searchBox = document.getElementById('searchBox');
+      if (searchBox) {
+          searchBox.value = '';
       }
+      navButtonsGroup.clearLayers(); // æ¸…é™¤å°èˆªæŒ‰éˆ•
+      markerLabelsGroup.clearLayers(); // æ¸…é™¤æ–‡å­—æ¨™ç±¤
   });
-
 });

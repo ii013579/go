@@ -1,4 +1,4 @@
-/* ¥ş§½©M°ò¥»§G§½¼Ë¦¡ */
+/* å…¨å±€å’ŒåŸºæœ¬ä½ˆå±€æ¨£å¼ */
 html, body {
   margin: 0;
   padding: 0;
@@ -13,7 +13,7 @@ body {
   background-color: #f0f2f5;
 }
 
-/* ¼ĞÃD°Ï°ì¼Ë¦¡ */
+/* æ¨™é¡Œå€åŸŸæ¨£å¼ */
 #title {
   text-align: center;
   padding: 12px;
@@ -25,10 +25,10 @@ body {
   border-bottom-left-radius: 12px;
   border-bottom-right-radius: 12px;
   position: relative;
-  z-index: 1001; /* ½T«O¦b¨ä¥L¤º®e¤§¤W */
+  z-index: 1001; /* ç¢ºä¿åœ¨å…¶ä»–å…§å®¹ä¹‹ä¸Š */
 }
 
-/* ½s¿è«ö¶s¼Ë¦¡ */
+/* ç·¨è¼¯æŒ‰éˆ•æ¨£å¼ */
 #editButton {
   position: absolute;
   top: 50%;
@@ -50,30 +50,41 @@ body {
   transform: translateY(-50%) scale(1.05);
 }
 
-/* ¥D­n¤º®e°Ï°ì */
+/* ä¸»è¦å…§å®¹å€åŸŸ */
 #map {
   flex-grow: 1;
   background-color: #e2e4e7;
   border-radius: 8px;
   margin: 10px;
   box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-  z-index: 1; /* ½T«O¦a¹Ï¦b±±¨î¶µ¤U¤è */
+  z-index: 1; /* ç¢ºä¿åœ°åœ–åœ¨æ§åˆ¶é …ä¸‹æ–¹ */
 }
 
-/* ±±¨î­±ªO¼Ë¦¡ */
+/* æ§åˆ¶é¢æ¿æ¨£å¼ - æ›´æ–°ç‚ºV1.0æ¨£å¼ï¼Œæ‰€æœ‰å…§å®¹åœ¨ä¸€è¡Œ */
 #controls {
     display: flex;
-    flex-direction: column;
+    flex-direction: row; /* è®“å­å…ƒç´ æ’æˆä¸€è¡Œ */
+    flex-wrap: wrap; /* å…è¨±æ›è¡Œåœ¨å°è¢å¹•ä¸Š */
     gap: 10px;
     padding: 10px;
     background-color: #ffffff;
     border-bottom: 1px solid #e0e0e0;
     box-shadow: 0 2px 4px rgba(0,0,0,0.05);
     z-index: 1000;
-    position: relative; /* ¬°¤FÅı searchResults ¥i¥H¬Û¹ï©ó¥¦©w¦ì */
+    position: relative; /* ç‚ºäº†è®“ searchResults å¯ä»¥ç›¸å°æ–¼å®ƒå®šä½ */
+    align-items: center; /* å‚ç›´å±…ä¸­å°é½Š */
+    justify-content: space-between; /* è®“å…ƒç´ åœ¨å…©ç«¯å°é½Šï¼Œä¸­é–“æœ‰é–“è· */
 }
 
-/* ¿ï¾Ü¸ê®Æ®w¹Ï¼h¼Ë¦¡ */
+/* å°‡æ§åˆ¶çµ„ä»¶åŒ…è£¹åœ¨ä¸€å€‹ div å…§ï¼Œä»¥æ›´å¥½åœ°æ§åˆ¶ä½ˆå±€ */
+.control-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0; /* é˜²æ­¢ç¸®å° */
+}
+
+/* é¸æ“‡è³‡æ–™åº«åœ–å±¤æ¨£å¼ */
 #kmlLayerSelect {
     padding: 8px 12px;
     border: 1px solid #ccc;
@@ -81,20 +92,24 @@ body {
     font-size: 16px;
     cursor: pointer;
     background-color: #f9f9f9;
-    /* ÁY¤p¼e«×¥H²Å¦X¤â¾÷¨Ï¥Î */
-    max-width: 200px; /* ³]¸m³Ì¤j¼e«× */
-    width: 100%; /* Åı¥¦¦b¤p©ó max-width ®É¯à¦ûº¡¥i¥ÎªÅ¶¡ */
-    box-sizing: border-box; /* ½T«O padding ©M border ¥]§t¦b¼e«×¤º */
+    /* ç¸®å°å¯¬åº¦ä»¥ç¬¦åˆæ‰‹æ©Ÿä½¿ç”¨ */
+    max-width: 150px; /* è¨­ç½®æœ€å¤§å¯¬åº¦ */
+    width: 100%; /* è®“å®ƒåœ¨å°æ–¼ max-width æ™‚èƒ½ä½”æ»¿å¯ç”¨ç©ºé–“ */
+    box-sizing: border-box; /* ç¢ºä¿ padding å’Œ border åŒ…å«åœ¨å¯¬åº¦å…§ */
 }
 
-/* °w¹ï¤p¿Ã¹õªº½Õ¾ã */
+/* é‡å°å°è¢å¹•çš„èª¿æ•´ */
 @media (max-width: 768px) {
-    #controls > div {
-        flex-direction: column; /* ¦b¤p¿Ã¹õ¤W««ª½±Æ¦C */
-        align-items: flex-start; /* ¥ª¹ï»ô */
+    #controls {
+        flex-direction: column; /* åœ¨å°è¢å¹•ä¸Šå‚ç›´æ’åˆ— */
+        align-items: stretch; /* æ‹‰ä¼¸ä»¥ä½”æ»¿å¯¬åº¦ */
+    }
+    .control-group {
+        width: 100%; /* è®“çµ„ä»¶åœ¨å°è¢å¹•ä¸Šä½”æ»¿å¯¬åº¦ */
+        justify-content: space-between; /* ä¿æŒçµ„ä»¶å…§éƒ¨çš„å·¦å³å°é½Š */
     }
     #kmlLayerSelect {
-        max-width: 100%; /* ¦b¤p¿Ã¹õ¤W¥i¥H¦ûº¡§ó¦h¼e«× */
+        max-width: none; /* åœ¨å°è¢å¹•ä¸Šå–æ¶ˆæœ€å¤§å¯¬åº¦é™åˆ¶ */
     }
     #searchContainer {
         width: 100%;
@@ -102,7 +117,7 @@ body {
 }
 
 
-/* ·j´M®e¾¹¼Ë¦¡ */
+/* æœå°‹å®¹å™¨æ¨£å¼ */
 #searchContainer {
   position: relative;
   display: flex;
@@ -114,8 +129,8 @@ body {
   padding: 8px 12px;
   box-shadow: 0 2px 4px rgba(0,0,0,0.08);
   transition: all 0.3s ease;
-  width: auto; /* Allow content to dictate width, or set a max-width */
-  max-width: 350px; /* Keep it from being too wide on larger screens */
+  flex-grow: 1; /* å…è¨±æœå°‹æ¡†ä½”æ“šå‰©é¤˜ç©ºé–“ */
+  min-width: 150px; /* æœ€å°å¯¬åº¦ */
 }
 
 #searchContainer.search-active {
@@ -136,10 +151,10 @@ body {
   color: #a0a0a0;
 }
 
-/* ·j´Mµ²ªGÅã¥Ü°Ï¶ô */
+/* æœå°‹çµæœé¡¯ç¤ºå€å¡Š */
 #searchResults {
   position: absolute;
-  top: 100%; /* ©w¦ì¦b·j´M®Ø¤U¤è */
+  top: 100%; /* å®šä½åœ¨æœå°‹æ¡†ä¸‹æ–¹ */
   left: 0;
   right: 0;
   background-color: #ffffff;
@@ -150,10 +165,10 @@ body {
   box-shadow: 0 4px 8px rgba(0,0,0,0.1);
   max-height: 250px;
   overflow-y: auto;
-  display: none; /* ¹w³]ÁôÂÃ */
-  z-index: 999; /* ½T«O¦b¨ä¥L¤º®e¤§¤W¦ı§C©ó¥D¼ĞÃD */
+  display: none; /* é è¨­éš±è— */
+  z-index: 999; /* ç¢ºä¿åœ¨å…¶ä»–å…§å®¹ä¹‹ä¸Šä½†ä½æ–¼ä¸»æ¨™é¡Œ */
   padding: 5px;
-  grid-template-columns: repeat(3, 1fr); /* ©T©w¤TÄæ */
+  grid-template-columns: repeat(3, 1fr); /* å›ºå®šä¸‰æ¬„ */
   gap: 5px;
   padding: 8px;
 }
@@ -163,12 +178,12 @@ body {
   cursor: pointer;
   border-radius: 6px;
   transition: background-color 0.2s ease;
-  background-color: #f0f0f0; /* ¨C­Óµ²ªG¶µªº­I´º¦â */
+  background-color: #f0f0f0; /* æ¯å€‹çµæœé …çš„èƒŒæ™¯è‰² */
   color: #333;
   text-align: center;
-  overflow: hidden; /* ÁôÂÃ¶W¥X³¡¤À */
-  white-space: nowrap; /* ¤£´«¦æ */
-  text-overflow: ellipsis; /* Åã¥Ü¬Ù²¤¸¹ */
+  overflow: hidden; /* éš±è—è¶…å‡ºéƒ¨åˆ† */
+  white-space: nowrap; /* ä¸æ›è¡Œ */
+  text-overflow: ellipsis; /* é¡¯ç¤ºçœç•¥è™Ÿ */
   font-size: 14px;
 }
 
@@ -177,7 +192,7 @@ body {
 }
 
 
-/* »{ÃÒ°Ï¶ô¼Ë¦¡ */
+/* èªè­‰å€å¡Šæ¨£å¼ */
 #authSection {
   display: flex;
   flex-direction: column;
@@ -195,7 +210,7 @@ body {
   color: #2193b0;
 }
 
-/* µn¤J«ö¶s¼Ë¦¡ */
+/* ç™»å…¥æŒ‰éˆ•æ¨£å¼ */
 .action-buttons {
   padding: 10px 20px;
   border: none;
@@ -250,13 +265,13 @@ body {
   background-color: #5a6268;
 }
 
-/* µn¤J°T®§ */
+/* ç™»å…¥è¨Šæ¯ */
 #loginMessage {
   color: #dc3545;
   font-weight: 500;
 }
 
-/* µn¤J«á»öªíªO¼Ë¦¡ */
+/* ç™»å…¥å¾Œå„€è¡¨æ¿æ¨£å¼ */
 #loggedInDashboard {
   display: flex;
   flex-direction: column;
@@ -270,7 +285,7 @@ body {
     color: #28a745;
 }
 
-/* KML ±±¨î²Õ¥ó */
+/* KML æ§åˆ¶çµ„ä»¶ */
 #kmlControlsDashboard,
 #uploadKmlSectionDashboard,
 #deleteKmlSectionDashboard,
@@ -278,11 +293,11 @@ body {
 .registration-code-display-group,
 #userManagementSection {
     display: flex;
-    flex-wrap: wrap; /* ¤¹³\¤¸¯À´«¦æ */
+    flex-wrap: wrap; /* å…è¨±å…ƒç´ æ›è¡Œ */
     align-items: center;
     gap: 10px;
     width: 100%;
-    justify-content: center; /* ©~¤¤¹ï»ô */
+    justify-content: center; /* å±…ä¸­å°é½Š */
 }
 
 #uploadKmlSectionDashboard label,
@@ -290,11 +305,11 @@ body {
 #registrationSettingsSection label {
     font-weight: 600;
     color: #555;
-    white-space: nowrap; /* ¨¾¤î¼ĞÅÒ´«¦æ */
+    white-space: nowrap; /* é˜²æ­¢æ¨™ç±¤æ›è¡Œ */
 }
 
 #selectedKmlFileNameDashboard {
-    flex-grow: 1; /* ÅıÀÉ®×¦W¦û¾Ú§ó¦hªÅ¶¡ */
+    flex-grow: 1; /* è®“æª”æ¡ˆåä½”æ“šæ›´å¤šç©ºé–“ */
     padding: 8px;
     border: 1px dashed #ccc;
     border-radius: 6px;
@@ -303,8 +318,8 @@ body {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    cursor: pointer; /* ªí¥Ü¥i¥HÂIÀ» */
-    max-width: 180px; /* ­­¨î¼e«× */
+    cursor: pointer; /* è¡¨ç¤ºå¯ä»¥é»æ“Š */
+    max-width: 180px; /* é™åˆ¶å¯¬åº¦ */
 }
 
 #uploadKmlSubmitBtnDashboard {
@@ -319,7 +334,7 @@ body {
     cursor: pointer;
     background-color: #f9f9f9;
     flex-grow: 1;
-    max-width: 200px; /* ­­¨î¼e«× */
+    max-width: 200px; /* é™åˆ¶å¯¬åº¦ */
 }
 
 #deleteSelectedKmlBtn {
@@ -363,7 +378,7 @@ body {
     margin-top: 5px;
 }
 
-/* ¨Ï¥ÎªÌºŞ²z°Ï¶ô */
+/* ä½¿ç”¨è€…ç®¡ç†å€å¡Š */
 #userList {
     width: 100%;
     max-height: 300px;
@@ -472,33 +487,33 @@ body {
     justify-content: flex-end;
     flex-wrap: wrap;
 }
-/* ÅÜ§ó«ö¶s¼Ë¦¡ */
+/* è®Šæ›´æŒ‰éˆ•æ¨£å¼ */
 .user-card-row-2 .change-role-btn {
     padding: 6px 10px;
     font-size: 14px;
     width: auto;
     flex-shrink: 0;
-    background-color: #007bff; /* ÂÅ¦â */
+    background-color: #007bff; /* è—è‰² */
     color: white;
 }
 .user-card-row-2 .change-role-btn:hover {
     background-color: #0056b3;
 }
 
-/* §R°£«ö¶s¼Ë¦¡ */
+/* åˆªé™¤æŒ‰éˆ•æ¨£å¼ */
 .user-card-row-2 .delete-user-btn {
     padding: 6px 10px;
     font-size: 14px;
     width: auto;
     flex-shrink: 0;
-    background-color: #dc3545; /* ¬õ¦â */
+    background-color: #dc3545; /* ç´…è‰² */
     color: white;
 }
 .user-card-row-2 .delete-user-btn:hover {
     background-color: #c82333;
 }
 
-/* °T®§®Ø¼Ë¦¡ */
+/* è¨Šæ¯æ¡†æ¨£å¼ */
 .message-box-overlay, .registration-modal-overlay, .confirmation-modal-overlay {
   position: fixed;
   top: 0;
@@ -509,7 +524,7 @@ body {
   display: flex;
   justify-content: center;
   align-items: center;
-  z-index: 2000; /* ½T«O¦b³Ì¤W¼h */
+  z-index: 2000; /* ç¢ºä¿åœ¨æœ€ä¸Šå±¤ */
   opacity: 0;
   visibility: hidden;
   transition: opacity 0.3s ease, visibility 0.3s ease;
@@ -566,7 +581,7 @@ body {
   background-color: #1a7a92;
 }
 
-/* µù¥U½X¼ÒºA®Ø¯S©w¼Ë¦¡ */
+/* è¨»å†Šç¢¼æ¨¡æ…‹æ¡†ç‰¹å®šæ¨£å¼ */
 .registration-modal-content input[type="text"] {
     width: calc(100% - 20px);
     padding: 10px;
@@ -600,7 +615,7 @@ body {
     font-weight: bold;
 }
 
-/* ¦a¹Ï¤W¼ĞÅÒ©M¾É¯è«ö¶sªº¼Ë¦¡ */
+/* åœ°åœ–ä¸Šæ¨™ç±¤å’Œå°èˆªæŒ‰éˆ•çš„æ¨£å¼ */
 .marker-label {
     background-color: rgba(255, 255, 255, 0.85);
     border: 1px solid #ccc;
@@ -608,26 +623,26 @@ body {
     padding: 3px 8px;
     font-size: 12px;
     font-weight: bold;
-    color: #333;
+    color: #333; /* é»‘è‰²æ–‡å­— */
     white-space: nowrap;
     box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-    transform: translateX(-50%); /* ©~¤¤¼ĞÅÒ */
-    pointer-events: none; /* ÅıÂIÀ»¬ï³z¨ì¤U­±ªº¦a¹Ï©Î¼Ğ°O */
+    transform: translateX(-50%); /* å±…ä¸­æ¨™ç±¤ */
+    pointer-events: none; /* è®“é»æ“Šç©¿é€åˆ°ä¸‹é¢çš„åœ°åœ–æˆ–æ¨™è¨˜ */
 }
 
 .nav-button-icon {
     display: flex;
     justify-content: center;
     align-items: center;
-    width: 50px; /* ¹Ï¼Ğªº¼e«× */
-    height: 50px; /* ¹Ï¼Ğªº°ª«× */
+    width: 50px; /* åœ–æ¨™çš„å¯¬åº¦ */
+    height: 50px; /* åœ–æ¨™çš„é«˜åº¦ */
     /* background-color: rgba(255, 255, 255, 0.8); */
     border-radius: 50%;
     /* border: 1px solid #bbb; */
     box-shadow: 0 2px 5px rgba(0,0,0,0.2);
     cursor: pointer;
     transition: all 0.2s ease;
-    transform: translateX(-50%); /* ©~¤¤«ö¶s */
+    transform: translateX(-50%); /* å±…ä¸­æŒ‰éˆ• */
 }
 
 .nav-button-content img {
@@ -641,7 +656,7 @@ body {
     box-shadow: 0 4px 8px rgba(0,0,0,0.3);
 }
 
-/* °w¹ï Google My Maps ¶êÂI¼Ë¦¡ */
+/* é‡å° Google My Maps åœ“é»æ¨£å¼ */
 .custom-div-icon {
     background: none;
     border: none;
@@ -654,7 +669,8 @@ body {
     width: 18px;
     height: 18px;
     border-radius: 50%;
-    border: 2px solid #fff; /* ¥Õ¦âÃä®Ø */
+    border: 2px solid #fff; /* ç™½è‰²é‚Šæ¡† */
     box-shadow: 0 1px 3px rgba(0,0,0,0.4);
-    transform: translate(-50%, -50%); /* ½T«O¶êÂI¤¤¤ß»P¸g½n«×¹ï»ô */
+    transform: translate(-50%, -50%); /* ç¢ºä¿åœ“é»ä¸­å¿ƒèˆ‡ç¶“ç·¯åº¦å°é½Š */
+    background-color: #e74c3c; /* ç´…é» */
 }
