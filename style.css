@@ -38,421 +38,392 @@ body {
   color: #333;
   border: none;
   border-radius: 8px;
-  padding: 8px 15px;
+  padding: 8px 12px;
   font-size: 16px;
-  font-weight: 600;
   cursor: pointer;
   box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-  transition: background-color 0.3s ease, transform 0.3s ease;
+  transition: background-color 0.3s ease, transform 0.2s ease;
 }
+
 #editButton:hover {
   background-color: #e0e0e0;
   transform: translateY(-50%) scale(1.05);
 }
 
 /* 主要內容區域 */
-#map {
-  flex-grow: 1;
-  background-color: #e2e4e7;
-  border-radius: 8px;
-  margin: 10px;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-  z-index: 1; /* 確保地圖在控制項下方 */
-}
-
-/* 控制面板樣式 - 分為兩行顯示 */
-#controls {
-    display: flex;
-    flex-direction: column; /* 讓子元素垂直排列 */
-    gap: 10px;
-    padding: 10px;
-    background-color: #ffffff;
-    border-bottom: 1px solid #e0e0e0;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-    z-index: 1000;
-    position: relative; /* 為了讓 searchResults 可以相對於它定位 */
-}
-
-/* 每個控制組件的行樣式 */
-.control-row {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    width: 100%; /* 確保行佔據所有可用寬度 */
-    flex-wrap: wrap; /* 允許內容在小螢幕上換行 */
-    justify-content: space-between; /* 元素在兩端對齊 */
-}
-
-/* 選擇資料庫圖層樣式 */
-#kmlLayerSelect {
-    padding: 8px 12px;
-    border: 1px solid #ccc;
-    border-radius: 8px;
-    font-size: 16px;
-    cursor: pointer;
-    background-color: #f9f9f9;
-    flex-grow: 1; /* 允許它佔據剩餘空間 */
-    max-width: 250px; /* 設置最大寬度，避免過寬 */
-    box-sizing: border-box; /* 確保 padding 和 border 包含在寬度內 */
-}
-
-/* 針對小螢幕的調整 */
-@media (max-width: 768px) {
-    .control-row {
-        flex-direction: row; /* 保持單行排列，讓內容自行換行 */
-        justify-content: space-between;
-    }
-    #kmlLayerSelect {
-        max-width: calc(100% - 100px); /* 調整寬度以適應標籤，防止溢出 */
-    }
-    .control-row label {
-        flex-shrink: 0; /* 防止標籤縮小 */
-    }
-}
-
-
-/* 搜尋容器樣式 */
-#searchContainer {
-  position: relative;
+#mainContent {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  background-color: #f9f9f9;
-  border: 1px solid #e0e0e0;
-  border-radius: 8px;
-  padding: 8px 12px;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.08);
-  transition: all 0.3s ease;
-  flex-grow: 1; /* 允許搜尋框佔據剩餘空間 */
-  min-width: 150px; /* 最小寬度 */
+  flex: 1; /* 讓內容區域填滿剩餘空間 */
+  position: relative; /* 為了地圖的絕對定位 */
 }
 
-#searchContainer.search-active {
-  box-shadow: 0 4px 8px rgba(0,0,0,0.15);
-  border-color: #6dd5ed;
+/* 地圖容器 */
+#map {
+  flex-grow: 1; /* 地圖填滿所有可用空間 */
+  height: 100%; /* 確保地圖填滿其父容器的高度 */
+  width: 100%; /* 確保地圖填滿其父容器的寬度 */
+  z-index: 0; /* 確保地圖在底部 */
+}
+
+/* 控制面板 */
+#controls {
+  position: absolute;
+  top: 15px;
+  left: 15px;
+  z-index: 1000; /* 確保在地圖之上 */
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background-color: rgba(255, 255, 255, 0.9);
+  padding: 15px;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+  max-width: 300px;
+  box-sizing: border-box;
+}
+
+/* 搜尋容器 */
+#searchContainer {
+    position: relative;
+    width: 100%;
+    transition: all 0.3s ease;
+    box-sizing: border-box;
+    display: flex; /* Ensure the search box and results work together */
+    flex-direction: column;
 }
 
 #searchBox {
-  border: none;
-  outline: none;
-  padding: 5px 0;
-  font-size: 16px;
-  flex-grow: 1;
-  background-color: transparent;
-}
-
-#searchBox::placeholder {
-  color: #a0a0a0;
-}
-
-/* 搜尋結果顯示區塊 */
-#searchResults {
-  position: absolute;
-  top: 100%; /* 定位在搜尋框下方 */
-  left: 0;
-  right: 0;
-  background-color: #ffffff;
-  border: 1px solid #ddd;
-  border-top: none;
-  border-bottom-left-radius: 8px;
-  border-bottom-right-radius: 8px;
-  box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-  max-height: 250px;
-  overflow-y: auto;
-  display: none; /* 預設隱藏 */
-  z-index: 999; /* 確保在其他內容之上但低於主標題 */
-  padding: 5px;
-  grid-template-columns: repeat(3, 1fr); /* 固定三欄 */
-  gap: 5px;
-  padding: 8px;
-}
-
-.result-item {
-  padding: 8px 10px;
-  cursor: pointer;
-  border-radius: 6px;
-  transition: background-color 0.2s ease;
-  background-color: #f0f0f0; /* 每個結果項的背景色 */
-  color: #333;
-  text-align: center;
-  overflow: hidden; /* 隱藏超出部分 */
-  white-space: nowrap; /* 不換行 */
-  text-overflow: ellipsis; /* 顯示省略號 */
-  font-size: 14px;
-}
-
-.result-item:hover {
-  background-color: #e0e0e0;
-}
-
-
-/* 認證區塊樣式 */
-#authSection {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 20px;
-  background-color: #ffffff;
-  border-bottom: 1px solid #e0e0e0;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-  gap: 15px;
-  z-index: 1000;
-}
-
-#authSection h3 {
-  margin-top: 0;
-  color: #2193b0;
-}
-
-/* 登入按鈕樣式 */
-.action-buttons {
-  padding: 10px 20px;
-  border: none;
-  border-radius: 8px;
-  font-size: 16px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background-color 0.3s ease, transform 0.3s ease;
-  min-width: 120px;
-  text-align: center;
-}
-
-.google-btn {
-  background-color: #4285f4;
-  color: white;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-}
-.google-btn img {
-  height: 20px;
-  width: 20px;
-}
-.google-btn:hover {
-  background-color: #357ae8;
-  transform: translateY(-1px);
-}
-
-.upload-btn {
-  background-color: #28a745;
-  color: white;
-}
-.upload-btn:hover {
-  background-color: #218838;
-}
-
-.delete-btn {
-  background-color: #dc3545;
-  color: white;
-}
-.delete-btn:hover {
-  background-color: #c82333;
-}
-
-#logoutBtn {
-  background-color: #6c757d;
-  color: white;
-}
-#logoutBtn:hover {
-  background-color: #5a6268;
-}
-
-/* 登入訊息 */
-#loginMessage {
-  color: #dc3545;
-  font-weight: 500;
-}
-
-/* 登入後儀表板樣式 */
-#loggedInDashboard {
-  display: flex;
-  flex-direction: column;
-  gap: 15px;
-  width: 100%;
-  max-width: 500px;
-  align-items: center;
-}
-
-#loggedInDashboard h3 {
-    color: #28a745;
-}
-
-/* KML 控制組件 */
-#kmlControlsDashboard,
-#uploadKmlSectionDashboard,
-#deleteKmlSectionDashboard,
-#registrationSettingsSection,
-.registration-code-display-group,
-#userManagementSection {
-    display: flex;
-    flex-wrap: wrap; /* 允許元素換行 */
-    align-items: center;
-    gap: 10px;
     width: 100%;
-    justify-content: center; /* 居中對齊 */
-}
-
-#uploadKmlSectionDashboard label,
-#deleteKmlSectionDashboard label,
-#registrationSettingsSection label {
-    font-weight: 600;
-    color: #555;
-    white-space: nowrap; /* 防止標籤換行 */
-}
-
-#selectedKmlFileNameDashboard {
-    flex-grow: 1; /* 讓檔案名佔據更多空間 */
-    padding: 8px;
-    border: 1px dashed #ccc;
-    border-radius: 6px;
-    background-color: #f5f5f5;
-    text-align: center;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    cursor: pointer; /* 表示可以點擊 */
-    max-width: 180px; /* 限制寬度 */
-}
-
-#uploadKmlSubmitBtnDashboard {
-    padding: 8px 15px;
-}
-
-#kmlLayerSelectDashboard {
-    padding: 8px 12px;
+    padding: 10px 15px;
     border: 1px solid #ccc;
     border-radius: 8px;
     font-size: 16px;
+    box-sizing: border-box;
+    outline: none;
+    box-shadow: inset 0 1px 3px rgba(0,0,0,0.08);
+}
+
+#searchBox:focus {
+    border-color: #007bff;
+    box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.25);
+}
+
+/* 搜尋結果列表 */
+#searchResults {
+    display: none; /* 預設隱藏 */
+    position: absolute; /* 相對於父容器定位 */
+    top: 100%; /* 位於搜尋框下方 */
+    left: 0;
+    width: 100%;
+    background-color: white;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+    max-height: 300px; /* 限制高度，啟用滾動 */
+    overflow-y: auto; /* 超出部分滾動 */
+    z-index: 1050; /* 確保在其他內容之上 */
+    margin-top: 5px; /* 搜尋框和結果之間的間距 */
+
+    /* 新增：三欄式佈局 */
+    display: grid; /* 使用 Grid 佈局 */
+    grid-template-columns: repeat(3, 1fr); /* 固定三欄，每欄佔用等量空間 */
+    gap: 10px; /* 網格間距 */
+    padding: 10px; /* 內邊距 */
+    box-sizing: border-box; /* 確保 padding 不增加總寬度 */
+}
+
+/* 當搜尋結果顯示時，為 searchContainer 添加活躍狀態類別 */
+.search-active #searchResults {
+    display: grid; /* 當活躍時顯示為 Grid */
+}
+
+.search-result-item {
+    padding: 8px 10px;
     cursor: pointer;
     background-color: #f9f9f9;
-    flex-grow: 1;
-    max-width: 200px; /* 限制寬度 */
-}
-
-#deleteSelectedKmlBtn {
-    padding: 8px 15px;
-}
-
-#registrationCodeDisplay {
-    font-size: 1.1em;
-    font-weight: bold;
-    color: #007bff;
-    background-color: #e7f3ff;
-    padding: 8px 12px;
     border-radius: 6px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    transition: background-color 0.2s ease, transform 0.1s ease;
+    text-align: center; /* 讓文字居中 */
+    word-break: break-word; /* 斷字 */
+    overflow: hidden; /* 隱藏超出部分 */
+    text-overflow: ellipsis; /* 顯示省略號 */
+    white-space: normal; /* 允許換行 */
+    max-width: 100%; /* 確保內容不會超出網格項目 */
+    box-sizing: border-box;
 }
 
-.registration-code-display-group {
+.search-result-item:hover {
+    background-color: #e9e9e9;
+    transform: translateY(-2px);
+}
+
+
+/* KML 上傳和刪除區塊 */
+.kml-section {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 15px;
+    background-color: #f8f8f8;
+    border-radius: 10px;
+    border: 1px solid #eee;
+    box-shadow: inset 0 1px 3px rgba(0,0,0,0.05);
+}
+
+.kml-section h3 {
+    margin: 0 0 10px 0;
+    color: #555;
+    font-size: 18px;
+}
+
+/* 按鈕樣式 */
+.action-buttons {
+    padding: 10px 15px;
+    border: none;
+    border-radius: 8px;
+    background-color: #007bff;
+    color: white;
+    font-size: 16px;
+    cursor: pointer;
+    transition: background-color 0.3s ease, transform 0.2s ease;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.action-buttons:hover {
+    background-color: #0056b3;
+    transform: translateY(-1px);
+}
+
+.action-buttons:disabled {
+    background-color: #cccccc;
+    cursor: not-allowed;
+    box-shadow: none;
+}
+
+/* 檔案選擇和上傳按鈕組 */
+.file-upload-controls {
     display: flex;
     align-items: center;
     gap: 10px;
-    flex-wrap: wrap;
-    justify-content: center;
+    flex-wrap: wrap; /* 允許在小螢幕上換行 */
 }
 
-.registration-code-content-wrapper {
+.file-upload-controls .action-buttons {
+    flex-shrink: 0; /* 防止按鈕縮小 */
+}
+
+#selectedKmlFileNameDashboard {
+    flex-grow: 1; /* 讓檔案名區域盡可能佔用空間 */
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    background-color: #fff;
+    min-width: 120px; /* 最小寬度，防止過度壓縮 */
+    text-overflow: ellipsis;
+    overflow: hidden;
+    white-space: nowrap;
+    text-align: center;
+    box-sizing: border-box;
+}
+
+/* KML 下拉選單 */
+#kmlLayerSelectDashboard {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    font-size: 16px;
+    background-color: #fff;
+    appearance: none; /* 移除預設的下拉箭頭 */
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23333'%3E%3Cpath d='M7 10l5 5 5-5z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    background-size: 20px;
+    cursor: pointer;
+}
+
+/* 登入和儀表板樣式 */
+#authSection {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  position: absolute;
+  top: 15px;
+  left: 15px;
+  z-index: 1000;
+  background-color: rgba(255, 255, 255, 0.9);
+  padding: 15px;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+  max-width: 300px;
+  box-sizing: border-box;
+  display: none; /* 預設隱藏，由 JS 控制顯示 */
+}
+
+#loginForm, #loggedInDashboard {
     display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+#googleSignInBtn, #logoutBtn {
+    width: 100%;
+    padding: 10px 15px;
+    border: none;
+    border-radius: 8px;
+    font-size: 16px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    transition: background-color 0.3s ease, transform 0.2s ease;
+}
+
+#googleSignInBtn {
+    background-color: #4285F4;
+    color: white;
+}
+
+#googleSignInBtn:hover {
+    background-color: #357ae8;
+    transform: translateY(-1px);
+}
+
+#logoutBtn {
+    background-color: #dc3545;
+    color: white;
+}
+
+#logoutBtn:hover {
+    background-color: #c82333;
+    transform: translateY(-1px);
+}
+
+#userEmailDisplay {
+    font-weight: 600;
+    color: #007bff;
+    text-align: center;
+    word-break: break-all;
+    font-size: 14px;
+}
+
+#loginMessage {
+    color: #dc3545;
+    font-weight: 500;
+    text-align: center;
+}
+
+/* 註冊碼區塊 */
+#registrationSettingsSection {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 15px;
+    background-color: #f8f8f8;
+    border-radius: 10px;
+    border: 1px solid #eee;
+    box-shadow: inset 0 1px 3px rgba(0,0,0,0.05);
+}
+
+#registrationSettingsSection h3 {
+    margin: 0 0 10px 0;
+    color: #555;
+    font-size: 18px;
+}
+
+#registrationCodeDisplay {
+    background-color: #e9e9e9;
+    padding: 10px;
+    border-radius: 6px;
+    font-family: monospace;
+    font-size: 1.1em;
+    text-align: center;
+    word-break: break-all;
+    display: flex;
+    justify-content: center;
     align-items: center;
     gap: 5px;
 }
 
 #registrationCodeCountdown {
     font-size: 0.9em;
-    color: #666;
-}
-
-#registrationExpiryDisplay {
-    font-size: 0.9em;
     color: #888;
-    margin-top: 5px;
 }
 
-/* 使用者管理區塊 */
-#userList {
-    width: 100%;
-    max-height: 300px;
-    overflow-y: auto;
+/* 用戶列表 */
+#userListSection {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 15px;
+    background-color: #f8f8f8;
+    border-radius: 10px;
     border: 1px solid #eee;
-    border-radius: 8px;
-    padding: 10px;
-    background-color: #fefefe;
     box-shadow: inset 0 1px 3px rgba(0,0,0,0.05);
+    max-height: 250px; /* 限制高度 */
+    overflow-y: auto; /* 垂直滾動 */
+}
+
+#userListSection h3 {
+    margin: 0 0 10px 0;
+    color: #555;
+    font-size: 18px;
+}
+
+#userList {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
 }
 
 .user-card {
-    display: flex;
-    flex-direction: column;
-    padding: 10px;
-    margin-bottom: 8px;
-    background-color: #f9f9f9;
-    border: 1px solid #e0e0e0;
+    background-color: #fff;
+    border: 1px solid #ddd;
     border-radius: 8px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.07);
-}
-
-.user-card:last-child {
-    margin-bottom: 0;
-}
-
-.user-card-row-1, .user-card-row-2 {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 10px;
-    margin-bottom: 5px;
-}
-.user-card-row-1 {
-    margin-bottom: 10px;
-    padding-bottom: 5px;
-    border-bottom: 1px dashed #eee;
-}
-
-.user-card-row-2 {
-    margin-bottom: 0;
-}
-
-.user-name {
-    font-weight: 600;
-    color: #333;
-    flex-shrink: 0;
-    max-width: calc(60% - 10px);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.user-email {
-    font-size: 0.9em;
-    color: #666;
-    flex-grow: 1;
-    text-align: right;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.user-role-display {
-    font-size: 0.9em;
-    font-weight: 500;
-    padding: 4px 8px;
-    border-radius: 5px;
-    background-color: #e7f3ff;
-    color: #007bff;
-    white-space: nowrap;
-    flex-shrink: 0;
-}
-
-.user-card-row-2 .user-role-area {
+    padding: 10px;
     display: flex;
     flex-direction: column;
     gap: 5px;
-    flex-grow: 1;
-    max-width: calc(40% - 10px);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+
+.user-card-row-1 {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 14px;
+    color: #666;
+}
+
+.user-card-row-1 .user-id {
+    font-weight: 500;
+    color: #333;
+    word-break: break-all; /* 允許長ID斷行 */
+    flex-grow: 1; /* 讓ID佔用更多空間 */
+    margin-right: 10px;
+}
+
+.user-card-row-1 .user-email {
+    font-size: 0.85em;
+    color: #888;
+    word-break: break-all;
+    flex-shrink: 0;
+}
+
+.user-card-row-2 {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 14px;
+    flex-wrap: wrap; /* 允許換行 */
+}
+
+.user-card-row-2 .user-role-label {
+    color: #555;
+    flex-shrink: 0;
+    min-width: 80px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -489,12 +460,14 @@ body {
     flex-shrink: 0;
     background-color: #007bff; /* 藍色 */
     color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
 }
 .user-card-row-2 .change-role-btn:hover {
     background-color: #0056b3;
 }
-
-/* 刪除按鈕樣式 */
 .user-card-row-2 .delete-user-btn {
     padding: 6px 10px;
     font-size: 14px;
@@ -502,167 +475,285 @@ body {
     flex-shrink: 0;
     background-color: #dc3545; /* 紅色 */
     color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
 }
 .user-card-row-2 .delete-user-btn:hover {
     background-color: #c82333;
 }
 
-/* 訊息框樣式 */
+
+/* 訊息模態框 */
 .message-box-overlay, .registration-modal-overlay, .confirmation-modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: rgba(0, 0, 0, 0.6);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 2000; /* 確保在最上層 */
-  opacity: 0;
-  visibility: hidden;
-  transition: opacity 0.3s ease, visibility 0.3s ease;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.6);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 2000; /* 確保在最上層 */
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.3s ease, visibility 0.3s ease;
 }
 
 .message-box-overlay.visible, .registration-modal-overlay.visible, .confirmation-modal-overlay.visible {
-  opacity: 1;
-  visibility: visible;
+    opacity: 1;
+    visibility: visible;
 }
 
 .message-box-content, .registration-modal-content, .confirmation-modal-content {
-  background: #ffffff;
-  padding: 25px;
-  border-radius: 12px;
-  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.25);
-  text-align: center;
-  max-width: 400px;
-  width: 90%;
-  transform: translateY(-20px);
-  transition: transform 0.3s ease;
+    background-color: white;
+    padding: 25px;
+    border-radius: 12px;
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+    text-align: center;
+    max-width: 400px;
+    width: 90%;
+    transform: translateY(-20px);
+    opacity: 0;
+    transition: transform 0.3s ease, opacity 0.3s ease;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
 }
 
 .message-box-overlay.visible .message-box-content,
 .registration-modal-overlay.visible .registration-modal-content,
 .confirmation-modal-overlay.visible .confirmation-modal-content {
-  transform: translateY(0);
+    transform: translateY(0);
+    opacity: 1;
 }
 
 .message-box-content h3, .registration-modal-content h3, .confirmation-modal-content h3 {
-  color: #333;
-  margin-top: 0;
-  margin-bottom: 15px;
-  font-size: 22px;
+    margin-top: 0;
+    color: #333;
+    font-size: 22px;
+    font-weight: 600;
 }
 
 .message-box-content p, .registration-modal-content p, .confirmation-modal-content p {
-  color: #555;
-  margin-bottom: 20px;
-  line-height: 1.6;
+    margin-bottom: 0;
+    color: #555;
+    font-size: 16px;
+    line-height: 1.5;
 }
 
-.message-box-content button, .registration-modal-content button, .confirmation-modal-content button {
-  padding: 10px 25px;
-  border: none;
-  border-radius: 8px;
-  background-color: #2193b0;
-  color: white;
-  font-size: 16px;
-  cursor: pointer;
-  transition: background-color 0.3s ease;
+.registration-code-input-group {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    align-items: center;
 }
 
-.message-box-content button:hover, .registration-modal-content button:hover, .confirmation-modal-content button:hover {
-  background-color: #1a7a92;
+.registration-code-input-group label {
+    font-weight: 600;
+    color: #444;
 }
 
-/* 註冊碼模態框特定樣式 */
-.registration-modal-content input[type="text"] {
+.registration-code-input-group input[type="text"] {
     width: calc(100% - 20px);
     padding: 10px;
-    margin-bottom: 15px;
     border: 1px solid #ccc;
-    border-radius: 6px;
+    border-radius: 8px;
     font-size: 16px;
+    text-align: center;
     box-sizing: border-box;
 }
 
-.registration-modal-content .button-group, .confirmation-modal-content .button-group {
+.message-box-content .button-group, .registration-modal-content .button-group, .confirmation-modal-content .button-group {
     display: flex;
     justify-content: center;
     gap: 15px;
     margin-top: 10px;
 }
 
-.registration-modal-content .action-buttons, .confirmation-modal-content .action-buttons {
-    min-width: 80px;
+.message-box-content .action-buttons, .registration-modal-content .action-buttons, .confirmation-modal-content .action-buttons {
+    padding: 10px 25px;
+    font-size: 16px;
 }
 
-.registration-modal-content #cancelRegistrationCodeBtn, .confirmation-modal-content #confirmNoBtn {
-    background-color: #6c757d;
-}
-.registration-modal-content #cancelRegistrationCodeBtn:hover, .confirmation-modal-content #confirmNoBtn:hover {
-    background-color: #5a6268;
-}
-
-.registration-modal-content #registrationModalMessage.countdown {
-    color: #e62f01; /* Red color for countdown */
+.countdown {
+    color: #007bff !important; /* 藍色，強調計時 */
     font-weight: bold;
 }
 
-/* 地圖上標籤和導航按鈕的樣式 */
-.marker-label {
-    background-color: rgba(255, 255, 255, 0.85);
-    border: 1px solid #ccc;
-    border-radius: 5px;
-    padding: 3px 8px;
-    font-size: 12px;
-    font-weight: bold;
-    color: #333; /* 黑色文字 */
-    white-space: nowrap;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-    /* 將 transform 移到 JS 計算，或根據 anchor 調整 */
-    pointer-events: none; /* 讓點擊穿透到下面的地圖或標記 */
-}
-
-.nav-button-icon {
+/* Leaflet 自定義控制項樣式 */
+.leaflet-control-locate-me a {
+    font-size: 24px; /* Material icon 大小 */
+    line-height: 30px; /* 垂直居中 */
     display: flex;
     justify-content: center;
     align-items: center;
-    width: 50px; /* 圖標的寬度 */
-    height: 50px; /* 圖標的高度 */
+    color: #333;
+    text-decoration: none;
+    width: 30px;
+    height: 30px;
+}
+
+.leaflet-control-locate-me a:hover {
+    color: #007bff;
+}
+
+/* KML Marker 自定義圖標樣式 */
+.custom-div-icon {
+    background-color: transparent;
+    border: none;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    position: relative;
+    width: 30px;
+    height: 42px;
+    pointer-events: none; /* 讓點擊事件穿透到下層的 Leaflet 標記 */
+}
+
+.custom-div-icon .marker-pin {
+    width: 15px;
+    height: 15px;
     border-radius: 50%;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    background-color: #f00; /* 紅色點 */
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    box-shadow: 0 0 0 4px rgba(255, 0, 0, 0.3);
+}
+
+.custom-div-icon .material-symbols-outlined {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    color: #f00; /* 紅色圖標 */
+    font-size: 24px;
+    pointer-events: none; /* 讓點擊事件穿透 */
+}
+
+/* Marker Label 樣式 */
+.marker-label {
+    background-color: transparent;
+    border: none;
+}
+
+.marker-label-text {
+    background-color: rgba(255, 255, 255, 0.85);
+    padding: 3px 8px;
+    border-radius: 5px;
+    border: 1px solid #ccc;
+    font-size: 12px;
+    white-space: nowrap;
+    color: #333;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    transform: translateX(-50%); /* 水平居中 */
+}
+
+/* 導航按鈕樣式 */
+.nav-button-icon {
+    background-color: transparent;
+    border: none;
+}
+
+.nav-button-content {
+    background-color: #28a745; /* 綠色 */
+    border-radius: 50%;
+    width: 50px;
+    height: 50px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.2);
     cursor: pointer;
-    transition: all 0.2s ease;
-    /* transform: translateX(-50%); /* 居中按鈕 */ /* 移除，由 JS 的 iconAnchor 控制 */
+    transition: background-color 0.3s ease, transform 0.2s ease;
+}
+
+.nav-button-content:hover {
+    background-color: #218838;
+    transform: scale(1.05);
 }
 
 .nav-button-content img {
-    width: 100%;
-    height: 100%;
-    object-fit: contain;
+    width: 30px;
+    height: 30px;
+    filter: invert(100%); /* 讓圖片變白 */
 }
 
-.nav-button-icon:hover {
-    transform: scale(1.1); /* 移除 translateX(-50%) */
-    box-shadow: 0 4px 8px rgba(0,0,0,0.3);
-}
-
-/* 針對 Google My Maps 圓點樣式 */
-.custom-div-icon {
-    background: none;
+/* 用戶定位標記樣式 */
+.user-location-marker {
+    background-color: transparent;
     border: none;
     display: flex;
     justify-content: center;
     align-items: center;
 }
 
-.custom-dot-icon {
-    width: 18px;
-    height: 18px;
-    border-radius: 50%;
-    border: 2px solid #fff; /* 白色邊框 */
-    box-shadow: 0 1px 3px rgba(0,0,0,0.4);
-    transform: translate(-50%, -50%); /* 確保圓點中心與經緯度對齊 */
-    background-color: #e74c3c; /* 紅點 */
+/* 響應式設計 */
+@media (max-width: 768px) {
+    #title {
+        font-size: 20px;
+        padding: 10px;
+    }
+
+    #editButton {
+        padding: 6px 10px;
+        font-size: 14px;
+    }
+
+    #controls, #authSection {
+        top: 10px;
+        left: 10px;
+        right: 10px; /* 在小螢幕上讓面板佔滿寬度 */
+        max-width: none;
+        width: auto; /* 恢復自動寬度 */
+        padding: 10px;
+    }
+
+    #searchResults {
+        /* 在小螢幕上調整為兩欄或一欄 */
+        grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); /* 響應式列數 */
+        max-height: 200px;
+    }
+
+    .search-result-item {
+        font-size: 13px;
+        padding: 6px 8px;
+    }
+
+    .message-box-content, .registration-modal-content, .confirmation-modal-content {
+        padding: 15px;
+        width: 95%;
+    }
+
+    .message-box-content h3, .registration-modal-content h3, .confirmation-modal-content h3 {
+        font-size: 20px;
+    }
+
+    .message-box-content p, .registration-modal-content p, .confirmation-modal-content p {
+        font-size: 14px;
+    }
+
+    .message-box-content .action-buttons, .registration-modal-content .action-buttons, .confirmation-modal-content .action-buttons {
+        padding: 8px 18px;
+        font-size: 14px;
+    }
+
+    .user-card-row-2 {
+        flex-direction: column; /* 在小螢幕上垂直排列 */
+        align-items: flex-start;
+        gap: 8px;
+    }
+    .user-card-row-2 .user-role-controls,
+    .user-card-row-2 .user-actions {
+        width: 100%; /* 佔滿整行 */
+        justify-content: flex-start;
+    }
 }
