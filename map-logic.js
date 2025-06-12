@@ -15,6 +15,7 @@ document.addEventListener('DOMContentLoaded', () => {
     map = L.map('map', { zoomControl: false }).setView([23.6, 120.9], 8); // 台灣中心經緯度，禁用預設縮放控制
 
     // 將 markerLabelsGroup 和 navButtonsGroup 添加到地圖
+    // 注意：這裡將 Group 添加到地圖，而不是直接將單個圖層添加到地圖
     markerLabelsGroup.addTo(map);
     navButtonsGroup.addTo(map);
 
@@ -37,9 +38,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // 預設將 'Google 街道圖' 添加到地圖
     baseLayers['Google 街道圖'].addTo(map);
 
-    // 添加自定義縮放控制 (加號和減號按鈕，放置在右上角)
+    // 將縮放控制添加到地圖的右上角
     L.control.zoom({
-        position: 'topright'
+        position: 'topright' // 從 'topleft' 改為 'topright'
     }).addTo(map);
 
     // 自定義定位控制項
@@ -51,72 +52,102 @@ document.addEventListener('DOMContentLoaded', () => {
             const container = L.DomUtil.create('div', 'leaflet-bar leaflet-control leaflet-control-locate-me');
             const button = L.DomUtil.create('a', '', container);
             button.href = "#";
-            button.title = "定位到我的位置";
-            button.role = "button";
-            button.innerHTML = '<span class="material-symbols-outlined">my_location</span>';
+            button.title = "顯示我的位置";
+            button.setAttribute("role", "button");
+            button.setAttribute("aria-label", "顯示我的位置");
+            button.innerHTML = `<span class="material-symbols-outlined" style="font-size: 24px; line-height: 30px;">my_location</span>`;
 
-            L.DomEvent.on(button, 'click', (e) => {
-                L.DomEvent.stopPropagation(e);
-                map.locate({ setView: true, maxZoom: 16, enableHighAccuracy: true });
-            });
+            L.DomEvent.on(button, 'click', this._locateUser, this);
 
-            map.on('locationfound', (e) => {
-                const radius = e.accuracy / 2;
-                if (this._userLocationMarker) {
-                    this._userLocationMarker.setLatLng(e.latlng);
-                    this._userLocationCircle.setLatLng(e.latlng).setRadius(radius);
-                } else {
-                    this._userLocationMarker = L.marker(e.latlng).addTo(map)
-                        .bindPopup(`你距離這裡約 ${radius.toFixed(0)} 公尺`).openPopup();
-                    this._userLocationCircle = L.circle(e.latlng, radius).addTo(map);
-                }
-                console.log(`定位成功：緯度 ${e.latlng.lat}, 經度 ${e.latlng.lng}, 精度 ${e.accuracy} 公尺`);
-                window.showMessage('定位成功', `已定位到您的位置，精度約 ${e.accuracy.toFixed(0)} 公尺。`);
-            });
+            // 為地理定位成功/失敗事件添加監聽器
+            map.on('locationfound', this._onLocationFound, this);
+            map.on('locationerror', this._onLocationError, this);
 
-            map.on('locationerror', (e) => {
-                console.error("定位失敗:", e.message);
-                window.showMessage('定位失敗', `無法獲取您的位置：${e.message}`);
-                if (this._userLocationMarker) {
-                    map.removeLayer(this._userLocationMarker);
-                    this._userLocationMarker = null;
-                }
-                if (this._userLocationCircle) {
-                    map.removeLayer(this._userLocationCircle);
-                    this._userLocationCircle = null;
-                }
-            });
             return container;
         },
+
         onRemove: function(map) {
-            map.off('locationfound');
-            map.off('locationerror');
+            map.off('locationfound', this._onLocationFound, this);
+            map.off('locationerror', this._onLocationError, this);
+            this._clearLocationMarkers();
+        },
+
+        _locateUser: function(e) {
+            L.DomEvent.stopPropagation(e);
+            L.DomEvent.preventDefault(e);
+
+            this._clearLocationMarkers();
+
+            // 開始定位用戶位置
+            map.locate({
+                setView: true,
+                maxZoom: 16,
+                enableHighAccuracy: true,
+                watch: false
+            });
+            window.showMessage('定位中', '正在獲取您的位置...');
+        },
+
+        _onLocationFound: function(e) {
+            this._clearLocationMarkers();
+
+            const radius = e.accuracy / 2;
+
+            this._userLocationMarker = L.marker(e.latlng, {
+                icon: L.divIcon({
+                    className: 'user-location-dot',
+                    iconSize: [16, 16],
+                    iconAnchor: [8, 8]
+                })
+            }).addTo(map);
+
+            this._userLocationCircle = L.circle(e.latlng, radius, {
+                color: '#1a73e8',
+                fillColor: '#1a73e8',
+                fillOpacity: 0.15,
+                weight: 2
+            }).addTo(map);
+
+            window.showMessage('定位成功', `您的位置已定位，誤差約 ${radius.toFixed(0)} 公尺。`);
+        },
+
+        _onLocationError: function(e) {
+            this._clearLocationMarkers();
+            window.showMessage('定位失敗', `無法獲取您的位置: ${e.message}`);
+            console.error('Geolocation error:', e.message);
+        },
+
+        _clearLocationMarkers: function() {
             if (this._userLocationMarker) {
                 map.removeLayer(this._userLocationMarker);
+                this._userLocationMarker = null;
             }
             if (this._userLocationCircle) {
                 map.removeLayer(this._userLocationCircle);
+                this._userLocationCircle = null;
             }
         }
     });
-    L.control.locateMe = function(opts) {
-        return new LocateMeControl(opts);
-    };
-    L.control.locateMe({position: 'topright'}).addTo(map);
 
-    // 將基本圖層控制添加到地圖 (放置在定位按鈕下方，右上角)
-    L.control.layers(baseLayers, null, { position: 'topright' }).addTo(map);
+    // 將自定義定位控制項添加到地圖的右上角
+    new LocateMeControl({ position: 'topright' }).addTo(map); // 從 'topleft' 改為 'topright'
 
+    // 將基本圖層控制添加到地圖的右上角 (放置在定位按鈕下方)
+    L.control.layers(baseLayers, null, {
+        position: 'topright' // 從 'topleft' 改為 'topright'
+    }).addTo(map);
 
     // 處理地圖點擊事件，隱藏搜尋結果和導航按鈕
     map.on('click', () => {
         const searchResults = document.getElementById('searchResults');
-        const searchContainer = document.getElementById('searchContainer');
+        const searchContainer = document.getElementById('searchContainer'); // 獲取搜尋容器
         if (searchResults) {
             searchResults.style.display = 'none';
+            searchContainer.classList.remove('search-active'); // 移除活躍狀態類別
         }
-        if (searchContainer) {
-            searchContainer.classList.remove('search-active');
+        const searchBox = document.getElementById('searchBox');
+        if (searchBox) {
+            searchBox.value = '';
         }
         navButtonsGroup.clearLayers(); // 清除導航按鈕
         console.log("地圖點擊事件：隱藏搜尋結果和導航按鈕。");
