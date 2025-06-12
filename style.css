@@ -576,41 +576,21 @@ body {
     font-size: 20px;
 }
 
-/* Leaflet 圖層控制面板的展開/收起按鈕樣式 */
-/* 複製定位按鈕的樣式，並移除預設背景圖 */
-.leaflet-control-layers-toggle {
+.leaflet-control-layers {
+    width: 30px;
+    height: 30px;
     background-color: #fff;
-    border-radius: 4px; /* 與定位按鈕一致 */
+    border-radius: 4px;
     box-shadow: 0 1px 5px rgba(0,0,0,0.65);
-    padding: 0; /* 確保沒有額外內邊距 */
-    cursor: pointer;
-    text-align: center;
-    width: 30px; /* 設置按鈕寬度 */
-    height: 30px; /* 設置按鈕高度 */
-    display: flex; /* 使用 flex 佈局來居中內容 */
-    justify-content: center;
-    align-items: center;
-    transition: background-color 0.2s, box-shadow 0.2s;
-    background-image: none; /* 移除 Leaflet 預設的背景圖片 */
-    box-sizing: border-box; /* 確保寬高包含 padding 和 border */
-}
-
-.leaflet-control-layers-toggle:hover {
-    background-color: #f4f4f4; /* 保持與定位按鈕一致的 hover 背景色 */
-    box-shadow: 0 1px 5px rgba(0,0,0,0.8); /* 保持與定位按鈕一致的 hover 陰影 */
-}
-
-/* 調整圖層控制按鈕內部的 Material Symbols 圖標樣式 */
-/* 如果您沒有在 JS 中明確設置圖標，這部分 CSS 不會生效 */
-.leaflet-control-layers-toggle .material-symbols-outlined {
-    font-size: 24px; /* 確保圖標大小 */
-    line-height: 1; /* 調整行高以垂直居中 */
     display: flex;
-    align-items: center;
     justify-content: center;
-    width: 100%;
-    height: 100%;
-    color: #333; /* 確保圖標顏色 */
+    align-items: center;
+    cursor: pointer;
+}
+
+.leaflet-control-layers-expanded {
+    width: auto !important;
+    height: auto !important;
 }
 
 /* 用戶位置點樣式 (脈衝動畫) */

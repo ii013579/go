@@ -123,12 +123,7 @@ document.addEventListener('DOMContentLoaded', () => {
     new LocateMeControl({ position: 'topright' }).addTo(map);
 
     // 將基本圖層控制添加到地圖的右上角
-    const layerControl = L.control.layers(baseLayers, null, {
-        position: 'topright',
-        collapsed: true, // 保持預設收起
-    // 這裡添加 Material Symbols 圖標的 HTML
-        icon: '<span class="material-symbols-outlined">layers</span>' // 或者您喜歡的其他圖標，例如 'map'
-     }).addTo(map);
+    const layerControl = L.control.layers(baseLayers, null, { position: 'topright' }).addTo(map);
 
     // 監聽基本圖層變更事件，並在變更後自動隱藏圖層控制面板
     map.on('baselayerchange', function (e) {
