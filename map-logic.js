@@ -11,7 +11,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // 初始化地圖
     map = L.map('map', { zoomControl: false }).setView([23.6, 120.9], 8); // 台灣中心經緯度，禁用預設縮放控制
 
-    // 定義基本圖層 - 為了實現圖層切換功能，將其重新引入
+    // 定義基本圖層
     const baseLayers = {
         'Google 街道圖': L.tileLayer('https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {
             attribution: 'Google Maps'
@@ -27,11 +27,11 @@ document.addEventListener('DOMContentLoaded', () => {
         })
     };
 
-    // 預設將 'Google 街道圖' 添加到地圖 (取代原始的 OpenStreetMap 預設添加)
+    // 預設將 'Google 街道圖' 添加到地圖
     baseLayers['Google 街道圖'].addTo(map);
 
     // 將縮放控制添加到地圖的右上角
-    L.control.zoom({ position: 'topright' }).addTo(map); // 修改位置為 'topright'
+    L.control.zoom({ position: 'topright' }).addTo(map);
 
     // 自定義定位控制項
     const LocateMeControl = L.Control.extend({
@@ -120,12 +120,23 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // 將自定義定位控制項添加到地圖的右上角
-    new LocateMeControl({ position: 'topright' }).addTo(map); // 修改位置為 'topright'
+    new LocateMeControl({ position: 'topright' }).addTo(map);
 
-    // 將基本圖層控制添加到地圖的右上角 (放置在定位按鈕下方)
-    L.control.layers(baseLayers, null, { position: 'topright' }).addTo(map); // 添加圖層控制並設定位置
+    // 將基本圖層控制添加到地圖的右上角
+    const layerControl = L.control.layers(baseLayers, null, { position: 'topright' }).addTo(map);
 
-    // 將 markers 和 navButtons 添加到地圖 (原始位置)
+    // 監聽基本圖層變更事件，並在變更後自動隱藏圖層控制面板
+    map.on('baselayerchange', function (e) {
+        console.log("基本圖層已變更:", e.name);
+        const controlContainer = layerControl.getContainer();
+        if (controlContainer && controlContainer.classList.contains('leaflet-control-layers-expanded')) {
+            // 移除 'leaflet-control-layers-expanded' 類別來收起控制面板
+            controlContainer.classList.remove('leaflet-control-layers-expanded');
+            console.log("圖層控制面板已自動收起。");
+        }
+    });
+
+    // 將 markers 和 navButtons 添加到地圖
     markers.addTo(map);
     navButtons.addTo(map);
 
@@ -135,7 +146,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (!featuresToDisplay || featuresToDisplay.length === 0) {
             console.log("沒有 features 可顯示。");
-            window.showMessage('載入警示', 'KML 圖層載入完成但未發現有效地圖元素。'); // 新增警告訊息
+            window.showMessage('載入警示', 'KML 圖層載入完成但未發現有效地圖元素。');
             return;
         }
         console.log(`正在將 ${featuresToDisplay.length} 個 features 添加到地圖。`);
@@ -225,7 +236,6 @@ document.addEventListener('DOMContentLoaded', () => {
             // 如果有 features 但沒有一個被添加到地圖 (例如，所有都是不支援的類型)
             console.warn("KML features 已載入，但地圖上沒有可顯示的幾何類型。請檢查控制台日誌以獲取詳細資訊。");
         }
-        window.showMessage('載入成功', `KML 圖層已成功載入並顯示。`); // 新增成功訊息
     };
 
     // 全局函數：從 Firestore 載入 KML 圖層 (保留原版 logic，僅為了讓 auth-kml-management.js 找到)
