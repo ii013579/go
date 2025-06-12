@@ -1,4 +1,4 @@
-// map-logic.js
+// map-logic.js v1.2.3
 
 let map;
 let baseLayers;
@@ -134,8 +134,14 @@ document.addEventListener('DOMContentLoaded', () => {
                         });
                     }
                 }
-                // 預設返回 Marker
-                return L.marker(latlng);
+                // 預設返回帶有紅色圓點的 Marker
+                const defaultDotIcon = L.divIcon({
+                    className: 'custom-div-icon',
+                    html: `<div class="custom-dot-icon" style="background-color: #e74c3c;"></div>`, // 預設紅色
+                    iconSize: [18, 18],
+                    iconAnchor: [9, 9]
+                });
+                return L.marker(latlng, { icon: defaultDotIcon });
             },
             onEachFeature: function (feature, layer) {
                 let popupContent = '';
@@ -153,41 +159,53 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                     
                     if (feature.geometry.type === 'Point') {
-                        // 在點擊時才顯示導航按鈕和文字標籤
+                        const latlng = layer.getLatLng();
+
+                        // 創建文字標籤 (黑色文字), 立即顯示
+                        // 偏移量以避免與圓點重疊，並使其位於圓點上方
+                        const labelOffsetLat = latlng.lat;
+                        const labelOffsetLon = latlng.lng + 0.00015; // 輕微向右偏移，如舊版所示
+                        const labelLatLng = L.latLng(labelOffsetLat, labelOffsetLon);
+
+                        const markerLabel = L.marker(labelLatLng, {
+                            icon: L.divIcon({
+                                className: 'marker-label',
+                                html: `<span>${name}</span>`,
+                                iconSize: [null, null], // 讓尺寸根據內容自動調整
+                                iconAnchor: [0, 0] // 相對於左上角，需要配合 CSS 調整位置
+                            }),
+                            interactive: false // 標籤不可互動
+                        }).addTo(markerLabelsGroup);
+
+                        // 在點擊時才顯示導航按鈕
                         layer.on('click', (e) => {
                             L.DomEvent.stopPropagation(e); // 阻止事件冒泡到地圖，避免關閉按鈕
                             
-                            // 清除所有舊的導航按鈕和標籤
+                            // 清除所有舊的導航按鈕 (標籤不會被清除，因為它們一直存在於 markerLabelsGroup 中)
                             navButtonsGroup.clearLayers();
-                            markerLabelsGroup.clearLayers();
 
-                            const latlng = layer.getLatLng();
+                            const clickedLatLng = layer.getLatLng(); // 獲取點擊點的經緯度
                             
-                            // 創建導航按鈕
+                            // 創建導航按鈕 (使用舊版程式碼的圖片和 anchor)
+                            const googleMapsUrl = `http://maps.google.com/maps?q=${clickedLatLng.lat},${clickedLatLng.lng}`;
+                            const buttonHtml = `
+                                <div class="nav-button-content" onclick="window.open('${googleMapsUrl}', '_blank'); event.stopPropagation();">
+                                    <img src="https://i0.wp.com/canadasafetycouncil.org/wp-content/uploads/2018/08/offroad.png" alt="導航" />
+                                </div>
+                            `;
                             const navButtonIcon = L.divIcon({
                                 className: 'nav-button-icon',
-                                html: `<div class="nav-button-content"><img src="https://maps.google.com/mapfiles/kml/shapes/arrow.png" alt="導航" /></div>`,
+                                html: buttonHtml,
                                 iconSize: [50, 50],
-                                iconAnchor: [25, 50] // 錨點在圖片底部中央
+                                iconAnchor: [25, 25] // 錨點在圖片中心，如舊版程式碼所示
                             });
-                            const navButton = L.marker(latlng, { icon: navButtonIcon }).addTo(navButtonsGroup);
-                            navButton.on('click', () => {
-                                window.open(`https://www.google.com/maps/dir/?api=1&destination=${latlng.lat},${latlng.lng}`, '_blank');
-                            });
-
-                            // 創建文字標籤 (黑色文字)
-                            const labelLatLng = L.latLng(latlng.lat, latlng.lng); // 標籤與點位同經緯度
-                            const markerLabel = L.marker(labelLatLng, {
-                                icon: L.divIcon({
-                                    className: 'marker-label',
-                                    html: `<span>${name}</span>`,
-                                    iconSize: [200, 30], // 預設大小，可調整
-                                    iconAnchor: [100, -10] // 調整位置，讓文字顯示在圖標上方
-                                }),
-                            }).addTo(markerLabelsGroup);
-
-                            map.setView(latlng, 16); // 縮放至點位
-                            console.log(`點擊點位: ${name}，顯示導航和標籤，縮放至地圖，級別: 16。`);
+                            const navButton = L.marker(clickedLatLng, {
+                                icon: navButtonIcon,
+                                interactive: true
+                            }).addTo(navButtonsGroup);
+                            
+                            map.setView(clickedLatLng, 16); // 縮放至點位
+                            console.log(`點擊點位: ${name}，顯示導航按鈕，縮放至地圖，級別: 16。`);
                         });
                     }
                 }
@@ -275,7 +293,6 @@ document.addEventListener('DOMContentLoaded', () => {
               item.addEventListener('click', () => {
                   const originalLatLng = L.latLng(lat, lon);
                   // 點擊搜尋結果時，模擬點擊該點位，觸發導航按鈕和標籤顯示
-                  // 需要找到對應的 Leaflet Marker 實例並觸發其 click 事件
                   map.eachLayer(function(layer) {
                       if (layer instanceof L.Marker && layer.getLatLng().equals(originalLatLng)) {
                           layer.fire('click'); // 觸發 Leaflet Marker 的 click 事件
@@ -307,6 +324,6 @@ document.addEventListener('DOMContentLoaded', () => {
           searchBox.value = '';
       }
       navButtonsGroup.clearLayers(); // 清除導航按鈕
-      markerLabelsGroup.clearLayers(); // 清除文字標籤
+      // 不清除 markerLabelsGroup，因為它們應該一直顯示
   });
 });

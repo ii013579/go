@@ -60,11 +60,10 @@ body {
   z-index: 1; /* 確保地圖在控制項下方 */
 }
 
-/* 控制面板樣式 - 更新為V1.0樣式，所有內容在一行 */
+/* 控制面板樣式 - 分為兩行顯示 */
 #controls {
     display: flex;
-    flex-direction: row; /* 讓子元素排成一行 */
-    flex-wrap: wrap; /* 允許換行在小螢幕上 */
+    flex-direction: column; /* 讓子元素垂直排列 */
     gap: 10px;
     padding: 10px;
     background-color: #ffffff;
@@ -72,16 +71,16 @@ body {
     box-shadow: 0 2px 4px rgba(0,0,0,0.05);
     z-index: 1000;
     position: relative; /* 為了讓 searchResults 可以相對於它定位 */
-    align-items: center; /* 垂直居中對齊 */
-    justify-content: space-between; /* 讓元素在兩端對齊，中間有間距 */
 }
 
-/* 將控制組件包裹在一個 div 內，以更好地控制佈局 */
-.control-group {
+/* 每個控制組件的行樣式 */
+.control-row {
     display: flex;
     align-items: center;
     gap: 10px;
-    flex-shrink: 0; /* 防止縮小 */
+    width: 100%; /* 確保行佔據所有可用寬度 */
+    flex-wrap: wrap; /* 允許內容在小螢幕上換行 */
+    justify-content: space-between; /* 元素在兩端對齊 */
 }
 
 /* 選擇資料庫圖層樣式 */
@@ -92,27 +91,22 @@ body {
     font-size: 16px;
     cursor: pointer;
     background-color: #f9f9f9;
-    /* 縮小寬度以符合手機使用 */
-    max-width: 150px; /* 設置最大寬度 */
-    width: 100%; /* 讓它在小於 max-width 時能佔滿可用空間 */
+    flex-grow: 1; /* 允許它佔據剩餘空間 */
+    max-width: 250px; /* 設置最大寬度，避免過寬 */
     box-sizing: border-box; /* 確保 padding 和 border 包含在寬度內 */
 }
 
 /* 針對小螢幕的調整 */
 @media (max-width: 768px) {
-    #controls {
-        flex-direction: column; /* 在小螢幕上垂直排列 */
-        align-items: stretch; /* 拉伸以佔滿寬度 */
-    }
-    .control-group {
-        width: 100%; /* 讓組件在小螢幕上佔滿寬度 */
-        justify-content: space-between; /* 保持組件內部的左右對齊 */
+    .control-row {
+        flex-direction: row; /* 保持單行排列，讓內容自行換行 */
+        justify-content: space-between;
     }
     #kmlLayerSelect {
-        max-width: none; /* 在小螢幕上取消最大寬度限制 */
+        max-width: calc(100% - 100px); /* 調整寬度以適應標籤，防止溢出 */
     }
-    #searchContainer {
-        width: 100%;
+    .control-row label {
+        flex-shrink: 0; /* 防止標籤縮小 */
     }
 }
 
@@ -626,7 +620,7 @@ body {
     color: #333; /* 黑色文字 */
     white-space: nowrap;
     box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-    transform: translateX(-50%); /* 居中標籤 */
+    /* 將 transform 移到 JS 計算，或根據 anchor 調整 */
     pointer-events: none; /* 讓點擊穿透到下面的地圖或標記 */
 }
 
@@ -636,13 +630,11 @@ body {
     align-items: center;
     width: 50px; /* 圖標的寬度 */
     height: 50px; /* 圖標的高度 */
-    /* background-color: rgba(255, 255, 255, 0.8); */
     border-radius: 50%;
-    /* border: 1px solid #bbb; */
     box-shadow: 0 2px 5px rgba(0,0,0,0.2);
     cursor: pointer;
     transition: all 0.2s ease;
-    transform: translateX(-50%); /* 居中按鈕 */
+    /* transform: translateX(-50%); /* 居中按鈕 */ /* 移除，由 JS 的 iconAnchor 控制 */
 }
 
 .nav-button-content img {
@@ -652,7 +644,7 @@ body {
 }
 
 .nav-button-icon:hover {
-    transform: translateX(-50%) scale(1.1);
+    transform: scale(1.1); /* 移除 translateX(-50%) */
     box-shadow: 0 4px 8px rgba(0,0,0,0.3);
 }
 
