@@ -140,9 +140,10 @@ document.addEventListener('DOMContentLoaded', () => {
     markers.addTo(map);
     navButtons.addTo(map);
 
-    // 全局函數：添加標記到地圖 (現在支援 Point, LineString, Polygon)
+    // 全局函數：添加標記到地圖 (現在支援 Point, LineString, Polygon, MultiLineString, MultiPolygon)
     window.addMarkers = function(featuresToDisplay) {
         markers.clearLayers(); // 清除現有標記
+        window.allKmlFeatures = []; // 清除之前的搜尋數據
 
         if (!featuresToDisplay || featuresToDisplay.length === 0) {
             console.log("沒有 features 可顯示。");
@@ -150,20 +151,25 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         console.log(`正在將 ${featuresToDisplay.length} 個 features 添加到地圖。`);
+
         featuresToDisplay.forEach(f => {
             const name = f.properties.name || '未命名';
-            const coordinates = f.geometry.coordinates;
+            const geometryType = f.geometry ? f.geometry.type : 'N/A';
+            const coordinates = f.geometry ? f.geometry.coordinates : null;
             let layer;
 
             if (!coordinates) {
-                console.warn(`跳過缺少座標的 feature: ${name} (類型: ${f.geometry.type || '未知'})`);
+                console.warn(`跳過缺少座標的 feature: ${name} (類型: ${geometryType})`);
                 return;
             }
 
-            if (f.geometry.type === 'Point') {
+            // 將 feature 儲存到全局變數，以便搜尋功能使用
+            window.allKmlFeatures.push(f);
+
+            if (geometryType === 'Point') {
                 const [lon, lat] = coordinates;
                 const latlng = L.latLng(lat, lon);
-                const labelLatLng = L.latLng(lat, lon + 0.00015);
+                const labelLatLng = L.latLng(lat, lon + 0.00015); // 微調標籤位置，避免與點重疊
 
                 // 自定義圓點圖標
                 const dotIcon = L.divIcon({
@@ -197,8 +203,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 markers.addLayer(label); // 為點添加標籤
                 console.log(`添加 Point: ${name} (Lat: ${latlng.lat}, Lng: ${latlng.lng})`);
 
-            } else if (f.geometry.type === 'LineString') {
-                // 將 [lon, lat] 陣列轉換為 L.LatLng 陣列以用於 LineString
+            } else if (geometryType === 'LineString') {
                 const latlngs = coordinates.map(coord => L.latLng(coord[1], coord[0]));
                 layer = L.polyline(latlngs, {
                     color: '#1a73e8', // 藍色
@@ -209,8 +214,22 @@ document.addEventListener('DOMContentLoaded', () => {
                 markers.addLayer(layer);
                 console.log(`添加 LineString: ${name} (${coordinates.length} 點)`);
 
-            } else if (f.geometry.type === 'Polygon') {
-                // 對於 Polygon，座標是 [ [[lon,lat],[lon,lat],...]] 用於外環
+            } else if (geometryType === 'MultiLineString') {
+                // MultiLineString 是一個陣列，包含多個 LineString 的座標陣列
+                const multiLatlngs = coordinates.map(line =>
+                    line.map(coord => L.latLng(coord[1], coord[0]))
+                );
+                layer = L.multiPolyline(multiLatlngs, {
+                    color: '#1a73e8', // 藍色
+                    weight: 4,
+                    opacity: 0.7
+                });
+                layer.bindPopup(`<b>${name}</b>`);
+                markers.addLayer(layer);
+                console.log(`添加 MultiLineString: ${name} (${coordinates.length} 條線段)`);
+
+            } else if (geometryType === 'Polygon') {
+                // 對於 Polygon，座標是 [[[lon,lat],[lon,lat],...]] 用於外環
                 // 並且可能包含內環。L.polygon 期望一個 LatLng 陣列的陣列。
                 const latlngs = coordinates[0].map(coord => L.latLng(coord[1], coord[0]));
                 layer = L.polygon(latlngs, {
@@ -223,8 +242,25 @@ document.addEventListener('DOMContentLoaded', () => {
                 markers.addLayer(layer);
                 console.log(`添加 Polygon: ${name} (${coordinates[0].length} 點)`);
 
+            } else if (geometryType === 'MultiPolygon') {
+                // MultiPolygon 是一個陣列，包含多個 Polygon 的座標陣列
+                const multiLatlngs = coordinates.map(polygon =>
+                    polygon.map(ring =>
+                        ring.map(coord => L.latLng(coord[1], coord[0]))
+                    )
+                );
+                layer = L.multiPolygon(multiLatlngs, {
+                    color: '#1a73e8', // 藍色邊框
+                    fillColor: '#6dd5ed', // 淺藍色填充
+                    fillOpacity: 0.3,
+                    weight: 2
+                });
+                layer.bindPopup(`<b>${name}</b>`);
+                markers.addLayer(layer);
+                console.log(`添加 MultiPolygon: ${name} (${coordinates.length} 個多邊形)`);
+
             } else {
-                console.warn(`跳過不支援的幾何類型: ${f.geometry.type} (名稱: ${name})`);
+                console.warn(`跳過不支援的幾何類型: ${geometryType} (名稱: ${name})`);
             }
         });
 
