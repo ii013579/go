@@ -470,7 +470,7 @@ select:focus {
     width: 40px;
     height: 40px;
     box-shadow: 0 2px 5px rgba(0,0,0,0.3);
-    display: flex !important; /* 強制顯示 */
+    display: flex; /* 確保顯示 */
     justify-content: center;
     align-items: center;
 }
@@ -491,9 +491,9 @@ select:focus {
 }
 
 .nav-button-icon {
-    background: none !important; /* 確保 Leaflet 不添加背景 */
-    border: none !important;     /* 確保 Leaflet 不添加邊框 */
-    box-shadow: none !important; /* 確保 Leaflet 不添加陰影 */
+    background: none; /* 確保 Leaflet 不添加背景 */
+    border: none;     /* 確保 Leaflet 不添加邊框 */
+    box-shadow: none; /* 確保 Leaflet 不添加陰影 */
 }
 .nav-button-content {
     display: flex;
@@ -529,7 +529,7 @@ select:focus {
 
 /* 針對右上方控制項的樣式 - 確保它們垂直堆疊顯示 */
 .leaflet-control-container .leaflet-top.leaflet-right {
-    display: flex !important; /* 強制確保容器是 flex 佈局 */
+    display: flex; /* 確保容器是 flex 佈局 */
     flex-direction: column; /* 讓控制項垂直堆疊 */
     align-items: flex-end; /* 右對齊 */
     gap: 8px; /* 控制項之間的間距 */
@@ -544,7 +544,7 @@ select:focus {
     border-radius: 8px;
     box-shadow: 0 2px 5px rgba(0,0,0,0.2);
     background-color: white;
-    display: block !important; /* 強制顯示 */
+    display: block; /* 確保顯示 */
 }
 
 /* 確保 Leaflet 縮放按鈕樣式 */
@@ -556,7 +556,7 @@ select:focus {
     color: #333;
     border-radius: 8px;
     background-color: white;
-    display: block !important; /* 強制顯示 */
+    display: block; /* 確保顯示 */
 }
 .leaflet-control-zoom a.leaflet-control-zoom-in {
     border-bottom-left-radius: 0;
@@ -577,7 +577,7 @@ select:focus {
     background-size: 24px 24px;
     background-position: center center;
     border-radius: 8px;
-    display: block !important; /* 強制顯示 */
+    display: block; /* 確保顯示 */
 }
 .leaflet-control-layers-expanded {
     padding: 10px;
