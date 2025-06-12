@@ -1,7 +1,7 @@
 // map-logic.js
 
 let map;
-// 用於儲存所有 KML 標記以便管理
+// 用於儲存所有 KML 標記、線條、多邊形以便管理
 let markerLabelsGroup = L.featureGroup();
 // 用於儲存導航按鈕
 let navButtonsGroup = L.featureGroup();
@@ -137,25 +137,26 @@ window.clearAllKmlLayers = () => {
 /**
  * 將 GeoJSON features 添加到地圖上，並更新全局搜尋數據。
  * 這個函數會在 auth-kml-management.js 中被調用，接收從 Firestore 獲取的 GeoJSON features。
- * @param {Array<Object>} geojsonFeatures - 從 Firestore 獲取的 GeoJSON features 陣列。
+ * @param {Array<Object>} featuresToDisplay - 從 Firestore 獲取的 GeoJSON features 陣列。
+ * 這些 features 應該是 GeoJSON Feature 物件，
+ * 包含 `geometry` 和 `properties`。
  */
-window.addMarkers = (geojsonFeatures) => {
+window.addMarkers = (featuresToDisplay) => {
     console.log("[Map Logic] addMarkers 被呼叫。");
     // 每次添加新圖層前，先清除舊的 KML 相關圖層和數據
     window.clearAllKmlLayers();
 
-    if (!geojsonFeatures || geojsonFeatures.length === 0) {
+    if (!featuresToDisplay || featuresToDisplay.length === 0) {
         console.warn("[Map Logic] 沒有 GeoJSON features 提供給 addMarkers，或者 GeoJSON 數據為空。");
         window.showMessage('載入警示', 'KML 圖層載入完成但未發現有效地圖元素。');
         return;
     }
 
     // 重新填充 window.allKmlFeatures，因為 clearAllKmlLayers 清空了它
-    // 這裡直接將 geojsonFeatures 賦值給 allKmlFeatures
-    window.allKmlFeatures = geojsonFeatures;
+    window.allKmlFeatures = featuresToDisplay;
 
     // 使用 L.geoJSON 添加 GeoJSON 圖層
-    L.geoJSON(geojsonFeatures, {
+    L.geoJSON(featuresToDisplay, {
         // 為每個 GeoJSON 點位創建一個 Leaflet 標記
         pointToLayer: function (feature, latlng) {
             const name = feature.properties.name || '未知地點';
