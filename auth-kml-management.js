@@ -22,736 +22,409 @@ document.addEventListener('DOMContentLoaded', () => {
     const registrationCodeDisplay = document.getElementById('registrationCodeDisplay');
     const registrationCodeCountdown = document.getElementById('registrationCodeCountdown');
     const registrationExpiryDisplay = document.getElementById('registrationExpiryDisplay');
-
-    const userManagementSection = document.getElementById('userManagementSection');
+    let registrationCodeTimer = null; // 用於儲存倒數計時器
     const refreshUsersBtn = document.getElementById('refreshUsersBtn');
-    const userListDiv = document.getElementById('userList');
+    const userList = document.getElementById('userList'); // 用戶列表容器
 
-    // 全局變數
-    window.currentUserRole = null;
-    let currentKmlLayers = [];
-    let registrationCodeTimer = null;
+    // 模態框相關元素
+    const registrationCodeModalOverlay = document.getElementById('registrationCodeModalOverlay');
+    const registrationCodeInput = document.getElementById('registrationCodeInput');
+    const nicknameInput = document.getElementById('nicknameInput');
+    const confirmRegistrationCodeBtn = document.getElementById('confirmRegistrationCodeBtn');
+    const cancelRegistrationCodeBtn = document.getElementById('cancelRegistrationCodeBtn');
+    const registrationModalMessage = document.getElementById('registrationModalMessage');
 
-    // 輔助函數：將角色英文轉換為中文
-    const getRoleDisplayName = (role) => {
-        switch (role) {
-            case 'unapproved': return '未審核';
-            case 'user': return '一般用戶';
-            case 'editor': return '編輯者';
-            case 'owner': return '擁有者';
-            default: return role;
+    // Firestore 和 Auth 實例已在 firebase-init.js 中初始化
+    const db = firebase.firestore();
+    const auth = firebase.auth();
+    const storage = firebase.storage();
+    const appId = typeof __app_id !== 'undefined' ? __app_id : firebaseConfig.projectId; // 確保使用正確的 appId
+
+    // 用戶角色相關變數
+    window.currentUserRole = 'guest'; // 預設為 guest
+
+    // --- 輔助函數 ---
+    const showMessageBox = window.showMessage; // 引入全局 showMessage 函數
+    const showConfirmationBox = window.showConfirmationBox; // 引入全局 showConfirmationBox 函數
+    const showRegistrationModal = window.showRegistrationModal; // 引入全局 showRegistrationModal 函數
+
+    // 清除 KML 圖層的輔助函數，直接調用 map-logic.js 中的全局函數
+    const clearAllKmlLayers = () => {
+        if (typeof window.clearAllKmlLayers === 'function') {
+            window.clearAllKmlLayers();
+        } else {
+            // 如果 window.clearAllKmlLayers 未定義，則嘗試使用 markerLabelsGroup 和 navButtonsGroup
+            // 這是一個備用方案，建議確保 map-logic.js 中的函數存在
+            console.warn("window.clearAllKmlLayers 函數未定義。嘗試直接清除地圖群組。");
+            if (window.markerLabelsGroup) window.markerLabelsGroup.clearLayers();
+            if (window.navButtonsGroup) window.navButtonsGroup.clearLayers();
+            window.allKmlFeatures = [];
         }
     };
 
-    // 輔助函數：定義角色排序
-    const roleOrder = {
-        'unapproved': 1,
-        'user': 2,
-        'editor': 3,
-        'owner': 4
+
+    // --- Firestore 路徑輔助函數 ---
+    const getUserDocRef = (uid) => {
+        return db.collection('artifacts').doc(appId).collection('users').doc(uid);
+    };
+    const getRegistrationCodeDocRef = (codeId = 'one-time-code') => {
+        return db.collection('artifacts').doc(appId).collection('public').doc('data').collection('registrationCodes').doc(codeId);
+    };
+    const getKmlLayerRef = (kmlId) => {
+        return db.collection('artifacts').doc(appId).collection('public').doc('data').collection('kmlLayers').doc(kmlId);
+    };
+    const getKmlFeaturesCollectionRef = (kmlId) => {
+        return getKmlLayerRef(kmlId).collection('features');
     };
 
-    // 輔助函數：更新 KML 圖層選單
-    const updateKmlLayerSelects = async () => {
+
+    // --- 身份驗證狀態監聽 ---
+    auth.onAuthStateChanged(async (user) => {
+        if (user) {
+            loggedInDashboard.style.display = 'block';
+            loginForm.style.display = 'none';
+            userEmailDisplay.textContent = `歡迎, ${user.email || user.uid}`;
+            loginMessage.textContent = ''; // 清除登入訊息
+
+            // 獲取用戶角色
+            await fetchUserRole(user.uid);
+            updateUiBasedOnRole();
+
+            // 載入可用的 KML 圖層列表
+            loadAvailableKmlLayers();
+
+        } else {
+            loggedInDashboard.style.display = 'none';
+            loginForm.style.display = 'block';
+            userEmailDisplay.textContent = '未登入';
+            window.currentUserRole = 'guest'; // 重置為 guest
+            updateUiBasedOnRole();
+            clearAllKmlLayers(); // 用戶登出時清除所有 KML 圖層
+
+            // 檢查是否需要顯示註冊碼模態框
+            const storedPrompted = sessionStorage.getItem('promptedForRegistration');
+            if (!storedPrompted) {
+                showRegistrationModal(async (result) => {
+                    sessionStorage.setItem('promptedForRegistration', 'true'); // 設置標誌
+                    if (result && result.code && result.nickname) {
+                        try {
+                            const codeDoc = await getRegistrationCodeDocRef(result.code).get();
+                            if (codeDoc.exists && !codeDoc.data().used) {
+                                // 嘗試匿名登入以獲取 uid
+                                const anonUserCred = await auth.signInAnonymously();
+                                const anonUid = anonUserCred.user.uid;
+
+                                // 更新註冊碼狀態為已使用，並記錄使用者的匿名 UID
+                                await getRegistrationCodeDocRef(result.code).update({
+                                    used: true,
+                                    usedBy: anonUid,
+                                    usedAt: firebase.firestore.FieldValue.serverTimestamp()
+                                });
+
+                                // 在 users 集合中創建新用戶文件
+                                await getUserDocRef(anonUid).set({
+                                    email: `anonymous-${anonUid.substring(0, 8)}@example.com`,
+                                    nickname: result.nickname,
+                                    role: 'member', // 新註冊用戶預設為 member
+                                    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                                    registeredWithCode: result.code
+                                });
+
+                                showMessageBox('註冊成功', `您的帳戶已註冊成功，角色為 'member'，您的暱稱是 ${result.nickname}。請重新登入。`);
+                                auth.signOut(); // 強制登出以重新觸發 onAuthStateChanged
+
+                            } else {
+                                showMessageBox('註冊失敗', '無效的註冊碼或註冊碼已使用。');
+                            }
+                        } catch (err) {
+                            console.error("註冊失敗:", err);
+                            showMessageBox('註冊失敗', `註冊過程中發生錯誤: ${err.message}`);
+                        }
+                    } else {
+                        // 用戶取消或時間到期，不執行任何操作
+                        showMessageBox('提示', '您取消了註冊或註冊碼已過期。');
+                    }
+                });
+            }
+        }
+    });
+
+
+    // --- 角色管理函數 ---
+    async function fetchUserRole(uid) {
+        try {
+            const userDoc = await getUserDocRef(uid).get();
+            if (userDoc.exists) {
+                window.currentUserRole = userDoc.data().role;
+                console.log("用戶角色:", window.currentUserRole);
+                if (userDoc.data().nickname) {
+                    userEmailDisplay.textContent = `歡迎, ${userDoc.data().nickname} (${userDoc.data().role})`;
+                } else {
+                    userEmailDisplay.textContent = `歡迎, ${userDoc.data().email || userDoc.id} (${userDoc.data().role})`;
+                }
+            } else {
+                // 如果用戶文檔不存在，可能是新登入的 Google 用戶，建立一個新的 member 角色
+                const isGoogleUser = auth.currentUser && auth.currentUser.providerData.some(provider => provider.providerId === 'google.com');
+                if (isGoogleUser) {
+                    await getUserDocRef(uid).set({
+                        email: auth.currentUser.email,
+                        nickname: auth.currentUser.displayName || '未設定暱稱',
+                        role: 'member', // Google 登入預設為 member
+                        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                    window.currentUserRole = 'member';
+                    console.log("新 Google 用戶註冊為 member 角色。");
+                    userEmailDisplay.textContent = `歡迎, ${auth.currentUser.displayName || auth.currentUser.email} (member)`;
+                } else {
+                    // 如果不是 Google 用戶且文檔不存在，則視為 guest
+                    window.currentUserRole = 'guest';
+                    userEmailDisplay.textContent = '未登入';
+                    console.log("用戶文檔不存在，設定為 guest 角色。");
+                }
+            }
+        } catch (error) {
+            console.error("獲取或設定用戶角色時出錯:", error);
+            window.currentUserRole = 'guest'; // 出錯時預設為 guest
+            showMessageBox('錯誤', `獲取用戶角色失敗: ${error.message}`);
+        }
+    }
+
+    function updateUiBasedOnRole() {
+        const isOwner = window.currentUserRole === 'owner';
+        const isMember = window.currentUserRole === 'member';
+
+        // 控制上傳 KML 區塊的顯示
+        uploadKmlSectionDashboard.style.display = (isOwner || isMember) ? 'block' : 'none';
+
+        // 控制刪除 KML 區塊的顯示
+        deleteKmlSectionDashboard.style.display = (isOwner || isMember) ? 'block' : 'none';
+
+        // 控制註冊碼設定區塊的顯示 (僅限 owner)
+        registrationSettingsSection.style.display = isOwner ? 'block' : 'none';
+    }
+
+
+    // --- KML 圖層管理 ---
+    async function loadAvailableKmlLayers() {
         const kmlLayerSelect = document.getElementById('kmlLayerSelect');
-        kmlLayerSelect.innerHTML = '<option value="">-- 請選擇 KML 圖層 --</option>';
         const kmlLayerSelectDashboard = document.getElementById('kmlLayerSelectDashboard');
-        kmlLayerSelectDashboard.innerHTML = '<option value="">-- 請選擇 KML 圖層 --</option>';
-        const deleteSelectedKmlBtn = document.getElementById('deleteSelectedKmlBtn');
-        if (deleteSelectedKmlBtn) deleteSelectedKmlBtn.disabled = true;
 
-        kmlLayerSelect.disabled = false;
-
-        const canEdit = (window.currentUserRole === 'owner' || window.currentUserRole === 'editor');
-
-        // 控制 KML 上傳和刪除區塊的顯示
-        if (uploadKmlSectionDashboard) {
-            uploadKmlSectionDashboard.style.display = canEdit ? 'flex' : 'none';
-        }
-        if (deleteKmlSectionDashboard) {
-            deleteKmlSectionDashboard.style.display = canEdit ? 'flex' : 'none';
-        }
-
-        if (kmlLayerSelectDashboard) kmlLayerSelectDashboard.disabled = !canEdit;
-        if (uploadKmlSubmitBtnDashboard) uploadKmlSubmitBtnDashboard.disabled = !canEdit;
-
+        // 清空現有選項
+        kmlLayerSelect.innerHTML = '<option value="">-- 請選擇 KML 圖層 --</option>';
+        kmlLayerSelectDashboard.innerHTML = '<option value="">-- 選擇要刪除的 KML 圖層 --</option>';
 
         try {
-            // IMPORTANT: 確保 Firebase 安全規則已正確設定，允許讀取以下路徑。
-            const kmlRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('kmlLayers');
-            let snapshot;
-
-            if (window.currentUserRole === 'editor' && auth.currentUser && auth.currentUser.email) {
-                snapshot = await kmlRef.where('uploadedBy', '==', auth.currentUser.email).get();
-            } else {
-                snapshot = await kmlRef.get();
-            }
-
-            currentKmlLayers = [];
+            const kmlLayersRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('kmlLayers');
+            const snapshot = await kmlLayersRef.get();
 
             if (snapshot.empty) {
-                console.log("沒有 KML 圖層資料。");
+                console.log("沒有可用的 KML 圖層。");
                 return;
             }
 
             snapshot.forEach(doc => {
                 const data = doc.data();
-                const kmlId = doc.id;
-                const kmlName = data.name || `KML_${kmlId.substring(0, 8)}`;
                 const option = document.createElement('option');
-                option.value = kmlId;
-                option.textContent = kmlName;
+                option.value = doc.id;
+                option.textContent = data.name || doc.id; // 顯示名稱，如果沒有則顯示 ID
                 kmlLayerSelect.appendChild(option);
 
-                const optionDashboard = document.createElement('option');
-                optionDashboard.value = kmlId;
-                optionDashboard.textContent = kmlName;
-                kmlLayerSelectDashboard.appendChild(optionDashboard);
-
-                currentKmlLayers.push({ id: kmlId, name: kmlName });
-            });
-
-            if (currentKmlLayers.length > 0) {
-                if (canEdit && deleteSelectedKmlBtn) {
-                    deleteSelectedKmlBtn.disabled = false;
+                // 如果是管理員，也添加到刪除下拉選單
+                if (window.currentUserRole === 'owner' || window.currentUserRole === 'member') {
+                    const dashboardOption = document.createElement('option');
+                    dashboardOption.value = doc.id;
+                    dashboardOption.textContent = data.name || doc.id;
+                    kmlLayerSelectDashboard.appendChild(dashboardOption);
                 }
-            }
-
-            kmlLayerSelect.removeEventListener('change', handleKmlLayerSelectChange);
-            kmlLayerSelect.addEventListener('change', handleKmlLayerSelectChange);
-
+            });
+            console.log("已載入所有可用的 KML 圖層列表。");
 
         } catch (error) {
-            console.error("更新 KML 圖層列表時出錯:", error);
-            showMessage('錯誤', '無法載入 KML 圖層列表。');
+            console.error("載入可用 KML 圖層時出錯:", error);
+            showMessageBox('錯誤', `載入 KML 圖層列表失敗: ${error.message}`);
         }
-    };
+    }
 
-    // KML 層選擇器變更處理函數
-    const handleKmlLayerSelectChange = (event) => {
-        const kmlId = event.target.value;
-        if (kmlId && typeof window.loadKmlLayerFromFirestore === 'function') {
-            window.loadKmlLayerFromFirestore(kmlId);
-        } else if (typeof window.clearAllKmlLayers === 'function') {
-            window.clearAllKmlLayers();
-        }
-    };
-
-    // 輔助函數：顯示自訂確認模態框
-    window.showConfirmationModal = function(title, message) {
-        return new Promise(resolve => {
-            const modalOverlay = document.getElementById('confirmationModalOverlay');
-            const modalTitle = document.getElementById('confirmationModalTitle');
-            const modalMessage = document.getElementById('confirmationModalMessage');
-            const confirmYesBtn = document.getElementById('confirmYesBtn');
-            const confirmNoBtn = document.getElementById('confirmNoBtn');
-
-            modalTitle.textContent = title;
-            modalMessage.textContent = message;
-            modalOverlay.classList.add('visible');
-
-            const cleanupAndResolve = (result) => {
-                modalOverlay.classList.remove('visible');
-                confirmYesBtn.removeEventListener('click', yesHandler);
-                confirmNoBtn.removeEventListener('click', noHandler);
-                resolve(result);
-            };
-
-            const yesHandler = () => cleanupAndResolve(true);
-            const noHandler = () => cleanupAndResolve(false);
-
-            confirmYesBtn.addEventListener('click', yesHandler);
-            confirmNoBtn.addEventListener('click', noHandler);
-        });
-    };
-
-    // 輔助函數：顯示用戶管理列表
-    const refreshUserList = async () => {
-        userListDiv.innerHTML = '載入中...';
-        try {
-            const usersRef = db.collection('users');
-            const snapshot = await usersRef.get();
-            userListDiv.innerHTML = '';
-
-            if (snapshot.empty) {
-                userListDiv.innerHTML = '<p>目前沒有註冊用戶。</p>';
-                return;
-            }
-
-            let usersData = [];
-            snapshot.forEach(doc => {
-                const user = doc.data();
-                const uid = doc.id;
-                if (uid !== auth.currentUser.uid) { // 不顯示當前登入用戶
-                    usersData.push({ id: uid, ...user });
-                }
-            });
-
-            // 根據定義的角色順序進行排序
-            usersData.sort((a, b) => {
-                const roleA = roleOrder[a.role] || 99; // 如果角色未定義，則給予一個較大的值
-                const roleB = roleOrder[b.role] || 99;
-                return roleA - roleB;
-            });
-
-
-            usersData.forEach(user => {
-                const uid = user.id;
-                const userCard = document.createElement('div');
-                userCard.className = 'user-card';
-                userCard.dataset.nickname = user.name || 'N/A';
-                userCard.dataset.uid = uid;
-
-                userCard.innerHTML = `
-                    <div class="user-card-row-1">
-                        <span class="user-email">Email: ${user.email || 'N/A'}</span>
-                        <span class="user-nickname">暱稱: ${user.name || 'N/A'}</span>
-                    </div>
-                    <div class="user-card-row-2">
-                        <div class="user-role-controls">
-                            <label for="role-select-${uid}">角色:</label>
-                            <select id="role-select-${uid}" data-uid="${uid}" data-original-value="${user.role}" class="user-role-select">
-                                <option value="unapproved" ${user.role === 'unapproved' ? 'selected' : ''}>${getRoleDisplayName('unapproved')}</option>
-                                <option value="user" ${user.role === 'user' ? 'selected' : ''}>${getRoleDisplayName('user')}</option>
-                                <option value="editor" ${user.role === 'editor' ? 'selected' : ''}>${getRoleDisplayName('editor')}</option>
-                                <option value="owner" ${user.role === 'owner' ? 'selected' : ''} ${window.currentUserRole !== 'owner' ? 'disabled' : ''}>${getRoleDisplayName('owner')}</option>
-                            </select>
-                        </div>
-                        <div class="user-actions">
-                            <button class="change-role-btn" data-uid="${uid}" disabled>變更</button>
-                            <button class="delete-user-btn action-buttons delete-btn" data-uid="${uid}">刪除</button>
-                        </div>
-                    </div>
-                `;
-                userListDiv.appendChild(userCard);
-            });
-
-            userListDiv.querySelectorAll('.user-role-select').forEach(select => {
-                select.dataset.originalValue = select.value;
-                const changeButton = select.closest('.user-card').querySelector('.change-role-btn');
-
-                select.addEventListener('change', (event) => {
-                    changeButton.disabled = (event.target.value === select.dataset.originalValue);
-                });
-
-                changeButton.addEventListener('click', async (event) => {
-                    const userCard = event.target.closest('.user-card');
-                    const uidToUpdate = userCard.dataset.uid;
-                    const nicknameToUpdate = userCard.dataset.nickname;
-                    const newRole = select.value;
-
-                    const confirmUpdate = await showConfirmationModal(
-                        '確認變更角色',
-                        `確定要將用戶 ${nicknameToUpdate} (${uidToUpdate.substring(0,6)}...) 的角色變更為 ${getRoleDisplayName(newRole)} 嗎？` +
-                        (newRole === 'owner' ? ' (此操作會賦予最高權限)' : '')
-                    );
-
-                    if (!confirmUpdate) {
-                        // 如果用戶取消，恢復選取狀態
-                        select.value = select.dataset.originalValue;
-                        changeButton.disabled = true;
-                        return;
-                    }
-
-                    try {
-                        await db.collection('users').doc(uidToUpdate).update({ role: newRole });
-                        showMessage('成功', `用戶 ${nicknameToUpdate} (${uidToUpdate.substring(0,6)}...) 的角色已更新為 ${getRoleDisplayName(newRole)}。`);
-                        select.dataset.originalValue = newRole;
-                        changeButton.disabled = true;
-                    } catch (error) {
-                        console.error("更新用戶角色時出錯:", error);
-                        showMessage('錯誤', `更新用戶角色失敗: ${error.message}`);
-                        select.value = select.dataset.originalValue;
-                        changeButton.disabled = true;
-                    }
-                });
-            });
-
-            userListDiv.querySelectorAll('.delete-user-btn').forEach(button => {
-                button.addEventListener('click', async (event) => {
-                    const userCard = event.target.closest('.user-card');
-                    const uidToDelete = userCard.dataset.uid;
-                    const nicknameToDelete = userCard.dataset.nickname;
-
-                    const confirmDelete = await showConfirmationModal(
-                        '確認刪除用戶',
-                        `確定要刪除用戶 ${nicknameToDelete} (${uidToDelete.substring(0,6)}...) 嗎？此操作不可逆！`
-                    );
-
-                    if (!confirmDelete) {
-                        return;
-                    }
-
-                    try {
-                        await db.collection('users').doc(uidToDelete).delete();
-                        showMessage('成功', `用戶 ${nicknameToDelete} (${uidToDelete.substring(0,6)}...) 已刪除。`); // 簡化訊息
-                        refreshUserList();
-                    } catch (error) {
-                        console.error("刪除用戶時出錯:", error);
-                        showMessage('錯誤', `刪除用戶失敗: ${error.message}`);
-                    }
-                });
-            });
-
-        } catch (error) {
-            console.error("載入用戶列表時出錯:", error);
-            userListDiv.innerHTML = `<p style="color: red;">載入用戶列表失敗: ${error.message}</p>`;
-        }
-    };
-
-
-    // Firestore 實時監聽器
-    auth.onAuthStateChanged(async (user) => {
-        if (user) {
-            loginForm.style.display = 'none';
-            loggedInDashboard.style.display = 'block';
-            // 顯示用戶郵箱和角色
-            userEmailDisplay.textContent = `${user.email} (${getRoleDisplayName(window.currentUserRole)})`;
-            userEmailDisplay.style.display = 'block';
-
-            db.collection('users').doc(user.uid).onSnapshot(async (doc) => {
-                if (doc.exists) {
-                    const userData = doc.data();
-                    window.currentUserRole = userData.role || 'unapproved';
-
-                    console.log("用戶角色:", window.currentUserRole);
-                    // 更新用戶郵箱和角色顯示
-                    userEmailDisplay.textContent = `${user.email} (${getRoleDisplayName(window.currentUserRole)})`;
-
-                    const canEdit = (window.currentUserRole === 'owner' || window.currentUserRole === 'editor');
-                    const isOwner = (window.currentUserRole === 'owner');
-
-                    // 控制 KML 上傳和刪除區塊的顯示
-                    if (uploadKmlSectionDashboard) {
-                        uploadKmlSectionDashboard.style.display = canEdit ? 'flex' : 'none';
-                    }
-                    if (deleteKmlSectionDashboard) {
-                        deleteKmlSectionDashboard.style.display = canEdit ? 'flex' : 'none';
-                    }
-
-                    uploadKmlSubmitBtnDashboard.disabled = !canEdit;
-                    deleteSelectedKmlBtn.disabled = !(canEdit && currentKmlLayers.length > 0);
-                    kmlLayerSelectDashboard.disabled = !canEdit;
-
-                    registrationSettingsSection.style.display = isOwner ? 'flex' : 'none'; 
-                    generateRegistrationCodeBtn.disabled = !isOwner;
-                    registrationCodeDisplay.style.display = 'inline-block'; 
-                    registrationCodeCountdown.style.display = 'inline-block'; 
-                    registrationExpiryDisplay.style.display = 'none';
-
-                    userManagementSection.style.display = isOwner ? 'block' : 'none';
-                    refreshUsersBtn.disabled = !isOwner;
-
-
-                    if (isOwner) {
-                        refreshUserList();
-                    }
-
-                    if (window.currentUserRole === 'unapproved') {
-                        showMessage('帳號審核中', '您的帳號正在等待管理員審核。在審核通過之前，您將無法上傳或刪除 KML。');
-                    }
-
-                    updateKmlLayerSelects();
-
-                } else {
-                    console.log("用戶數據不存在，為新註冊用戶創建預設數據。");
-                    auth.signOut();
-                    showMessage('帳號資料異常', '您的帳號資料有誤或已被移除，請重新登入或聯繫管理員。');
-                }
-            }, (error) => {
-                // 檢查是否為登出導致的權限錯誤，如果是則不顯示訊息
-                if (!auth.currentUser && error.code === 'permission-denied') {
-                    console.warn("因登出導致的權限錯誤，已忽略訊息。");
-                } else {
-                    console.error("監聽用戶角色時出錯:", error);
-                    showMessage('錯誤', `獲取用戶角色失敗: ${error.message}`);
-                    auth.signOut();
-                }
-            });
-
+    // 事件監聽器：選擇 KML 圖層
+    document.getElementById('kmlLayerSelect').addEventListener('change', (e) => {
+        const selectedKmlId = e.target.value;
+        if (selectedKmlId) {
+            // 調用 map-logic.js 中的函數來載入 KML 圖層
+            // 我們現在期望這個函數從 Firestore 加載數據並渲染 GeoJSON
+            window.loadKmlLayerFromFirestore(selectedKmlId);
         } else {
-            loginForm.style.display = 'block';
-            loggedInDashboard.style.display = 'none';
-            userEmailDisplay.textContent = '';
-            userEmailDisplay.style.display = 'none';
-            window.currentUserRole = null;
-            updateKmlLayerSelects();
+            // 清除地圖上的所有 KML 圖層和導航按鈕
+            clearAllKmlLayers();
         }
     });
 
-    // 事件監聽器：Google 登入/註冊
-    googleSignInBtn.addEventListener('click', async () => {
-        try {
-            const provider = new firebase.auth.GoogleAuthProvider();
-            const userCredential = await auth.signInWithPopup(provider);
-            const user = userCredential.user;
 
-            const userDoc = await db.collection('users').doc(user.uid).get();
-            if (!userDoc.exists) {
-                await auth.signOut(); // 登出新註冊但尚未驗證角色的用戶
-                window.showRegistrationCodeModal(async (result) => {
-                    if (result) {
-                        const code = result.code;
-                        const nickname = result.nickname;
-
-                        try {
-                            const regDoc = await db.collection('settings').doc('registration').get();
-                            console.log("註冊嘗試: 用戶輸入的註冊碼:", code);
-                            if (regDoc.exists) {
-                                console.log("Firestore 註冊設定數據:", regDoc.data());
-                                const storedCode = regDoc.data().oneTimeCode;
-                                const expiryTime = regDoc.data().oneTimeCodeExpiry ? regDoc.data().oneTimeCodeExpiry.toDate() : null;
-                                const currentTime = new Date();
-                                console.log(`儲存的註冊碼: ${storedCode}, 過期時間: ${expiryTime}, 目前時間: ${currentTime}`);
-                                console.log(`註冊碼是否匹配: ${storedCode === code}, 是否過期: ${expiryTime && currentTime > expiryTime}`);
-
-
-                                if (!storedCode || storedCode !== code || (expiryTime && currentTime > expiryTime)) {
-                                    showMessage('註冊失敗', '無效或過期的註冊碼。');
-                                    console.error(`註冊失敗: 註冊碼不匹配或已過期。`);
-                                    return;
-                                }
-                            } else {
-                                showMessage('註冊失敗', '註冊系統未啟用或無效的註冊碼。請聯繫管理員。');
-                                console.error("settings/registration 文檔不存在。");
-                                return;
-                            }
-                            
-                            // 重新登入以確保獲取正確的用戶憑證
-                            const reAuthUserCredential = await auth.signInWithPopup(provider);
-                            const reAuthUser = reAuthUserCredential.user;
-
-                            console.log("嘗試創建新用戶文檔:", {
-                                uid: reAuthUser.uid,
-                                email: reAuthUser.email,
-                                name: nickname,
-                                role: 'unapproved', // 預設為未審核
-                                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-                                registeredWithCode: true,
-                                registrationCodeUsed: code
-                            });
-
-                            await db.collection('users').doc(reAuthUser.uid).set({
-                                email: reAuthUser.email,
-                                name: nickname,
-                                role: 'unapproved',
-                                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-                                registeredWithCode: true,
-                                registrationCodeUsed: code
-                            });
-                            console.log("新用戶文檔創建成功。");
-
-                            // 重要提示：前端嘗試使一次性註冊碼失效。
-                            // 這需要觸發此操作的用戶擁有對 `settings/registration` 文檔的寫入權限。
-                            // 通常，新註冊的用戶（role: 'unapproved'）不會有這種權限，這會導致 "Missing or insufficient permissions" 錯誤。
-                            // 推薦的解決方案是使用 Firebase Cloud Functions：
-                            // 在用戶成功註冊後（例如，觸發 `onCreate` 用戶事件），
-                            // 由後端函數安全地將 `settings/registration` 中的 `oneTimeCode` 設為 `null`。
-                            // 這樣可以確保安全且不會因前端權限問題而失敗。
-                            // 為了保持此版本的功能，我們將保留此行，但請注意其權限限制。
-                            try {
-                                await db.collection('settings').doc('registration').set({
-                                    oneTimeCode: null,
-                                    oneTimeCodeExpiry: null
-                                }, { merge: true });
-                                console.log("一次性註冊碼已在 Firestore 中失效（前端嘗試操作）。");
-                                showMessage('註冊成功', `歡迎 ${reAuthUser.email} (${nickname})！您的帳號已成功註冊，正在等待審核。`);
-                            } catch (codeInvalidationError) {
-                                console.warn("前端嘗試使註冊碼失效時發生權限不足錯誤:", codeInvalidationError.message);
-                                showMessage(
-                                    '註冊待審核', 
-                                    `歡迎 ${reAuthUser.email} (${nickname})！您的帳號已成功註冊，正在等待審核。`
-                                );
-                            }
-
-                        } catch (error) {
-                            console.error("使用註冊碼登入/註冊失敗:", error);
-                            if (error.code) {
-                                console.error(`Firebase Error Code: ${error.code}`);
-                            }
-                            showMessage('註冊失敗', `使用註冊碼登入/註冊時發生錯誤: ${error.message} (請檢查安全規則)`);
-                        }
-                    } else {
-                        showMessage('取消', '您已取消註冊。');
-                    }
-                });
-            } else {
-                showMessage('登入成功', `歡迎回來 ${user.email}！`);
-            }
-        }
-        catch (error) {
-            console.error("Google 登入失敗:", error);
-            loginMessage.textContent = `登入失敗: ${error.message}`;
-            showMessage('登入失敗', `Google 登入時發生錯誤: ${error.message}`);
-        }
-    });
-
-    // 事件監聽器：登出
-    logoutBtn.addEventListener('click', async () => {
-        try {
-            await auth.signOut();
-            showMessage('登出成功', '用戶已登出。'); // 登出訊息已修改
-        } catch (error) {
-            console.error("登出失敗:", error);
-            showMessage('登出失敗', `登出時發生錯誤: ${error.message}`);
-        }
-    });
-
-    // 點擊 "尚未選擇檔案" 對話框也能選取檔案
-    selectedKmlFileNameDashboard.addEventListener('click', () => {
-        hiddenKmlFileInput.click();
-    });
-
-    // 監聽實際的文件選擇變化
+    // --- KML 上傳和刪除功能 ---
     hiddenKmlFileInput.addEventListener('change', (event) => {
         const file = event.target.files[0];
         if (file) {
             selectedKmlFileNameDashboard.textContent = file.name;
-            uploadKmlSubmitBtnDashboard.disabled = false; // 啟用上傳按鈕
+            uploadKmlSubmitBtnDashboard.disabled = false;
         } else {
-            selectedKmlFileNameDashboard.textContent = '尚未選擇檔案';
-            uploadKmlSubmitBtnDashboard.disabled = true; // 禁用上傳按鈕
+            selectedKmlFileNameDashboard.textContent = '未選擇檔案';
+            uploadKmlSubmitBtnDashboard.disabled = true;
         }
     });
 
-    // 實際執行上傳 KML 的函數
     uploadKmlSubmitBtnDashboard.addEventListener('click', async () => {
+        if (window.currentUserRole !== 'owner' && window.currentUserRole !== 'member') {
+            showMessageBox('權限不足', '只有管理員和成員才能上傳 KML 圖層。');
+            return;
+        }
+
         const file = hiddenKmlFileInput.files[0];
         if (!file) {
-            showMessage('提示', '請先選擇 KML 檔案。');
-            return;
-        }
-        if (!auth.currentUser || (window.currentUserRole !== 'owner' && window.currentUserRole !== 'editor')) {
-            showMessage('錯誤', '您沒有權限上傳 KML，請登入或等待管理員審核。');
+            showMessageBox('錯誤', '請選擇一個 KML 檔案。');
             return;
         }
 
-        const fileName = file.name;
-        const reader = new FileReader();
-        reader.onload = async () => {
-            console.log(`正在處理 KML 檔案: ${file.name}`);
-            try {
-                const kmlString = reader.result;
+        if (file.type !== 'text/xml' && !file.name.endsWith('.kml')) {
+            showMessageBox('錯誤', '請選擇有效的 KML 檔案 (.kml 或 XML 格式)。');
+            return;
+        }
+
+        showMessageBox('上傳中', '正在處理 KML 檔案，請稍候...');
+
+        try {
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+                const kmlText = e.target.result;
                 const parser = new DOMParser();
-                const kmlDoc = parser.parseFromString(kmlString, 'text/xml');
+                const kmlDom = parser.parseFromString(kmlText, 'text/xml');
 
-                if (kmlDoc.getElementsByTagName('parsererror').length > 0) {
-                    const errorText = kmlDoc.getElementsByTagName('parsererror')[0].textContent;
-                    throw new Error(`KML XML 解析錯誤: ${errorText}。請確保您的 KML 檔案是有效的 XML。`);
-                }
+                // 使用 togeojson 轉換為 GeoJSON
+                const geojsonData = togeojson.kml(kmlDom);
 
-                const geojson = toGeoJSON.kml(kmlDoc); 
-                const parsedFeatures = geojson.features || []; 
-
-                console.log('--- KML 檔案解析結果 (parsedFeatures) ---');
-                console.log(`已解析出 ${parsedFeatures.length} 個地理要素。`); 
-                if (parsedFeatures.length === 0) {
-                    console.warn('togeojson.kml() 未能從 KML 檔案中識別出任何地理要素。請確認 KML 包含 <Placemark> 內的 <Point>, <LineString>, <Polygon> 及其有效座標和名稱。');
-                } else {
-                    parsedFeatures.forEach((f, index) => {
-                        console.log(`Feature ${index + 1}:`);
-                        console.log(`  類型 (geometry.type): ${f.geometry ? f.geometry.type : 'N/A (無幾何資訊)'}`);
-                        console.log(`  名稱 (properties.name): ${f.properties ? (f.properties.name || '未命名') : 'N/A (無屬性)'}`);
-                        console.log(`  座標 (geometry.coordinates):`, f.geometry ? f.geometry.coordinates : 'N/A');
-                    });
-                }
-                console.log('--- KML 檔案解析結果結束 ---');
-
-
-                if (parsedFeatures.length === 0) {
-                    showMessage('KML 載入', 'KML 檔案中沒有找到任何可顯示的地理要素 (點、線、多邊形)。請確認 KML 檔案內容包含 <Placemark> 及其有效的地理要素。');
-                    console.warn("KML 檔案不包含任何可用的 Point、LineString 或 Polygon 類型 feature。");
+                if (!geojsonData || !geojsonData.features || geojsonData.features.length === 0) {
+                    showMessageBox('上傳失敗', 'KML 檔案中沒有有效地圖元素 (點、線、多邊形)。');
                     return;
                 }
 
-                const kmlLayersCollectionRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('kmlLayers');
-                
-                // 查詢是否存在相同名稱的 KML 圖層
-                const existingKmlQuery = await kmlLayersCollectionRef.where('name', '==', fileName).get();
-                let kmlLayerDocRef;
-                let isOverwriting = false;
+                const kmlId = file.name.split('.')[0] + '-' + Date.now(); // 使用檔名和時間戳作為 ID
 
-                if (!existingKmlQuery.empty) {
-                    // 找到相同名稱的圖層，詢問是否覆蓋
-                    const confirmOverwrite = await window.showConfirmationModal(
-                        '覆蓋 KML 檔案',
-                        `資料庫中已存在名為 "${fileName}" 的 KML 圖層。您確定要覆蓋它嗎？`
-                    );
+                // 儲存 KML 元數據 (名稱)
+                await getKmlLayerRef(kmlId).set({
+                    name: file.name,
+                    uploadedBy: auth.currentUser.uid,
+                    uploadedAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
 
-                    if (!confirmOverwrite) {
-                        showMessage('已取消', 'KML 檔案上傳已取消。');
-                        hiddenKmlFileInput.value = '';
-                        selectedKmlFileNameDashboard.textContent = '尚未選擇檔案';
-                        uploadKmlSubmitBtnDashboard.disabled = true;
-                        return; // 終止上傳流程
-                    }
+                // 將 GeoJSON features 分批儲存到子集合
+                const batch = db.batch();
+                const featuresCollectionRef = getKmlFeaturesCollectionRef(kmlId);
+                geojsonData.features.forEach(feature => {
+                    // 檢查 GeoJSON feature 是否符合 Firestore 儲存的限制
+                    // 例如，如果 GeoJSON 數據過於複雜，可能需要簡化或分割
+                    // 這裡只是簡單地將每個 feature 作為一個文檔儲存
+                    batch.set(featuresCollectionRef.doc(), feature); // Firestore 會自動生成文檔 ID
+                });
+                await batch.commit();
 
-                    // 準備覆蓋
-                    kmlLayerDocRef = existingKmlQuery.docs[0].ref;
-                    isOverwriting = true;
-                    console.log(`找到相同名稱的 KML 圖層 "${fileName}"，使用者確認覆蓋。ID: ${kmlLayerDocRef.id}`);
+                showMessageBox('成功', `KML 圖層 "${file.name}" 已成功上傳。`);
+                hiddenKmlFileInput.value = ''; // 清空檔案輸入框
+                selectedKmlFileNameDashboard.textContent = '未選擇檔案';
+                uploadKmlSubmitBtnDashboard.disabled = true;
+                loadAvailableKmlLayers(); // 重新載入列表
+            };
+            reader.readAsText(file);
 
-                    // 刪除現有 features 子集合的資料
-                    const oldFeaturesSnapshot = await kmlLayersCollectionRef.doc(kmlLayerDocRef.id).collection('features').get();
+        } catch (error) {
+            console.error("上傳 KML 時出錯:", error);
+            showMessageBox('錯誤', `上傳 KML 圖層失敗: ${error.message}`);
+        }
+    });
+
+    deleteSelectedKmlBtn.addEventListener('click', async () => {
+        if (window.currentUserRole !== 'owner' && window.currentUserRole !== 'member') {
+            showMessageBox('權限不足', '只有管理員和成員才能刪除 KML 圖層。');
+            return;
+        }
+
+        const kmlIdToDelete = kmlLayerSelectDashboard.value;
+        if (!kmlIdToDelete) {
+            showMessageBox('錯誤', '請選擇一個要刪除的 KML 圖層。');
+            return;
+        }
+
+        showConfirmationBox('確認刪除', `您確定要刪除圖層 "${kmlLayerSelectDashboard.options[kmlLayerSelectDashboard.selectedIndex].text}" 嗎？此操作不可撤銷。`, async (confirmed) => {
+            if (confirmed) {
+                showMessageBox('刪除中', '正在刪除 KML 圖層，請稍候...');
+                try {
+                    // 刪除子集合中的所有 features (需要分批刪除，或使用雲函數)
+                    // 這裡是一個簡化的範例，實際生產環境可能需要更複雜的批量刪除邏輯
+                    const featuresSnapshot = await getKmlFeaturesCollectionRef(kmlIdToDelete).get();
                     const deleteBatch = db.batch();
-                    oldFeaturesSnapshot.forEach(doc => {
+                    featuresSnapshot.forEach(doc => {
                         deleteBatch.delete(doc.ref);
                     });
                     await deleteBatch.commit();
-                    console.log(`已從子集合中刪除 ${oldFeaturesSnapshot.size} 個 features。`);
 
-                    // 更新主 KML 圖層文件的元數據
-                    await kmlLayerDocRef.update({
-                        uploadTime: firebase.firestore.FieldValue.serverTimestamp(),
-                        uploadedBy: auth.currentUser.email || auth.currentUser.uid,
-                        uploadedByRole: window.currentUserRole
-                    });
-                    console.log(`已更新主 KML 圖層文件 ${kmlLayerDocRef.id} 的元數據。`);
+                    // 刪除 KML 元數據文檔
+                    await getKmlLayerRef(kmlIdToDelete).delete();
 
-                } else {
-                    // 沒有找到相同名稱的圖層，新增一個
-                    kmlLayerDocRef = await kmlLayersCollectionRef.add({
-                        name: fileName,
-                        uploadTime: firebase.firestore.FieldValue.serverTimestamp(),
-                        uploadedBy: auth.currentUser.email || auth.currentUser.uid,
-                        uploadedByRole: window.currentUserRole
-                    });
-                    console.log(`沒有找到相同名稱的 KML 圖層，已新增一個。ID: ${kmlLayerDocRef.id}`);
+                    showMessageBox('成功', `KML 圖層 "${kmlLayerSelectDashboard.options[kmlLayerSelectDashboard.selectedIndex].text}" 已成功刪除。`);
+                    loadAvailableKmlLayers(); // 重新載入列表
+                    clearAllKmlLayers(); // 清除地圖上的 KML 圖層
+                } catch (error) {
+                    console.error("刪除 KML 時出錯:", error);
+                    showMessageBox('錯誤', `刪除 KML 圖層失敗: ${error.message}`);
                 }
-
-                const featuresSubCollectionRef = kmlLayersCollectionRef.doc(kmlLayerDocRef.id).collection('features');
-                const batch = db.batch();
-                let addedCount = 0;
-                console.log(`開始批量寫入 ${parsedFeatures.length} 個 features 到 ${kmlLayerDocRef.id} 的子集合。`);
-                for (const f of parsedFeatures) {
-                    if (f.geometry && f.properties && f.geometry.coordinates) {
-                        batch.set(featuresSubCollectionRef.doc(), {
-                            geometry: f.geometry,
-                            properties: f.properties
-                        });
-                        addedCount++;
-                    } else {
-                        console.warn("上傳時跳過無效或無座標的 feature:", f.geometry ? f.geometry.type : '無幾何資訊', f);
-                    }
-                }
-                await batch.commit();
-                console.log(`批量提交成功。已添加 ${addedCount} 個 features。`);
-
-                const successMessage = isOverwriting ? 
-                    `KML 檔案 "${fileName}" 已成功覆蓋並儲存 ${addedCount} 個地理要素。` :
-                    `KML 檔案 "${fileName}" 已成功上傳並儲存 ${addedCount} 個地理要素。`;
-                showMessage('成功', successMessage);
-                hiddenKmlFileInput.value = '';
-                selectedKmlFileNameDashboard.textContent = '尚未選擇檔案';
-                uploadKmlSubmitBtnDashboard.disabled = true;
-                updateKmlLayerSelects(); // 重新整理 KML 選單
-            } catch (error) {
-                console.error("處理 KML 檔案或上傳到 Firebase 時出錯:", error);
-                showMessage('KML 處理錯誤', `處理 KML 檔案或上傳時發生錯誤：${error.message}`);
             }
-        };
-        reader.readAsText(file);
+        });
     });
 
 
-    // 事件監聽器：刪除 KML
-    deleteSelectedKmlBtn.addEventListener('click', async () => {
-        const kmlIdToDelete = kmlLayerSelectDashboard.value;
-        if (!kmlIdToDelete) {
-            showMessage('提示', '請先選擇要刪除的 KML 圖層。');
-            return;
-        }
-        if (!auth.currentUser || (window.currentUserRole !== 'owner' && window.currentUserRole !== 'editor')) {
-            showMessage('錯誤', '您沒有權限刪除 KML。');
-            return;
-        }
-
-        const confirmDelete = await window.showConfirmationModal(
-            '確認刪除 KML',
-            '確定要刪除此 KML 圖層及其所有地理要素嗎？此操作不可逆！'
-        );
-
-        if (!confirmDelete) {
-            return;
-        }
-
+    // --- 登入/登出事件監聽器 ---
+    googleSignInBtn.addEventListener('click', async () => {
         try {
-            const kmlLayerDocRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('kmlLayers').doc(kmlIdToDelete);
-            const kmlDoc = await kmlLayerDocRef.get();
-            if (!kmlDoc.exists) {
-                showMessage('錯誤', '找不到該 KML 圖層。');
-                return;
-            }
-            const kmlData = kmlDoc.data();
-            const fileName = kmlData.name;
-
-            const featuresSubCollectionRef = kmlLayerDocRef.collection('features');
-            const featuresSnapshot = await featuresSubCollectionRef.get();
-            const batch = db.batch();
-            let deletedFeaturesCount = 0;
-            featuresSnapshot.forEach(docRef => {
-                batch.delete(docRef.ref);
-                deletedFeaturesCount++;
-            });
-            await batch.commit();
-            console.log(`已從子集合中刪除 ${deletedFeaturesCount} 個 features。`);
-
-            await kmlLayerDocRef.delete();
-            console.log(`已刪除父 KML 圖層文檔: ${kmlIdToDelete}`);
-
-            showMessage('成功', `KML 圖層 "${fileName}" 已成功刪除，共刪除 ${deletedFeaturesCount} 個地理要素。`);
-            updateKmlLayerSelects();
-            window.clearAllKmlLayers();
-        }
-        catch (error) {
-            console.error("刪除 KML 失敗:", error);
-            showMessage('刪除失敗', `刪除 KML 圖層時發生錯誤: ${error.message}`);
+            const provider = new firebase.auth.GoogleAuthProvider();
+            await auth.signInWithPopup(provider);
+            showMessageBox('登入成功', '您已成功登入！');
+        } catch (error) {
+            console.error("Google 登入失敗:", error);
+            showMessageBox('登入失敗', `Google 登入失敗: ${error.message}`);
         }
     });
 
-    // Function to generate the alphanumeric code (3 letters + 5 digits)
-    function generateRegistrationAlphanumericCode() {
-        let result = '';
-        const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-        const digits = '013456789'; // 移除 0123456789 中的 2 以符合 3L+5D 模式
-
-        // Generate 3 random letters
-        for (let i = 0; i < 3; i++) {
-            result += letters.charAt(Math.floor(Math.random() * letters.length));
+    logoutBtn.addEventListener('click', async () => {
+        try {
+            await auth.signOut();
+            showMessageBox('登出成功', '您已登出。');
+            clearAllKmlLayers(); // 登出時清除所有 KML 圖層
+        } catch (error) {
+            console.error("登出失敗:", error);
+            showMessageBox('登出失敗', `登出失敗: ${error.message}`);
         }
-        // Generate 5 random digits
-        for (let i = 0; i < 5; i++) {
-            result += digits.charAt(Math.floor(Math.random() * digits.length));
-        }
-        return result;
-    }
+    });
 
-    // 事件監聽器：生成一次性註冊碼 (Owner Only)
+
+    // --- 註冊碼管理 (Owner Only) ---
     generateRegistrationCodeBtn.addEventListener('click', async () => {
         if (window.currentUserRole !== 'owner') {
-            showMessage('權限不足', '只有管理員才能生成註冊碼。');
+            showMessageBox('權限不足', '只有管理員才能生成註冊碼。');
             return;
         }
 
-        if (registrationCodeTimer) {
-            clearInterval(registrationCodeTimer);
-            registrationCodeTimer = null;
-        }
-
         try {
-            const code = generateRegistrationAlphanumericCode();
-            let countdownSeconds = 60;
-            const expiryDate = new Date();
-            expiryDate.setSeconds(expiryDate.getSeconds() + countdownSeconds); 
+            const code = Math.random().toString(36).substring(2, 10).toUpperCase(); // 簡單的隨機碼
+            const expirySeconds = 60; // 註冊碼有效時間，例如 60 秒
 
-            await db.collection('settings').doc('registration').set({
-                oneTimeCode: code,
-                oneTimeCodeExpiry: firebase.firestore.Timestamp.fromDate(expiryDate)
-            }, { merge: true });
+            // 儲存一次性註冊碼到 Firestore
+            await getRegistrationCodeDocRef(code).set({
+                code: code,
+                used: false,
+                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                expiresAt: firebase.firestore.Timestamp.fromMillis(Date.now() + expirySeconds * 1000)
+            });
 
             registrationCodeDisplay.textContent = code;
+            let countdownSeconds = expirySeconds; // 將倒計時秒數獨立出來
             registrationCodeCountdown.textContent = ` (剩餘 ${countdownSeconds} 秒)`;
-            registrationCodeDisplay.style.display = 'inline-block'; 
             registrationCodeCountdown.style.display = 'inline-block';
             registrationExpiryDisplay.style.display = 'none';
 
@@ -774,10 +447,10 @@ document.addEventListener('DOMContentLoaded', () => {
             document.execCommand('copy');
             document.body.removeChild(tempInput);
 
-            showMessage('成功', `一次性註冊碼已生成並複製到剪貼簿，設定為 ${countdownSeconds} 秒後過期！`);
+            showMessageBox('成功', `一次性註冊碼已生成並複製到剪貼簿，設定為 ${expirySeconds} 秒後過期！`);
         } catch (error) {
             console.error("生成註冊碼時出錯:", error);
-            showMessage('錯誤', `生成註冊碼失敗: ${error.message}`);
+            showMessageBox('錯誤', `生成註冊碼失敗: ${error.message}`);
         }
     });
 
@@ -786,7 +459,112 @@ document.addEventListener('DOMContentLoaded', () => {
         if (window.currentUserRole === 'owner') {
             refreshUserList();
         } else {
-            showMessage('權限不足', '只有管理員才能重新整理用戶列表。');
+            showMessageBox('權限不足', '只有管理員才能重新整理用戶列表。');
         }
     });
+
+    async function refreshUserList() {
+        if (window.currentUserRole !== 'owner') {
+            console.warn("只有管理員才能查看用戶列表。");
+            return;
+        }
+
+        userList.innerHTML = '<p>載入用戶中...</p>'; // 清空並顯示載入狀態
+        try {
+            const usersRef = db.collection('artifacts').doc(appId).collection('users');
+            const snapshot = await usersRef.get();
+
+            if (snapshot.empty) {
+                userList.innerHTML = '<p>沒有註冊用戶。</p>';
+                return;
+            }
+
+            userList.innerHTML = ''; // 清空載入狀態
+
+            snapshot.forEach(doc => {
+                const userData = doc.data();
+                const userId = doc.id;
+                const userCard = document.createElement('div');
+                userCard.className = 'user-card';
+                userCard.dataset.userId = userId;
+
+                // 避免顯示匿名的 email，改用暱稱和 UID 縮寫
+                const displayEmail = userData.nickname || userData.email || `匿名用戶 ${userId.substring(0, 8)}`;
+                const displayRole = userData.role || 'guest'; // 確保有預設角色
+
+                userCard.innerHTML = `
+                    <div class="user-card-row-1">
+                        <span class="user-email">${displayEmail}</span>
+                        <span class="user-nickname">${userData.nickname || '未設定暱稱'}</span>
+                    </div>
+                    <div class="user-card-row-2">
+                        <span class="user-role-display">角色: ${displayRole}</span>
+                        <div class="user-role-controls">
+                            <select class="user-role-select">
+                                <option value="guest" ${displayRole === 'guest' ? 'selected' : ''}>訪客</option>
+                                <option value="member" ${displayRole === 'member' ? 'selected' : ''}>成員</option>
+                                <option value="owner" ${displayRole === 'owner' ? 'selected' : ''}>管理員</option>
+                            </select>
+                            <button class="change-role-btn">變更角色</button>
+                        </div>
+                        <div class="user-actions">
+                            <button class="delete-user-btn">刪除</button>
+                        </div>
+                    </div>
+                `;
+                userList.appendChild(userCard);
+            });
+
+            // 為每個用戶卡片添加事件監聽器
+            userList.querySelectorAll('.user-card').forEach(card => {
+                const userId = card.dataset.userId;
+                const selectElement = card.querySelector('.user-role-select');
+                const changeRoleBtn = card.querySelector('.change-role-btn');
+                const deleteUserBtn = card.querySelector('.delete-user-btn');
+
+                changeRoleBtn.addEventListener('click', async () => {
+                    const newRole = selectElement.value;
+                    if (newRole && userId) {
+                        showConfirmationBox('確認變更', `您確定要將用戶 ${userId.substring(0, 8)} 的角色變更為 ${newRole} 嗎？`, async (confirmed) => {
+                            if (confirmed) {
+                                try {
+                                    await getUserDocRef(userId).update({ role: newRole });
+                                    showMessageBox('成功', `用戶 ${userId.substring(0, 8)} 的角色已更新為 ${newRole}。`);
+                                    refreshUserList(); // 重新整理列表
+                                } catch (error) {
+                                    console.error("更新用戶角色失敗:", error);
+                                    showMessageBox('錯誤', `更新角色失敗: ${error.message}`);
+                                }
+                            }
+                        });
+                    }
+                });
+
+                deleteUserBtn.addEventListener('click', async () => {
+                    if (userId) {
+                        showConfirmationBox('確認刪除', `您確定要刪除用戶 ${userId.substring(0, 8)} 嗎？此操作不可撤銷。`, async (confirmed) => {
+                            if (confirmed) {
+                                try {
+                                    // 為了安全，實際的用戶刪除應該在後端（Cloud Functions）執行，
+                                    // 因為這裡無法直接刪除 Firebase Authentication 用戶。
+                                    // 這裡只刪除 Firestore 中的用戶文件。
+                                    await getUserDocRef(userId).delete();
+                                    showMessageBox('成功', `用戶 ${userId.substring(0, 8)} 的記錄已從資料庫中刪除。`);
+                                    refreshUserList(); // 重新整理列表
+                                } catch (error) {
+                                    console.error("刪除用戶失敗:", error);
+                                    showMessageBox('錯誤', `刪除用戶失敗: ${error.message}`);
+                                }
+                            }
+                        });
+                    }
+                });
+            });
+
+        } catch (error) {
+            console.error("載入用戶列表失敗:", error);
+            userList.innerHTML = '<p>載入用戶列表失敗。</p>';
+            showMessageBox('錯誤', `載入用戶列表失敗: ${error.message}`);
+        }
+    }
 });
