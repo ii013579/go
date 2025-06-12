@@ -557,24 +557,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 console.log('--- KML 檔案解析結果結束 ---');
 
-        // ***** 新增：檢查 GeoJSON features 是否包含線段或多邊形 *****
-        let containsForbiddenGeometry = false;
-        const forbiddenTypes = ['LineString', 'MultiLineString', 'Polygon', 'MultiPolygon'];
-        for (const feature of geoJson.features) {
-            if (feature.geometry && forbiddenTypes.includes(feature.geometry.type)) {
-                containsForbiddenGeometry = true;
-                break;
-            }
-        }
-
-        if (containsForbiddenGeometry) {
-            showMessage('上傳失敗', '偵測到 KML 檔案中包含線段或多邊形圖徵，目前不開放使用。請確保檔案只包含點位資訊。');
-            hiddenKmlFileInput.value = ''; // 清空檔案選擇
-            selectedKmlFileNameDashboard.textContent = '請選擇 KML 檔案...';
-            uploadKmlSubmitBtnDashboard.disabled = true;
-            return; // 終止上傳流程
-        }
-        // ***** 結束新增 *****
 
                 if (parsedFeatures.length === 0) {
                     showMessage('KML 載入', 'KML 檔案中沒有找到任何可顯示的地理要素 (點、線、多邊形)。請確認 KML 檔案內容包含 <Placemark> 及其有效的地理要素。');
