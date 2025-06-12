@@ -470,7 +470,7 @@ select:focus {
     width: 40px;
     height: 40px;
     box-shadow: 0 2px 5px rgba(0,0,0,0.3);
-    display: flex;
+    display: flex !important; /* 強制顯示 */
     justify-content: center;
     align-items: center;
 }
@@ -517,47 +517,46 @@ select:focus {
 }
 
 /* Leaflet 控制項容器樣式 */
-/* 這裡的 top 和 left 需要根據實際佈局和避免重疊來調整 */
-/* 原始針對 .leaflet-top.leaflet-left 的規則，可以保留或移除，因為我們現在主要關注 topright */
 .leaflet-control-container .leaflet-top.leaflet-left {
-    display: flex;
+    display: flex; /* 確保是 flex 佈局 */
     flex-direction: column; /* 將縮放和定位按鈕堆疊 */
     align-items: flex-start;
     gap: 8px; /* 按鈕間距 */
-    /* 調整位置，確保不與搜尋結果重疊 */
-    left: 15px; /* 預設的左邊距 */
-    top: 15px; /* 預設的上邊距 */
-    z-index: 900; /* 確保在搜尋結果之下，避免遮擋 */
+    left: 15px;
+    top: 15px;
+    z-index: 900;
 }
 
-/* 新增：針對右上方控制項的樣式 */
+/* 針對右上方控制項的樣式 - 確保它們垂直堆疊顯示 */
 .leaflet-control-container .leaflet-top.leaflet-right {
-    display: flex;
+    display: flex !important; /* 強制確保容器是 flex 佈局 */
     flex-direction: column; /* 讓控制項垂直堆疊 */
     align-items: flex-end; /* 右對齊 */
     gap: 8px; /* 控制項之間的間距 */
-    right: 15px; /* 從右邊緣開始 */
-    top: 15px; /* 從上邊緣開始 */
-    z-index: 1200; /* 確保在大多數其他內容之上，包括搜尋結果和標題 */
+    right: 15px;
+    top: 15px;
+    z-index: 1200; /* 確保在大多數其他內容之上 */
 }
 
-/* 確保 Leaflet 控制項本身有圓角和陰影 */
+/* 確保 Leaflet 控制項本身有圓角和陰影，並強制顯示 */
 .leaflet-control-zoom,
 .leaflet-control-layers {
-    border-radius: 8px; /* 圓角 */
-    box-shadow: 0 2px 5px rgba(0,0,0,0.2); /* 陰影 */
-    background-color: white; /* 背景色 */
+    border-radius: 8px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    background-color: white;
+    display: block !important; /* 強制顯示 */
 }
 
 /* 確保 Leaflet 縮放按鈕樣式 */
 .leaflet-control-zoom a {
-    width: 40px; /* 統一按鈕大小 */
+    width: 40px;
     height: 40px;
-    line-height: 40px; /* 垂直居中符號 */
-    font-size: 24px; /* 增大符號大小 */
+    line-height: 40px;
+    font-size: 24px;
     color: #333;
-    border-radius: 8px; /* 圓角 */
-    background-color: white; /* 背景色 */
+    border-radius: 8px;
+    background-color: white;
+    display: block !important; /* 強制顯示 */
 }
 .leaflet-control-zoom a.leaflet-control-zoom-in {
     border-bottom-left-radius: 0;
@@ -571,14 +570,14 @@ select:focus {
     background-color: #f0f0f0;
 }
 
-
-/* 確保 Leaflet 圖層控制項內部樣式 */
+/* 確保 Leaflet 圖層控制項內部樣式和強制顯示 */
 .leaflet-control-layers-toggle {
     width: 40px;
     height: 40px;
-    background-size: 24px 24px; /* 調整圖示大小 */
+    background-size: 24px 24px;
     background-position: center center;
-    border-radius: 8px; /* 圓角 */
+    border-radius: 8px;
+    display: block !important; /* 強制顯示 */
 }
 .leaflet-control-layers-expanded {
     padding: 10px;
