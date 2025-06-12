@@ -575,6 +575,17 @@ body {
     color: #333;
     font-size: 20px;
 }
+.leaflet-control-locate-me .material-symbols-outlined {
+    font-size: 24px !important; /* 確保圖標大小 */
+    line-height: 1 !important; /* 調整行高以垂直居中 */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+}
+
+
 /* Leaflet 圖層控制面板的展開/收起按鈕樣式 */
 .leaflet-control-layers-toggle {
     /* 這裡的樣式會覆蓋 Leaflet 預設的按鈕大小和背景圖 */
@@ -587,6 +598,26 @@ body {
     background-repeat: no-repeat;
     /* 如果您想替換成 Material Symbols 或其他圖標，需要調整 background 屬性或使用 ::before / ::after */
     transition: background-color 0.2s, box-shadow 0.2s;
+}
+
+.leaflet-control-layers-toggle:hover {
+    background-color: #f4f4f4; /* 保持與定位按鈕一致的 hover 背景色 */
+    box-shadow: 0 1px 5px rgba(0,0,0,0.8); /* 保持與定位按鈕一致的 hover 陰影 */
+}
+
+/* 如果您在 Leaflet 的圖層控制按鈕中使用了 Material Symbols，可以像這樣調整 */
+/* 例如：在 map-logic.js 中將 layerControl 創建時的圖標替換為 Material Symbols */
+/* L.control.layers(baseLayers, null, { position: 'topright', collapsed: true, title: '圖層', icon: '<span class="material-symbols-outlined">layers</span>' }).addTo(map); */
+/* 如果沒有直接替換，這部分 CSS 不會生效 */
+.leaflet-control-layers-toggle .material-symbols-outlined {
+    font-size: 24px !important; /* 確保圖標大小 */
+    line-height: 1 !important; /* 調整行高以垂直居中 */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    color: #333; /* 確保圖標顏色 */
 }
 
 /* 用戶位置點樣式 (脈衝動畫) */
