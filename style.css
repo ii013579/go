@@ -505,9 +505,14 @@ body {
     border-radius: 4px; /* 保持與定位按鈕一致的圓角 */
     box-shadow: 0 1px 5px rgba(0,0,0,0.65); /* 保持與定位按鈕一致的陰影 */
     background-color: #fff; /* 保持與定位按鈕一致的背景色 */
+    background-image: none; /* 移除 Leaflet 預設的背景圖片 */
     background-position: center center;
     background-repeat: no-repeat;
     transition: background-color 0.2s, box-shadow 0.2s;
+    /* 新增 flex 佈局以更好地居中內容，類似定位按鈕 */
+    display: flex;
+    justify-content: center;
+    align-items: center;
 }
 
 .leaflet-control-layers-toggle:hover {
