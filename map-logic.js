@@ -109,7 +109,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     // 實例化並添加到地圖
     L.control.locateMe = function(opts) {
-        return new LocateMeControl(opts); // <-- 修正這裡：使用 LocateMeControl
+        return new LocateMeControl(opts); // 修正這裡：使用 LocateMeControl
     };
     L.control.locateMe({position: 'topright'}).addTo(map); // 放置在右上角
 

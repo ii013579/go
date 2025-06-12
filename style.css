@@ -150,6 +150,17 @@ body {
   background-color: #e6f0ff;
   transform: translateY(-2px);
 }
+/* 移除當結果少於三欄時，讓它們填充整行的樣式 */
+/* #searchResults .result-item:nth-last-child(1):nth-child(odd) {
+  grid-column: span 3;
+}
+#searchResults .result-item:nth-last-child(2):nth-child(even) {
+  grid-column: span 2;
+}
+#searchResults .result-item:last-child:nth-child(odd):last-of-type {
+  grid-column: span 3;
+} */
+
 
 /* 地圖樣式 */
 #map {
@@ -470,7 +481,7 @@ select:focus {
     width: 40px;
     height: 40px;
     box-shadow: 0 2px 5px rgba(0,0,0,0.3);
-    display: flex; /* 確保顯示 */
+    display: flex;
     justify-content: center;
     align-items: center;
 }
@@ -491,9 +502,9 @@ select:focus {
 }
 
 .nav-button-icon {
-    background: none; /* 確保 Leaflet 不添加背景 */
-    border: none;     /* 確保 Leaflet 不添加邊框 */
-    box-shadow: none; /* 確保 Leaflet 不添加陰影 */
+    background: none;
+    border: none;
+    box-shadow: none;
 }
 .nav-button-content {
     display: flex;
@@ -517,46 +528,46 @@ select:focus {
 }
 
 /* Leaflet 控制項容器樣式 */
+/* 這裡的 top 和 left 需要根據實際佈局和避免重疊來調整 */
 .leaflet-control-container .leaflet-top.leaflet-left {
-    display: flex; /* 確保是 flex 佈局 */
+    display: flex;
     flex-direction: column; /* 將縮放和定位按鈕堆疊 */
     align-items: flex-start;
     gap: 8px; /* 按鈕間距 */
-    left: 15px;
-    top: 15px;
-    z-index: 900;
+    /* 調整位置，確保不與搜尋結果重疊 */
+    left: 15px; /* 預設的左邊距 */
+    top: 15px; /* 預設的上邊距 */
+    z-index: 900; /* 確保在搜尋結果之下，避免遮擋 */
 }
 
-/* 針對右上方控制項的樣式 - 確保它們垂直堆疊顯示 */
+/* 新增：針對右上方控制項的樣式 */
 .leaflet-control-container .leaflet-top.leaflet-right {
-    display: flex; /* 確保容器是 flex 佈局 */
+    display: flex;
     flex-direction: column; /* 讓控制項垂直堆疊 */
     align-items: flex-end; /* 右對齊 */
     gap: 8px; /* 控制項之間的間距 */
-    right: 15px;
-    top: 15px;
-    z-index: 1200; /* 確保在大多數其他內容之上 */
+    right: 15px; /* 從右邊緣開始 */
+    top: 15px; /* 從上邊緣開始 */
+    z-index: 1200; /* 確保在大多數其他內容之上，包括搜尋結果和標題 */
 }
 
-/* 確保 Leaflet 控制項本身有圓角和陰影，並強制顯示 */
+/* 確保 Leaflet 控制項本身有圓角和陰影 */
 .leaflet-control-zoom,
 .leaflet-control-layers {
-    border-radius: 8px;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-    background-color: white;
-    display: block; /* 確保顯示 */
+    border-radius: 8px; /* 圓角 */
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2); /* 陰影 */
+    background-color: white; /* 背景色 */
 }
 
 /* 確保 Leaflet 縮放按鈕樣式 */
 .leaflet-control-zoom a {
-    width: 40px;
+    width: 40px; /* 統一按鈕大小 */
     height: 40px;
-    line-height: 40px;
-    font-size: 24px;
+    line-height: 40px; /* 垂直居中符號 */
+    font-size: 24px; /* 增大符號大小 */
     color: #333;
-    border-radius: 8px;
-    background-color: white;
-    display: block; /* 確保顯示 */
+    border-radius: 8px; /* 圓角 */
+    background-color: white; /* 背景色 */
 }
 .leaflet-control-zoom a.leaflet-control-zoom-in {
     border-bottom-left-radius: 0;
@@ -570,14 +581,14 @@ select:focus {
     background-color: #f0f0f0;
 }
 
-/* 確保 Leaflet 圖層控制項內部樣式和強制顯示 */
+
+/* 確保 Leaflet 圖層控制項內部樣式 */
 .leaflet-control-layers-toggle {
     width: 40px;
     height: 40px;
-    background-size: 24px 24px;
+    background-size: 24px 24px; /* 調整圖示大小 */
     background-position: center center;
-    border-radius: 8px;
-    display: block; /* 確保顯示 */
+    border-radius: 8px; /* 圓角 */
 }
 .leaflet-control-layers-expanded {
     padding: 10px;
