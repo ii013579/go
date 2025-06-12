@@ -11,12 +11,27 @@ document.addEventListener('DOMContentLoaded', () => {
     // 初始化地圖
     map = L.map('map', { zoomControl: false }).setView([23.6, 120.9], 8); // 台灣中心經緯度，禁用預設縮放控制
 
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-    }).addTo(map);
+    // 定義基本圖層 - 為了實現圖層切換功能，將其重新引入
+    const baseLayers = {
+        'Google 街道圖': L.tileLayer('https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {
+            attribution: 'Google Maps'
+        }),
+        'Google 衛星圖': L.tileLayer('https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
+            attribution: 'Google Maps'
+        }),
+        'Google 地形圖': L.tileLayer('https://mt1.google.com/vt/lyrs=p&x={x}&y={y}&z={z}', {
+            attribution: 'Google Maps'
+        }),
+        'OpenStreetMap': L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        })
+    };
 
-    // 將縮放控制添加到地圖的左上方
-    L.control.zoom({ position: 'topleft' }).addTo(map);
+    // 預設將 'Google 街道圖' 添加到地圖 (取代原始的 OpenStreetMap 預設添加)
+    baseLayers['Google 街道圖'].addTo(map);
+
+    // 將縮放控制添加到地圖的右上角
+    L.control.zoom({ position: 'topright' }).addTo(map); // 修改位置為 'topright'
 
     // 自定義定位控制項
     const LocateMeControl = L.Control.extend({
@@ -104,10 +119,13 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // 將自定義定位控制項添加到地圖的左上方
-    new LocateMeControl({ position: 'topleft' }).addTo(map);
+    // 將自定義定位控制項添加到地圖的右上角
+    new LocateMeControl({ position: 'topright' }).addTo(map); // 修改位置為 'topright'
 
-    // 將 markers 和 navButtons 添加到地圖
+    // 將基本圖層控制添加到地圖的右上角 (放置在定位按鈕下方)
+    L.control.layers(baseLayers, null, { position: 'topright' }).addTo(map); // 添加圖層控制並設定位置
+
+    // 將 markers 和 navButtons 添加到地圖 (原始位置)
     markers.addTo(map);
     navButtons.addTo(map);
 
@@ -117,6 +135,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (!featuresToDisplay || featuresToDisplay.length === 0) {
             console.log("沒有 features 可顯示。");
+            window.showMessage('載入警示', 'KML 圖層載入完成但未發現有效地圖元素。'); // 新增警告訊息
             return;
         }
         console.log(`正在將 ${featuresToDisplay.length} 個 features 添加到地圖。`);
@@ -206,9 +225,11 @@ document.addEventListener('DOMContentLoaded', () => {
             // 如果有 features 但沒有一個被添加到地圖 (例如，所有都是不支援的類型)
             console.warn("KML features 已載入，但地圖上沒有可顯示的幾何類型。請檢查控制台日誌以獲取詳細資訊。");
         }
+        window.showMessage('載入成功', `KML 圖層已成功載入並顯示。`); // 新增成功訊息
     };
 
-    // 全局函數：從 Firestore 載入 KML 圖層
+    // 全局函數：從 Firestore 載入 KML 圖層 (保留原版 logic，僅為了讓 auth-kml-management.js 找到)
+    // 實際的 KML features 處理會透過 window.addMarkers 完成
     window.loadKmlLayerFromFirestore = async function(kmlId) {
         if (!kmlId) {
             console.log("未提供 KML ID，不載入。");
@@ -241,7 +262,7 @@ document.addEventListener('DOMContentLoaded', () => {
             } else {
                 querySnapshot.forEach(featureDoc => {
                     const feature = featureDoc.data();
-                    // 移除僅處理 Point 類型的篩選，現在處理所有有效的幾何類型
+                    // 確保 feature 包含 geometry 和 properties
                     if (feature.geometry && feature.geometry.coordinates && feature.properties) {
                         loadedFeatures.push(feature);
                     } else {
@@ -253,17 +274,11 @@ document.addEventListener('DOMContentLoaded', () => {
             window.allKmlFeatures = loadedFeatures; // 更新全局搜尋數據
             window.addMarkers(window.allKmlFeatures); // 將所有地理要素添加到地圖
 
-            if (window.allKmlFeatures.length > 0) {
-                // 如果有地理要素，設定地圖視角以包含所有要素
-                if (markers.getLayers().length > 0 && markers.getBounds().isValid()) {
-                    map.fitBounds(markers.getBounds());
-                } else {
-                    console.warn("地理要素存在，但其邊界對於地圖視圖不適用。");
-                }
+            // 如果有地理要素，設定地圖視角以包含所有要素
+            if (window.allKmlFeatures.length > 0 && markers.getLayers().length > 0 && markers.getBounds().isValid()) {
+                 map.fitBounds(markers.getBounds());
             } else {
-                // 調整錯誤訊息，使其更通用
-                showMessage('KML 載入', `KML 圖層 "${kmlData.name}" 載入完成，但沒有找到任何可顯示的地理要素 (點、線、多邊形)。請確認 KML 檔案內容。`);
-                console.log(`KML 圖層 "${kmlData.name}" 載入完成，但沒有找到任何可顯示的地理要素。`);
+                 console.warn("地理要素存在，但其邊界對於地圖視圖不適用，或地圖上沒有圖層可適合。");
             }
 
         } catch (error) {
@@ -308,7 +323,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
         console.log(`已為 ${name} 在 ${latlng.lat}, ${latlng.lng} 創建導航按鈕。`);
     };
-
 
     // 處理地圖點擊事件，隱藏搜尋結果和導航按鈕
     map.on('click', () => {
