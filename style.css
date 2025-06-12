@@ -39,185 +39,35 @@ body {
   padding: 8px 15px;
   border: none;
   border-radius: 8px;
+  cursor: pointer;
   font-size: 16px;
   font-weight: 600;
-  cursor: pointer;
-  transition: background-color 0.3s, transform 0.2s, box-shadow 0.2s;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-  z-index: 1003; /* 確保在標題之上 */
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  transition: all 0.3s ease;
 }
 #editButton:hover {
   background-color: #e0e0e0;
-  transform: translateY(-50%) scale(1.03);
-  box-shadow: 0 4px 8px rgba(0,0,0,0.25);
+  box-shadow: 0 3px 6px rgba(0,0,0,0.15);
 }
 
-/* 認證面板樣式 (預設隱藏，點擊編輯按鈕顯示) */
-#authSection {
-  background: #fff;
-  padding: 15px;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-  border-bottom: 1px solid #eee;
-  display: none; /* 預設隱藏 */
-  flex-direction: column;
-  gap: 15px;
-  position: relative;
-  z-index: 1001; /* 確保在 controls 之上 */
-}
-#authSection h3 {
-  margin: 0;
-  font-size: 22px;
-  color: #333;
-  text-align: center;
-}
-#authSection input {
-  padding: 10px 12px;
-  font-size: 16px;
-  border-radius: 8px;
-  border: 1px solid #dcdcdc;
-  width: calc(100% - 24px); /* 考慮 padding */
-  box-sizing: border-box;
-}
-#loginForm, #loggedInDashboard {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-}
-#loggedInDashboard {
-    text-align: center;
-}
-#userEmailDisplay {
-    font-size: 18px;
-    font-weight: 600;
-    color: #2193b0;
-    margin-bottom: 5px;
-    text-align: center;
-}
-
-/* KML 管理區塊內的樣式 */
-#kmlControlsDashboard, #registrationSettingsSection, #userManagementSection {
-    border-top: 1px solid #eee;
-    padding-top: 10px;
-    margin-top: 10px;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-}
-
-/* 上傳和刪除按鈕佈局 */
-#uploadKmlSectionDashboard, #deleteKmlSectionDashboard {
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-    gap: 8px;
-}
-#uploadKmlSectionDashboard label, #deleteKmlSectionDashboard label {
-    font-size: 14px;
-    font-weight: 500;
-    white-space: nowrap;
-    flex-shrink: 0;
-}
-#selectedKmlFileNameDashboard {
-    flex-grow: 1;
-    font-size: 14px;
-    color: #555;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    border: 1px solid #dcdcdc;
-    padding: 8px 10px;
-    border-radius: 6px;
-    background-color: #f9f9f9;
-    transition: border-color 0.3s, box-shadow 0.3s;
-    box-sizing: border-box;
-    height: 36px;
-    display: flex;
-    align-items: center;
-    cursor: pointer;
-}
-#selectedKmlFileNameDashboard:hover {
-    border-color: #4a90e2;
-    box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.1);
-}
-
-/* 上傳和刪除按鈕寬度 */
-#uploadKmlSubmitBtnDashboard, #deleteSelectedKmlBtn {
-    width: 80px;
-    flex-shrink: 0;
-}
-
-/* 註冊碼顯示區域的彈性佈局 */
-.registration-code-display-group {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    flex-wrap: nowrap;
-}
-.registration-code-display-group button {
-    flex-shrink: 0;
-    width: auto;
-}
-.registration-code-content-wrapper {
-    display: flex;
-    flex-grow: 1;
-    align-items: center;
-    gap: 5px;
-    background-color: #e6f0ff;
-    padding: 8px;
-    border-radius: 5px;
-    overflow: hidden;
-}
-#registrationCodeDisplay {
-    word-break: break-all;
-    text-align: center;
-    flex-grow: 1;
-    user-select: text;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-#registrationCodeCountdown {
-    font-weight: bold;
-    color: #007bff;
-    white-space: nowrap;
-    min-width: 80px;
-    text-align: right;
-    flex-shrink: 0;
-}
-
-/* 控制面板樣式 (預設顯示) */
+/* 控制面板樣式 (搜尋、KML 上傳等) */
 #controls {
   padding: 15px;
-  background: #fff;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-  display: flex; /* 預設顯示 */
-  flex-direction: column;
-  gap: 10px;
-  position: relative; /* 為了 searchResults 絕對定位 */
-  z-index: 1000;
-}
-
-/* KML 控制項預設是隱藏的，由 JS 控制顯示 */
-#kmlControls {
+  background-color: #fff;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  margin: 10px;
+  border-radius: 12px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 15px;
+  z-index: 1000; /* 確保在地圖上方 */
 }
-
-/* 輸入框統一樣式 */
-#kmlInput, #searchBox, #kmlLayerSelect, #kmlLayerSelectDashboard, #registrationCodeInput, #nicknameInput {
-  padding: 10px 12px;
-  font-size: 15px;
-  border-radius: 8px;
-  border: 1px solid #dcdcdc;
-  transition: border-color 0.3s, box-shadow 0.3s;
-  width: calc(100% - 24px);
-  box-sizing: border-box;
-}
-#kmlInput:focus, #searchBox:focus, #kmlLayerSelect:focus, #kmlLayerSelectDashboard:focus, #registrationCodeInput:focus, #nicknameInput:focus {
-  border-color: #4a90e2;
-  box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.2);
-  outline: none;
+#controls > div {
+    /* 為 controls 下的直接子 div 設置一些靈活性 */
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap; /* 允許項目換行 */
 }
 
 /* 搜尋容器樣式 */
@@ -240,28 +90,21 @@ body {
     border-bottom-color: transparent; /* 讓底部邊框透明，與搜尋結果框連接 */
 }
 
-/* Material Symbols 圖標樣式 */
-.material-symbols-outlined {
-  font-variation-settings:
-    'FILL' 0,
-    'wght' 400,
-    'GRAD' 0,
-    'opsz' 24;
-  font-size: 24px;
-  color: #777;
-  flex-shrink: 0;
-  vertical-align: middle;
+#searchContainer .material-symbols-outlined {
+  color: #888;
+  font-size: 20px;
 }
 
-/* 搜尋框樣式 */
 #searchBox {
-  flex-grow: 1;
+  flex-grow: 1; /* 讓搜尋框佔據剩餘空間 */
   padding: 10px 0;
   border: none;
   outline: none;
-  background: transparent;
-  box-sizing: border-box;
-  height: 44px;
+  font-size: 16px;
+  background-color: transparent;
+}
+#searchBox::placeholder {
+  color: #aaa;
 }
 
 /* 搜尋結果彈出框樣式 */
@@ -270,7 +113,7 @@ body {
   top: 100%; /* 相對於父容器 (searchContainer) 的底部 */
   left: 0; /* 相對於父容器的左側 */
   width: 100%; /* 與父容器同寬 */
-  max-height: 300px;
+  max-height: 164px; /* 設定固定高度，只顯示約三行結果，超過則捲動 */
   background: rgba(255, 255, 255, 0.98);
   overflow-y: auto;
   border: 1px solid #ddd; /* 增加邊框 */
@@ -288,6 +131,7 @@ body {
   padding: 10px;
   box-sizing: border-box;
 }
+
 .result-item {
   padding: 10px 12px;
   border: 1px solid #e0e0e0;
@@ -307,328 +151,257 @@ body {
   transform: translateY(-2px);
 }
 
-/* 地圖容器樣式 */
+/* 地圖樣式 */
 #map {
-  flex-grow: 1;
+  flex-grow: 1; /* 讓地圖佔據剩餘空間 */
+  width: 100%;
+  z-index: 1;
+  position: relative;
+  border-radius: 12px; /* 添加圓角 */
+  overflow: hidden; /* 確保內容不會溢出圓角 */
+  margin: 0 10px 10px 10px; /* 調整邊距 */
+  box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+/* 身份驗證區塊樣式 */
+#authSection {
+  padding: 15px;
+  background-color: #fff;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  margin: 10px;
   border-radius: 12px;
-  overflow: hidden;
-  margin: 15px;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  z-index: 1000;
 }
 
-/* Leaflet 控制項容器樣式 */
-/* 這裡的 top 和 left 需要根據實際佈局和避免重疊來調整 */
-.leaflet-control-container .leaflet-top.leaflet-left {
-    display: flex;
-    flex-direction: column; /* 將縮放和定位按鈕堆疊 */
-    align-items: flex-start;
-    gap: 8px; /* 按鈕間距 */
-    /* 調整位置，確保不與搜尋結果重疊 */
-    left: 15px; /* 預設的左邊距 */
-    top: 15px; /* 預設的上邊距 */
-    z-index: 900; /* 確保在搜尋結果之下，避免遮擋 */
-}
-
-/* 地標文字標籤樣式 */
-.marker-label {
-  background: none !important;
-  color: rgba(0, 0, 0, 0.88);
-  font-weight: 700;
-  font-size: 26px;
-  text-shadow:
-    -1.5px -1.5px 0 #fff,
-    1.5px -1.5px 0 #fff,
-    -1.5px 1.5px 0 #fff,
-    1.5px 1.5px 0 #fff,
-    0 0 5px rgba(0,0,0,0.1);
-  padding: 0;
-  transform: translate(-50%, -50%);
-  pointer-events: none;
-  white-space: nowrap;
-  display: block;
-}
-
-/* 導航按鈕圖標容器樣式 */
-.nav-button-icon {
-    pointer-events: auto;
-    background: none;
-    border: none;
-    box-shadow: none;
-    padding: 0;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    transform: translate(-50%, -100%); /* 稍微向上移動，避免遮擋地標 */
-    z-index: 999; /* 確保在標籤之上 */
-}
-
-/* 導航按鈕實際內容 (圖片) 樣式 */
-.nav-button-content img {
-  width: 50px;
-  height: 50px;
+/* 通用按鈕樣式 */
+.action-buttons {
+  padding: 10px 15px;
+  font-size: 16px;
+  border: none;
+  border-radius: 8px;
   cursor: pointer;
-  display: block;
-  border-radius: 50%;
-  background-color: rgba(255, 255, 255, 0.9);
-  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-  transition: transform 0.2s ease-in-out;
+  background-color: #007bff;
+  color: white;
+  transition: background-color 0.3s ease;
+  flex-shrink: 0;
+  min-width: 80px;
+  text-align: center;
 }
-.nav-button-content img:hover {
-  transform: scale(1.1);
-}
-
-/* 自定義圓點圖標樣式 */
-.custom-dot-icon {
-    background-color: #e74c3c; /* 紅點 */
-    border: 2px solid white;
-    border-radius: 50%;
-    width: 18px;
-    height: 18px;
-    pointer-events: auto;
-    display: block;
-    margin-left: -9px;
-    margin-top: -9px;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+.action-buttons:hover {
+  background-color: #0056b3;
 }
 
-/* 訊息框和註冊模態框樣式 */
+/* KML 管理區塊樣式 */
+.kml-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border: 1px solid #eee;
+  padding: 15px;
+  border-radius: 10px;
+  background-color: #f9f9f9;
+}
+.kml-section h3 {
+  margin-top: 0;
+  color: #555;
+  font-size: 18px;
+}
+.kml-section button {
+  width: auto; /* 讓按鈕寬度根據內容自動調整 */
+}
+
+/* 檔案選擇器樣式 */
+#hiddenKmlFileInput {
+  display: none; /* 隱藏原生檔案選擇器 */
+}
+.custom-file-upload {
+  display: inline-block;
+  padding: 10px 15px;
+  cursor: pointer;
+  background-color: #28a745;
+  color: white;
+  border-radius: 8px;
+  font-size: 16px;
+  transition: background-color 0.3s ease;
+}
+.custom-file-upload:hover {
+  background-color: #218838;
+}
+
+/* 選中檔案顯示樣式 */
+#selectedKmlFileNameDashboard {
+  margin-left: 10px;
+  font-style: italic;
+  color: #666;
+}
+
+/* 下拉選單樣式 */
+select {
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid #dcdcdc;
+  font-size: 16px;
+  background-color: white;
+  appearance: none; /* 移除預設的下拉箭頭 */
+  background-image: url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23007bff%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13.6-6.4H18.9c-7.7%200-13.6%204.4-13.6%2012.8%200%202.8%201.2%205.6%203.2%207.2l130.4%20128c5.2%205.2%2013.6%205.2%2018.4%200L283.8%2082.6c2-1.6%203.2-4.4%203.2-7.2z%22%2F%3E%3C%2Fsvg%3E'); /* 自定義箭頭 */
+  background-repeat: no-repeat;
+  background-position: right 12px top 50%;
+  background-size: 12px auto;
+  min-width: 180px; /* 確保下拉選單有足夠的寬度 */
+}
+select:focus {
+  border-color: #007bff;
+  box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+  outline: none;
+}
+
+/* 訊息框樣式 */
 .message-box-overlay, .registration-modal-overlay, .confirmation-modal-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(0, 0, 0, 0.5);
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    z-index: 2000;
-    opacity: 0;
-    visibility: hidden;
-    transition: opacity 0.3s ease, visibility 0.3s ease;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.6);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 9999;
+  visibility: hidden; /* 預設隱藏 */
+  opacity: 0;
+  transition: visibility 0s, opacity 0.3s ease-in-out;
 }
 .message-box-overlay.visible, .registration-modal-overlay.visible, .confirmation-modal-overlay.visible {
-    opacity: 1;
-    visibility: visible;
+  visibility: visible;
+  opacity: 1;
 }
+
 .message-box-content, .registration-modal-content, .confirmation-modal-content {
-    background: #fff;
-    padding: 30px;
-    border-radius: 12px;
-    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
-    text-align: center;
-    max-width: 400px;
-    width: 90%;
-    transform: translateY(-20px);
-    transition: transform 0.3s ease;
+  background-color: white;
+  padding: 25px;
+  border-radius: 12px;
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+  text-align: center;
+  max-width: 400px;
+  width: 90%;
+  transform: translateY(-20px); /* 初始位置稍微向上 */
+  transition: transform 0.3s ease-out;
 }
 .message-box-overlay.visible .message-box-content,
 .registration-modal-overlay.visible .registration-modal-content,
 .confirmation-modal-overlay.visible .confirmation-modal-content {
-    transform: translateY(0);
+  transform: translateY(0); /* 彈入效果 */
 }
+
 .message-box-content h3, .registration-modal-content h3, .confirmation-modal-content h3 {
-    margin-top: 0;
-    color: #333;
-    font-size: 22px;
-    margin-bottom: 15px;
+  margin-top: 0;
+  color: #007bff;
+  font-size: 22px;
 }
+
 .message-box-content p, .registration-modal-content p, .confirmation-modal-content p {
-    color: #555;
-    font-size: 16px;
-    line-height: 1.6;
-    margin-bottom: 25px;
+  margin-bottom: 20px;
+  color: #555;
+  line-height: 1.6;
 }
-.message-box-content button, .registration-modal-content button, .confirmation-modal-content button {
-    background-color: #4a90e2;
-    color: white;
-    border: none;
-    padding: 12px 25px;
-    border-radius: 8px;
-    cursor: pointer;
-    font-size: 16px;
-    font-weight: 600;
-    transition: background-color 0.2s, transform 0.2s;
-}
-.message-box-content button:hover, .registration-modal-content button:hover, .confirmation-modal-content button:hover {
-    background-color: #357ABD;
-    transform: translateY(-1px);
-}
-.registration-modal-content input[type="text"] {
-    padding: 10px 12px;
-    font-size: 15px;
-    border-radius: 8px;
-    border: 1px solid #dcdcdc;
-    width: calc(100% - 24px);
-    box-sizing: border-box;
-    margin-bottom: 15px;
-}
-.registration-modal-content .button-group, .confirmation-modal-content .button-group {
+
+.message-box-content .button-group, .registration-modal-content .button-group, .confirmation-modal-content .button-group {
     display: flex;
     justify-content: center;
     gap: 15px;
-}
-.confirmation-modal-content .action-buttons {
-    flex: 1;
-    max-width: 120px; /* 調整按鈕寬度 */
+    margin-top: 20px;
 }
 
-
-/* 通用操作按鈕樣式 */
-.action-buttons, .admin-option-button {
-  background-color: #28a745;
-  color: white;
-  border: none;
-  padding: 10px 20px;
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 15px;
-  font-weight: 600;
-  transition: background-color 0.2s, transform 0.2s;
-  width: 100%;
-  box-sizing: border-box;
-}
-.action-buttons:hover, .admin-option-button:hover {
-  transform: translateY(-1px);
-}
-.action-buttons:disabled, .admin-option-button:disabled {
-    background-color: #cccccc;
-    cursor: not-allowed;
-    transform: none;
-    box-shadow: none;
+.registration-modal-content input {
+    width: calc(100% - 20px);
+    padding: 10px;
+    margin-bottom: 15px;
+    border: 1px solid #dcdcdc;
+    border-radius: 8px;
+    font-size: 16px;
+    box-sizing: border-box;
 }
 
-/* 各類特定按鈕樣式 */
-.action-buttons.google-btn {
-  background-color: #4285F4;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-}
-.action-buttons.google-btn img {
-  width: 20px;
-  height: 20px;
-}
-.action-buttons.upload-btn {
-  background-color: #007bff;
-}
-.action-buttons.delete-btn {
-  background-color: #dc3545;
+.registration-modal-content .countdown {
+    color: #dc3545; /* 紅色倒計時 */
+    font-weight: bold;
 }
 
-/* 管理員選項按鈕 (Dashboard 內部按鈕) */
-.admin-option-button.upload-kml-dashboard-btn {
-    background-color: #007bff;
-}
-.admin-option-button.delete-kml-dashboard-btn {
-    background-color: #dc3545;
-}
-.admin-option-button.add-user-dashboard-btn {
-    background-color: #17a2b8;
-}
-.admin-option-button.add-user-dashboard-btn:hover {
-    background-color: #138496;
-}
-
-/* 新增用戶區塊樣式 */
-#addUserSection {
-    border-top: 1px solid #eee;
-    padding-top: 15px;
-    margin-top: 15px;
+/* 用戶管理區塊樣式 */
+.user-management-section {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 15px;
+    border: 1px solid #eee;
+    padding: 15px;
+    border-radius: 10px;
+    background-color: #f9f9f9;
 }
-#addUserSection h4 {
+.user-management-section h3 {
     margin-top: 0;
-    margin-bottom: 5px;
-    font-size: 18px;
     color: #555;
+    font-size: 18px;
 }
-
-/* 自定義定位按鈕樣式 */
-.leaflet-control-locate-me {
-    background-color: #fff;
-    border-radius: 4px;
-    box-shadow: 0 1px 5px rgba(0,0,0,0.65);
-    padding: 0;
-    cursor: pointer;
-    text-align: center;
-    line-height: 28px;
-    width: 30px;
-    height: 30px;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    transition: background-color 0.2s, box-shadow 0.2s;
-}
-.leaflet-control-locate-me:hover {
-    background-color: #f4f4f4;
-    box-shadow: 0 1px 5px rgba(0,0,0,0.8);
-}
-.leaflet-control-locate-me a {
-    display: block;
-    width: 100%;
-    height: 100%;
-    text-decoration: none;
-    color: #333;
-    font-size: 20px;
-}
-
-/* 用戶位置點樣式 (脈衝動畫) */
-.user-location-dot {
-    background-color: #1a73e8;
-    border: 2px solid white;
-    border-radius: 50%;
-    width: 16px;
-    height: 16px;
-    box-shadow: 0 0 0 3px rgba(26, 115, 232, 0.4);
-    animation: pulse 1.5s infinite ease-out;
-}
-@keyframes pulse {
-    0% {
-        box-shadow: 0 0 0 0 rgba(26, 115, 232, 0.4);
-    }
-    70% {
-        box-shadow: 0 0 0 10px rgba(26, 115, 232, 0);
-    }
-    100% {
-        box-shadow: 0 0 0 0 rgba(26, 115, 232, 0);
-    }
-}
-
-/* 用戶列表樣式 */
 #userList {
     display: flex;
     flex-direction: column;
     gap: 10px;
-    font-size: 14px;
+    max-height: 300px;
+    overflow-y: auto;
+    border-top: 1px solid #eee;
+    padding-top: 10px;
 }
 .user-card {
-    background-color: #fdfdfd;
+    background-color: #fff;
     border: 1px solid #e0e0e0;
-    border-radius: 8px;
-    padding: 10px;
+    border-radius: 10px;
+    padding: 12px 15px;
     display: flex;
     flex-direction: column;
     gap: 8px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.05);
 }
-.user-card-row-1, .user-card-row-2 {
+.user-card-row-1 {
     display: flex;
+    justify-content: space-between;
     align-items: center;
     flex-wrap: wrap;
-    gap: 10px;
+    gap: 8px;
 }
 .user-card-row-1 .user-email {
-    flex-basis: 60%;
+    font-weight: 600;
+    color: #333;
+    flex-grow: 1;
+    min-width: 150px;
+}
+.user-card-row-1 .user-nickname {
+    font-size: 14px;
+    color: #666;
+    background-color: #f0f0f0;
+    padding: 4px 8px;
+    border-radius: 6px;
+    flex-shrink: 0;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    min-width: 120px;
+    max-width: 120px;
 }
-.user-card-row-1 .user-nickname {
-    flex-basis: calc(40% - 10px);
+.user-card-row-2 {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 5px;
+}
+.user-card-row-2 .user-role-display {
+    font-style: italic;
+    color: #888;
+    flex-grow: 1;
+    width: calc(40% - 10px);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -666,31 +439,148 @@ body {
     background-color: #007bff; /* 藍色 */
     color: white;
     border: none;
-    border-radius: 8px;
+    border-radius: 6px;
     cursor: pointer;
-    font-weight: 600;
-    transition: background-color 0.2s, transform 0.2s;
+    transition: background-color 0.2s ease;
 }
 .user-card-row-2 .change-role-btn:hover {
-    background-color: #0056b3; /* 懸停時顏色加深 */
-    transform: translateY(-1px);
+    background-color: #0056b3;
 }
-.user-card-row-2 .change-role-btn:disabled {
-    background-color: #cccccc;
-    cursor: not-allowed;
-    transform: none;
-}
-/* 刪除按鈕樣式 (保持紅色) */
+/* 刪除按鈕樣式 */
 .user-card-row-2 .delete-user-btn {
     padding: 6px 10px;
     font-size: 14px;
     width: auto;
     flex-shrink: 0;
+    background-color: #dc3545; /* 紅色 */
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+.user-card-row-2 .delete-user-btn:hover {
+    background-color: #c82333;
 }
 
-/* 註冊碼模態框計時器樣式 */
-#registrationModalMessage.countdown {
-    font-size: 16px;
-    font-weight: bold;
-    color: #007bff;
+/* 定位按鈕和導航按鈕的自定義樣式 */
+.leaflet-control-locate-me {
+    background-color: white;
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+.leaflet-control-locate-me a {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    height: 100%;
+    color: #007bff; /* 藍色 */
+    text-decoration: none;
+}
+.leaflet-control-locate-me a:hover {
+    color: #0056b3;
+}
+.leaflet-control-locate-me .material-symbols-outlined {
+    font-size: 24px;
+}
+
+.nav-button-icon {
+    background: none !important; /* 確保 Leaflet 不添加背景 */
+    border: none !important;     /* 確保 Leaflet 不添加邊框 */
+    box-shadow: none !important; /* 確保 Leaflet 不添加陰影 */
+}
+.nav-button-content {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    height: 100%;
+    background-color: white;
+    border-radius: 50%;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+    cursor: pointer;
+    overflow: hidden; /* 確保內容在圓形內 */
+}
+.nav-button-content img {
+    width: 80%; /* 調整圖片大小 */
+    height: 80%;
+    object-fit: contain; /* 保持圖片比例 */
+}
+.nav-button-content:hover {
+    background-color: #f0f0f0;
+}
+
+/* Leaflet 控制項容器樣式 */
+/* 這裡的 top 和 left 需要根據實際佈局和避免重疊來調整 */
+/* 原始針對 .leaflet-top.leaflet-left 的規則，可以保留或移除，因為我們現在主要關注 topright */
+.leaflet-control-container .leaflet-top.leaflet-left {
+    display: flex;
+    flex-direction: column; /* 將縮放和定位按鈕堆疊 */
+    align-items: flex-start;
+    gap: 8px; /* 按鈕間距 */
+    /* 調整位置，確保不與搜尋結果重疊 */
+    left: 15px; /* 預設的左邊距 */
+    top: 15px; /* 預設的上邊距 */
+    z-index: 900; /* 確保在搜尋結果之下，避免遮擋 */
+}
+
+/* 新增：針對右上方控制項的樣式 */
+.leaflet-control-container .leaflet-top.leaflet-right {
+    display: flex;
+    flex-direction: column; /* 讓控制項垂直堆疊 */
+    align-items: flex-end; /* 右對齊 */
+    gap: 8px; /* 控制項之間的間距 */
+    right: 15px; /* 從右邊緣開始 */
+    top: 15px; /* 從上邊緣開始 */
+    z-index: 1200; /* 確保在大多數其他內容之上，包括搜尋結果和標題 */
+}
+
+/* 確保 Leaflet 控制項本身有圓角和陰影 */
+.leaflet-control-zoom,
+.leaflet-control-layers {
+    border-radius: 8px; /* 圓角 */
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2); /* 陰影 */
+    background-color: white; /* 背景色 */
+}
+
+/* 確保 Leaflet 縮放按鈕樣式 */
+.leaflet-control-zoom a {
+    width: 40px; /* 統一按鈕大小 */
+    height: 40px;
+    line-height: 40px; /* 垂直居中符號 */
+    font-size: 24px; /* 增大符號大小 */
+    color: #333;
+    border-radius: 8px; /* 圓角 */
+    background-color: white; /* 背景色 */
+}
+.leaflet-control-zoom a.leaflet-control-zoom-in {
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+}
+.leaflet-control-zoom a.leaflet-control-zoom-out {
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
+}
+.leaflet-control-zoom a:hover {
+    background-color: #f0f0f0;
+}
+
+
+/* 確保 Leaflet 圖層控制項內部樣式 */
+.leaflet-control-layers-toggle {
+    width: 40px;
+    height: 40px;
+    background-size: 24px 24px; /* 調整圖示大小 */
+    background-position: center center;
+    border-radius: 8px; /* 圓角 */
+}
+.leaflet-control-layers-expanded {
+    padding: 10px;
+    border-radius: 8px;
 }
