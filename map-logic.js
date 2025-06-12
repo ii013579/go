@@ -8,12 +8,30 @@ let navButtons = L.featureGroup(); // 用於儲存導航按鈕
 window.allKmlFeatures = [];
 
 document.addEventListener('DOMContentLoaded', () => {
-    // 初始化地圖
-    map = L.map('map', { zoomControl: false }).setView([23.6, 120.9], 8); // 台灣中心經緯度，禁用預設縮放控制
+  // 初始化地圖
+  map = L.map('map', {
+    center: [23.5, 121], // 台灣中心點
+    zoom: 8,
+    maxZoom: 18, // 設定最大縮放級別
+    minZoom: 7,  // 設定最小縮放級別
+    zoomControl: false // 禁用預設的縮放控制
+  });
 
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-    }).addTo(map);
+  // 定義基本圖層
+  baseLayers = {
+    'OpenStreetMap': L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    }).addTo(map), // 預設加入 OpenStreetMap
+    'Google 街道圖': L.tileLayer('https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {
+      attribution: 'Google Maps'
+    }),
+    'Google 衛星圖': L.tileLayer('https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
+      attribution: 'Google Maps'
+    })
+  };
+
+  // 將基本圖層控制添加到地圖
+  L.control.layers(baseLayers).addTo(map);
 
     // 將縮放控制添加到地圖的左上方
     L.control.zoom({ position: 'topleft' }).addTo(map);
