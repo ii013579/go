@@ -515,121 +515,82 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // 實際執行上傳 KML 的函數
-    uploadKmlSubmitBtnDashboard.addEventListener('click', async () => {
-        const file = hiddenKmlFileInput.files[0];
-        if (!file) {
-            showMessage('提示', '請先選擇 KML 檔案。');
-            return;
-        }
-        if (!auth.currentUser || (window.currentUserRole !== 'owner' && window.currentUserRole !== 'editor')) {
-            showMessage('錯誤', '您沒有權限上傳 KML，請登入或等待管理員審核。');
-            return;
-        }
+uploadKmlSubmitBtnDashboard.addEventListener('click', async () => {
+    const file = hiddenKmlFileInput.files[0];
+    if (!file) {
+        showMessage('提示', '請先選擇 KML 檔案。');
+        return;
+    }
 
-        const fileName = file.name;
-        const reader = new FileReader();
-        reader.onload = async () => {
-            console.log(`正在處理 KML 檔案: ${file.name}`);
-            try {
-                const kmlString = reader.result;
-                const parser = new DOMParser();
-                const kmlDoc = parser.parseFromString(kmlString, 'text/xml');
+    if (!auth.currentUser || (window.currentUserRole !== 'owner' && window.currentUserRole !== 'editor')) {
+        showMessage('錯誤', '您沒有權限上傳 KML，請登入或等待管理員審核。');
+        return;
+    }
 
-                if (kmlDoc.getElementsByTagName('parsererror').length > 0) {
-                    const errorText = kmlDoc.getElementsByTagName('parsererror')[0].textContent;
-                    throw new Error(`KML XML 解析錯誤: ${errorText}。請確保您的 KML 檔案是有效的 XML。`);
-                }
+    const fileName = file.name;
+    const reader = new FileReader();
 
-                const geojson = toGeoJSON.kml(kmlDoc); 
-                const parsedFeatures = geojson.features || []; 
+    reader.onload = async () => {
+        console.log(`正在處理 KML 檔案: ${file.name}`);
 
-                console.log('--- KML 檔案解析結果 (parsedFeatures) ---');
-                console.log(`已解析出 ${parsedFeatures.length} 個地理要素。`); 
-                if (parsedFeatures.length === 0) {
-                    console.warn('togeojson.kml() 未能從 KML 檔案中識別出任何地理要素。請確認 KML 包含 <Placemark> 內的 <Point>, <LineString>, <Polygon> 及其有效座標和名稱。');
-                } else {
-                    parsedFeatures.forEach((f, index) => {
-                        console.log(`Feature ${index + 1}:`);
-                        console.log(`  類型 (geometry.type): ${f.geometry ? f.geometry.type : 'N/A (無幾何資訊)'}`);
-                        console.log(`  名稱 (properties.name): ${f.properties ? (f.properties.name || '未命名') : 'N/A (無屬性)'}`);
-                        console.log(`  座標 (geometry.coordinates):`, f.geometry ? f.geometry.coordinates : 'N/A');
-                    });
-                }
-                console.log('--- KML 檔案解析結果結束 ---');
+        try {
+            const kmlString = reader.result;
+            const parser = new DOMParser();
+            const kmlDoc = parser.parseFromString(kmlString, 'text/xml');
 
+            if (kmlDoc.getElementsByTagName('parsererror').length > 0) {
+                const errorText = kmlDoc.getElementsByTagName('parsererror')[0].textContent;
+                throw new Error(`KML XML 解析錯誤: ${errorText}。請確保您的 KML 檔案是有效的 XML。`);
+            }
 
-                if (parsedFeatures.length === 0) {
-                    showMessage('KML 載入', 'KML 檔案中沒有找到任何可顯示的地理要素 (點、線、多邊形)。請確認 KML 檔案內容包含 <Placemark> 及其有效的地理要素。');
-                    console.warn("KML 檔案不包含任何可用的 Point、LineString 或 Polygon 類型 feature。");
-                    return;
-                }
+            const geojson = toGeoJSON.kml(kmlDoc);
+            const parsedFeatures = geojson.features || [];
 
-                // ****** 以下是處理 GeoJSON 座標，使其符合 Firestore 儲存要求的關鍵邏輯 ******
-                const processedFeatures = parsedFeatures.map(feature => {
-                    // 確保 feature 有 geometry 屬性
-                    if (!feature.geometry) {
-                        return feature; // 如果沒有 geometry，直接返回原始 feature
-                    }
+            if (parsedFeatures.length === 0) {
+                showMessage('KML 載入', 'KML 檔案中沒有找到任何可顯示的地理要素 (點、線、多邊形)。');
+                return;
+            }
 
-                    let processedGeometry = { ...feature.geometry }; // 複製 geometry 物件，以避免修改原始 geojson 物件
+            // 建立 Firestore 參考
+            const kmlLayersCollectionRef = db
+                .collection('artifacts')
+                .doc(appId)
+                .collection('public')
+                .doc('data')
+                .collection('kmlLayers');
 
-                    // 針對 LineString 類型進行扁平化處理
-                    if (feature.geometry.type === 'LineString') {
-                        const flatCoordinates = [];
-                        feature.geometry.coordinates.forEach(coordPair => {
-                            flatCoordinates.push(coordPair[0]); // 經度 (longitude)
-                            flatCoordinates.push(coordPair[1]); // 緯度 (latitude)
-                            if (coordPair.length > 2) { // 如果有高度 (altitude) 資訊
-                                flatCoordinates.push(coordPair[2]);
-                            }
-                        });
-                        processedGeometry.coordinates = flatCoordinates;
-                    }
-                    // 針對 MultiLineString 類型進行扁平化處理
-                    else if (feature.geometry.type === 'MultiLineString') {
-                        // MultiLineString 的座標是多個 LineString 陣列的陣列：[[[lon,lat],...], [[lon,lat],...]]
-                        const processedMultiLineCoordinates = feature.geometry.coordinates.map(line => {
-                            const flatLineCoordinates = [];
-                            line.forEach(coordPair => {
-                                flatLineCoordinates.push(coordPair[0]);
-                                flatLineCoordinates.push(coordPair[1]);
-                                if (coordPair.length > 2) {
-                                    flatLineCoordinates.push(coordPair[2]);
-                                }
-                            });
-                            return flatLineCoordinates; // 每個內部 LineString 都變成扁平陣列
-                        });
-                        processedGeometry.coordinates = processedMultiLineCoordinates;
-                    }
-                    // 針對 Polygon 類型進行物件化處理
-                    else if (feature.geometry.type === 'Polygon') {
-                        // Polygon 的座標是多個線性環 (linear ring) 的陣列：[[[lon,lat],...], [[lon,lat],...]]
-                        const processedPolygonCoordinates = feature.geometry.coordinates.map(linearRing => {
-                            // 每個 linearRing 是一個點陣列：[[lon,lat], [lon,lat], ...]
-                            return linearRing.map(coordPair => {
-                                // 每個 coordPair 是 [lon,lat] 或 [lon,lat,alt]
-                                const coord = { lng: coordPair[0], lat: coordPair[1] };
-                                if (coordPair.length > 2) {
-                                    coord.alt = coordPair[2];
-                                }
-                                return coord; // 將點轉換為 {lng:X, lat:Y, alt:Z} 物件
-                            });
-                        });
-                        processedGeometry.coordinates = processedPolygonCoordinates;
-                    }
-                    // 對於 Point 或其他不需要特殊處理的幾何類型，processedGeometry.coordinates 將保持原樣
+            const newLayerRef = kmlLayersCollectionRef.doc(); // 新圖層文件
+            const featuresRef = newLayerRef.collection('features'); // 子集合：features
+            const batch = db.batch();
 
-                    return { // 返回一個新的 feature 物件，其 geometry.coordinates 已被處理
-                        ...feature,
-                        geometry: processedGeometry
-                    };
+            // 將每個 feature 轉為 JSON 字串存入子文件
+            parsedFeatures.forEach((feature, index) => {
+                const featureDocRef = featuresRef.doc();
+                batch.set(featureDocRef, {
+                    geojson: JSON.stringify(feature), // 儲存整個 feature 為字串
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp()
                 });
-                // ****** GeoJSON 座標處理邏輯結束 ******
+            });
 
-                const kmlLayersCollectionRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('kmlLayers');
-                const newKmlLayerRef = kmlLayersCollectionRef.doc(); // 讓 Firestore 自動生成 ID
-                const batch = db.batch();
-                
+            // 上傳圖層基本資料
+            batch.set(newLayerRef, {
+                name: fileName,
+                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                featureCount: parsedFeatures.length
+            });
+
+            await batch.commit();
+
+            showMessage('成功', `成功上傳 KML 檔案，共 ${parsedFeatures.length} 筆地理要素。`);
+        } catch (err) {
+            console.error('處理 KML 檔案或上傳時發生錯誤：', err);
+            showMessage('錯誤', `KML 上傳失敗：${err.message}`);
+        }
+    };
+
+    reader.readAsText(file);
+});
+
                 // 查詢是否存在相同名稱的 KML 圖層
                 const existingKmlQuery = await kmlLayersCollectionRef.where('name', '==', fileName).get();
                 let kmlLayerDocRef;
