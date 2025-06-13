@@ -527,6 +527,14 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         const fileName = file.name;
+        // 詢問用戶 KML 圖層名稱
+        const kmlLayerName = prompt('請輸入此 KML 圖層的名稱 (將用於顯示):', fileName.replace(/\.kml$/i, ''));
+
+        if (!kmlLayerName) {
+            showMessage('提示', '已取消上傳。');
+            return;
+        }
+
         const reader = new FileReader();
         reader.onload = async () => {
             console.log(`正在處理 KML 檔案: ${file.name}`);
@@ -540,59 +548,95 @@ document.addEventListener('DOMContentLoaded', () => {
                     throw new Error(`KML XML 解析錯誤: ${errorText}。請確保您的 KML 檔案是有效的 XML。`);
                 }
 
-                // ****** 請將以下 GeoJSON 處理邏輯插入到這裡 ******
+                // 確保 togeojson 庫已經載入 (這通常在 index.html 中引入)
+                if (typeof toGeoJSON === 'undefined' || typeof toGeoJSON.kml === 'undefined') {
+                    throw new Error('togeojson 庫未載入。請確保 togeojson.js 已正確引入。');
+                }
+
+                const geojson = toGeoJSON.kml(kmlDoc);
+                let parsedFeatures = geojson.features || []; // 使用 let 因為我們將要處理這個陣列
+
+                console.log('--- KML 檔案解析結果 (parsedFeatures) ---');
+                console.log(`已解析出 ${parsedFeatures.length} 個地理要素。`);
+                if (parsedFeatures.length === 0) {
+                    console.warn('togeojson.kml() 未能從 KML 檔案中識別出任何地理要素。請確認 KML 包含 <Placemark> 內的 <Point>, <LineString>, <Polygon> 及其有效座標和名稱。');
+                } else {
+                    parsedFeatures.forEach((f, index) => {
+                        console.log(`Feature ${index + 1}:`);
+                        console.log(`  類型 (geometry.type): ${f.geometry ? f.geometry.type : 'N/A (無幾何資訊)'}`);
+                        console.log(`  名稱 (properties.name): ${f.properties ? (f.properties.name || '未命名') : 'N/A (無屬性)'}`);
+                        console.log(`  座標 (geometry.coordinates):`, f.geometry ? f.geometry.coordinates : 'N/A');
+                    });
+                }
+                console.log('--- KML 檔案解析結果結束 ---');
+
+                if (parsedFeatures.length === 0) {
+                    showMessage('KML 載入', 'KML 檔案中沒有找到任何可顯示的地理要素 (點、線、多邊形)。請確認 KML 檔案內容包含 <Placemark> 及其有效的地理要素。');
+                    console.warn("KML 檔案不包含任何可用的 Point、LineString 或 Polygon 類型 feature。");
+                    return;
+                }
+
+                // ****** 以下是處理 GeoJSON 座標，使其符合 Firestore 儲存要求的關鍵邏輯 ******
                 const processedFeatures = parsedFeatures.map(feature => {
+                    // 確保 feature 有 geometry 屬性
                     if (!feature.geometry) {
-                        return feature; // 如果沒有幾何資訊，直接返回
+                        return feature; // 如果沒有 geometry，直接返回原始 feature
                     }
 
-                    let processedGeometry = { ...feature.geometry }; // 複製 geometry 物件
+                    let processedGeometry = { ...feature.geometry }; // 複製 geometry 物件，以避免修改原始 geojson 物件
 
+                    // 針對 LineString 類型進行扁平化處理
                     if (feature.geometry.type === 'LineString') {
-                        // 扁平化 LineString 的座標：將 [[lon1, lat1], [lon2, lat2]] 轉換為 [lon1, lat1, lon2, lat2]
                         const flatCoordinates = [];
                         feature.geometry.coordinates.forEach(coordPair => {
-                            flatCoordinates.push(coordPair[0]); // 經度
-                            flatCoordinates.push(coordPair[1]); // 緯度
-                            if (coordPair.length > 2) { // 如果有高度資訊
+                            flatCoordinates.push(coordPair[0]); // 經度 (longitude)
+                            flatCoordinates.push(coordPair[1]); // 緯度 (latitude)
+                            if (coordPair.length > 2) { // 如果有高度 (altitude) 資訊
                                 flatCoordinates.push(coordPair[2]);
                             }
                         });
                         processedGeometry.coordinates = flatCoordinates;
-                    } else if (feature.geometry.type === 'MultiLineString') {
-                        // 扁平化 MultiLineString 的座標：將 [[[lon1, lat1], [lon2, lat2]], ...] 轉換為 [[lon1, lat1, lon2, lat2], ...]
+                    }
+                    // 針對 MultiLineString 類型進行扁平化處理
+                    else if (feature.geometry.type === 'MultiLineString') {
+                        // MultiLineString 的座標是多個 LineString 陣列的陣列：[[[lon,lat],...], [[lon,lat],...]]
                         const processedMultiLineCoordinates = feature.geometry.coordinates.map(line => {
                             const flatLineCoordinates = [];
                             line.forEach(coordPair => {
-                                flatLineCoordinates.push(coordPair[0]); // 經度
-                                flatLineCoordinates.push(coordPair[1]); // 緯度
-                                if (coordPair.length > 2) { // 如果有高度資訊
+                                flatLineCoordinates.push(coordPair[0]);
+                                flatLineCoordinates.push(coordPair[1]);
+                                if (coordPair.length > 2) {
                                     flatLineCoordinates.push(coordPair[2]);
                                 }
                             });
-                            return flatLineCoordinates;
+                            return flatLineCoordinates; // 每個內部 LineString 都變成扁平陣列
                         });
                         processedGeometry.coordinates = processedMultiLineCoordinates;
-                    } else if (feature.geometry.type === 'Polygon') {
-                        // 處理 Polygon 座標：將每個座標點轉換為 {lat: X, lng: Y, alt: Z} 物件陣列
+                    }
+                    // 針對 Polygon 類型進行物件化處理
+                    else if (feature.geometry.type === 'Polygon') {
+                        // Polygon 的座標是多個線性環 (linear ring) 的陣列：[[[lon,lat],...], [[lon,lat],...]]
                         const processedPolygonCoordinates = feature.geometry.coordinates.map(linearRing => {
+                            // 每個 linearRing 是一個點陣列：[[lon,lat], [lon,lat], ...]
                             return linearRing.map(coordPair => {
+                                // 每個 coordPair 是 [lon,lat] 或 [lon,lat,alt]
                                 const coord = { lng: coordPair[0], lat: coordPair[1] };
-                                if (coordPair.length > 2) { // 如果有高度資訊
+                                if (coordPair.length > 2) {
                                     coord.alt = coordPair[2];
                                 }
-                                return coord;
+                                return coord; // 將點轉換為 {lng:X, lat:Y, alt:Z} 物件
                             });
                         });
                         processedGeometry.coordinates = processedPolygonCoordinates;
                     }
-                    
-                    return { // 返回一個新的 feature 物件，包含處理過的 geometry
+                    // 對於 Point 或其他不需要特殊處理的幾何類型，processedGeometry.coordinates 將保持原樣
+
+                    return { // 返回一個新的 feature 物件，其 geometry.coordinates 已被處理
                         ...feature,
                         geometry: processedGeometry
                     };
                 });
-                // ****** GeoJSON 處理邏輯到此結束 ******
+                // ****** GeoJSON 座標處理邏輯結束 ******
 
 
                 const kmlLayersCollectionRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('kmlLayers');
@@ -608,7 +652,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     id: newKmlLayerRef.id // 儲存 ID 方便後續查詢
                 });
 
-                // 儲存每個地理特徵（使用處理過的 features，而不是原始的 parsedFeatures）
+                // 儲存每個地理特徵。現在使用 processedFeatures，它們的座標結構已經過處理
                 processedFeatures.forEach(feature => {
                     batch.set(newKmlLayerRef.collection('features').doc(), feature);
                 });
@@ -630,34 +674,6 @@ document.addEventListener('DOMContentLoaded', () => {
         };
         reader.readAsText(file);
     });
-
-
-                const geojson = toGeoJSON.kml(kmlDoc); 
-                const parsedFeatures = geojson.features || []; 
-
-                console.log('--- KML 檔案解析結果 (parsedFeatures) ---');
-                console.log(`已解析出 ${parsedFeatures.length} 個地理要素。`); 
-                if (parsedFeatures.length === 0) {
-                    console.warn('togeojson.kml() 未能從 KML 檔案中識別出任何地理要素。請確認 KML 包含 <Placemark> 內的 <Point>, <LineString>, <Polygon> 及其有效座標和名稱。');
-                } else {
-                    parsedFeatures.forEach((f, index) => {
-                        console.log(`Feature ${index + 1}:`);
-                        console.log(`  類型 (geometry.type): ${f.geometry ? f.geometry.type : 'N/A (無幾何資訊)'}`);
-                        console.log(`  名稱 (properties.name): ${f.properties ? (f.properties.name || '未命名') : 'N/A (無屬性)'}`);
-                        console.log(`  座標 (geometry.coordinates):`, f.geometry ? f.geometry.coordinates : 'N/A');
-                    });
-                }
-                console.log('--- KML 檔案解析結果結束 ---');
-
-
-                if (parsedFeatures.length === 0) {
-                    showMessage('KML 載入', 'KML 檔案中沒有找到任何可顯示的地理要素 (點、線、多邊形)。請確認 KML 檔案內容包含 <Placemark> 及其有效的地理要素。');
-                    console.warn("KML 檔案不包含任何可用的 Point、LineString 或 Polygon 類型 feature。");
-                    return;
-                }
-
-                const kmlLayersCollectionRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('kmlLayers');
-                
                 // 查詢是否存在相同名稱的 KML 圖層
                 const existingKmlQuery = await kmlLayersCollectionRef.where('name', '==', fileName).get();
                 let kmlLayerDocRef;
