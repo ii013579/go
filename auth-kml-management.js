@@ -557,55 +557,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 console.log('--- KML 檔案解析結果結束 ---');
 
-            // 👉 新增：禁止包含線段與多邊形
-            let hasLine = false;
-            let hasPolygon = false;
 
-            for (const feature of parsedFeatures) {
-                if (!feature.geometry) continue;
-                const type = feature.geometry.type;
-                if (type === 'LineString' || type === 'MultiLineString') {
-                    hasLine = true;
+                if (parsedFeatures.length === 0) {
+                    showMessage('KML 載入', 'KML 檔案中沒有找到任何可顯示的地理要素 (點、線、多邊形)。請確認 KML 檔案內容包含 <Placemark> 及其有效的地理要素。');
+                    console.warn("KML 檔案不包含任何可用的 Point、LineString 或 Polygon 類型 feature。");
+                    return;
                 }
-                if (type === 'Polygon' || type === 'MultiPolygon') {
-                    hasPolygon = true;
-                }
-            }
 
-            if (hasLine || hasPolygon) {
-                let message = 'KML 檔案中包含不支援的圖徵類型：';
-                if (hasLine && hasPolygon) {
-                    message += '線段與多邊形';
-                } else if (hasLine) {
-                    message += '線段';
-                } else if (hasPolygon) {
-                    message += '多邊形';
-                }
-                message += '。目前僅支援點位上傳，請移除其他圖徵類型後再試一次。';
-
-                showMessage('上傳失敗', message);
-                hiddenKmlFileInput.value = ''; // 清空檔案
-                selectedKmlFileNameDashboard.textContent = '請選擇 KML 檔案...';
-                uploadKmlSubmitBtnDashboard.disabled = true;
-                return;
-            }
-
-            if (parsedFeatures.length === 0) {
-                showMessage('KML 載入', 'KML 檔案中沒有找到任何可顯示的地理要素 (點、線、多邊形)。請確認 KML 檔案內容包含 <Placemark> 及其有效的地理要素。');
-                return;
-            }
-
-            const kmlLayersCollectionRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('kmlLayers');
-
-        } catch (error) {
-            console.error('KML 解析或處理時發生錯誤：', error);
-            showMessage('錯誤', `KML 處理失敗：${error.message}`);
-        }
-    };
-
-    reader.readAsText(file);
-});
-
+                const kmlLayersCollectionRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('kmlLayers');
+                
                 // 查詢是否存在相同名稱的 KML 圖層
                 const existingKmlQuery = await kmlLayersCollectionRef.where('name', '==', fileName).get();
                 let kmlLayerDocRef;
