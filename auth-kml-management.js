@@ -515,13 +515,33 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // 實際執行上傳 KML 的函數
+// 展平 coordinates 避免 Firestore nested array 錯誤
+function flattenCoordinates(geometry) {
+    const flatten = (coords) => {
+        if (typeof coords[0] === 'number') return coords;
+        return coords.map(flatten);
+    };
+    const newGeometry = { ...geometry };
+    newGeometry._coordinates = flatten(geometry.coordinates);
+    delete newGeometry.coordinates;
+    return newGeometry;
+}
+
+function prepareFirestoreSafeGeoJSON(geojson) {
+    const safeFeatures = geojson.features.map((f) => ({
+        ...f,
+        geometry: flattenCoordinates(f.geometry),
+    }));
+    return { type: 'FeatureCollection', features: safeFeatures };
+}
+
+// 實際執行上傳 KML 的函數 
 uploadKmlSubmitBtnDashboard.addEventListener('click', async () => {
     const file = hiddenKmlFileInput.files[0];
     if (!file) {
         showMessage('提示', '請先選擇 KML 檔案。');
         return;
     }
-
     if (!auth.currentUser || (window.currentUserRole !== 'owner' && window.currentUserRole !== 'editor')) {
         showMessage('錯誤', '您沒有權限上傳 KML，請登入或等待管理員審核。');
         return;
@@ -529,10 +549,8 @@ uploadKmlSubmitBtnDashboard.addEventListener('click', async () => {
 
     const fileName = file.name;
     const reader = new FileReader();
-
     reader.onload = async () => {
         console.log(`正在處理 KML 檔案: ${file.name}`);
-
         try {
             const kmlString = reader.result;
             const parser = new DOMParser();
@@ -543,15 +561,29 @@ uploadKmlSubmitBtnDashboard.addEventListener('click', async () => {
                 throw new Error(`KML XML 解析錯誤: ${errorText}。請確保您的 KML 檔案是有效的 XML。`);
             }
 
-            const geojson = toGeoJSON.kml(kmlDoc);
-            const parsedFeatures = geojson.features || [];
+            const geojson = toGeoJSON.kml(kmlDoc); 
+            const parsedFeatures = geojson.features || []; 
 
+            console.log('--- KML 檔案解析結果 (parsedFeatures) ---');
+            console.log(`已解析出 ${parsedFeatures.length} 個地理要素。`); 
             if (parsedFeatures.length === 0) {
+                console.warn('KML 檔案不包含任何地理要素，請檢查 Placemark 結構。');
                 showMessage('KML 載入', 'KML 檔案中沒有找到任何可顯示的地理要素 (點、線、多邊形)。');
                 return;
             }
 
-            // 建立 Firestore 參考
+            parsedFeatures.forEach((f, index) => {
+                console.log(`Feature ${index + 1}:`);
+                console.log(`  類型: ${f.geometry?.type ?? 'N/A'}`);
+                console.log(`  名稱: ${f.properties?.name ?? '未命名'}`);
+                console.log(`  座標:`, f.geometry?.coordinates ?? 'N/A');
+            });
+            console.log('--- KML 檔案解析結果結束 ---');
+
+            // 將 GeoJSON 格式轉為 Firestore-safe
+            const safeGeojson = prepareFirestoreSafeGeoJSON(geojson);
+            const features = safeGeojson.features;
+
             const kmlLayersCollectionRef = db
                 .collection('artifacts')
                 .doc(appId)
@@ -559,38 +591,33 @@ uploadKmlSubmitBtnDashboard.addEventListener('click', async () => {
                 .doc('data')
                 .collection('kmlLayers');
 
-            const newLayerRef = kmlLayersCollectionRef.doc(); // 新圖層文件
-            const featuresRef = newLayerRef.collection('features'); // 子集合：features
+            const newLayerRef = kmlLayersCollectionRef.doc();
+            const layerId = newLayerRef.id;
             const batch = db.batch();
 
-            // 將每個 feature 轉為 JSON 字串存入子文件
-            parsedFeatures.forEach((feature, index) => {
-                const featureDocRef = featuresRef.doc();
-                batch.set(featureDocRef, {
-                    geojson: JSON.stringify(feature), // 儲存整個 feature 為字串
-                    createdAt: firebase.firestore.FieldValue.serverTimestamp()
-                });
-            });
+            // 上傳每個 feature 到 Firestore 子集合
+            for (const f of features) {
+                const featureRef = newLayerRef.collection('features').doc();
+                batch.set(featureRef, f);
+            }
 
-            // 上傳圖層基本資料
+            // 建立圖層 metadata
             batch.set(newLayerRef, {
-                name: fileName,
-                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-                featureCount: parsedFeatures.length
+                name: file.name.replace('.kml', ''),
+                timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+                owner: auth.currentUser.uid,
             });
 
             await batch.commit();
-
-            showMessage('成功', `成功上傳 KML 檔案，共 ${parsedFeatures.length} 筆地理要素。`);
-        } catch (err) {
-            console.error('處理 KML 檔案或上傳時發生錯誤：', err);
-            showMessage('錯誤', `KML 上傳失敗：${err.message}`);
+            showMessage('上傳成功', `KML 圖層「${file.name}」已成功上傳。`);
+        } catch (error) {
+            console.error("KML 上傳錯誤：", error);
+            showMessage("錯誤", `KML 上傳失敗：${error.message}`);
         }
     };
 
     reader.readAsText(file);
 });
-
                 // 查詢是否存在相同名稱的 KML 圖層
                 const existingKmlQuery = await kmlLayersCollectionRef.where('name', '==', fileName).get();
                 let kmlLayerDocRef;
