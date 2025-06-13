@@ -527,14 +527,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         const fileName = file.name;
-        // 詢問用戶 KML 圖層名稱
-        const kmlLayerName = prompt('請輸入此 KML 圖層的名稱 (將用於顯示):', fileName.replace(/\.kml$/i, ''));
-
-        if (!kmlLayerName) {
-            showMessage('提示', '已取消上傳。');
-            return;
-        }
-
         const reader = new FileReader();
         reader.onload = async () => {
             console.log(`正在處理 KML 檔案: ${file.name}`);
@@ -548,16 +540,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     throw new Error(`KML XML 解析錯誤: ${errorText}。請確保您的 KML 檔案是有效的 XML。`);
                 }
 
-                // 確保 togeojson 庫已經載入 (這通常在 index.html 中引入)
-                if (typeof toGeoJSON === 'undefined' || typeof toGeoJSON.kml === 'undefined') {
-                    throw new Error('togeojson 庫未載入。請確保 togeojson.js 已正確引入。');
-                }
-
-                const geojson = toGeoJSON.kml(kmlDoc);
-                let parsedFeatures = geojson.features || []; // 使用 let 因為我們將要處理這個陣列
+                const geojson = toGeoJSON.kml(kmlDoc); 
+                const parsedFeatures = geojson.features || []; 
 
                 console.log('--- KML 檔案解析結果 (parsedFeatures) ---');
-                console.log(`已解析出 ${parsedFeatures.length} 個地理要素。`);
+                console.log(`已解析出 ${parsedFeatures.length} 個地理要素。`); 
                 if (parsedFeatures.length === 0) {
                     console.warn('togeojson.kml() 未能從 KML 檔案中識別出任何地理要素。請確認 KML 包含 <Placemark> 內的 <Point>, <LineString>, <Polygon> 及其有效座標和名稱。');
                 } else {
@@ -569,6 +556,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     });
                 }
                 console.log('--- KML 檔案解析結果結束 ---');
+
 
                 if (parsedFeatures.length === 0) {
                     showMessage('KML 載入', 'KML 檔案中沒有找到任何可顯示的地理要素 (點、線、多邊形)。請確認 KML 檔案內容包含 <Placemark> 及其有效的地理要素。');
@@ -638,42 +626,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
                 // ****** GeoJSON 座標處理邏輯結束 ******
 
-
                 const kmlLayersCollectionRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('kmlLayers');
                 const newKmlLayerRef = kmlLayersCollectionRef.doc(); // 讓 Firestore 自動生成 ID
                 const batch = db.batch();
-
-                // 儲存 KML 圖層的元數據
-                batch.set(newKmlLayerRef, {
-                    name: kmlLayerName, // 使用用戶輸入的名稱
-                    originalFileName: fileName,
-                    uploadTime: firebase.firestore.FieldValue.serverTimestamp(),
-                    uploadedBy: auth.currentUser.email,
-                    id: newKmlLayerRef.id // 儲存 ID 方便後續查詢
-                });
-
-                // 儲存每個地理特徵。現在使用 processedFeatures，它們的座標結構已經過處理
-                processedFeatures.forEach(feature => {
-                    batch.set(newKmlLayerRef.collection('features').doc(), feature);
-                });
-
-                await batch.commit();
-                showMessage('成功', `${kmlLayerName} 已成功上傳！`);
-                loadKmlLayersToSelect(); // 重新載入選單
-                loadAllKmlLayersToMap(); // 重新載入地圖上的所有 KML 圖層
-
-                // 重置檔案輸入框和顯示
-                hiddenKmlFileInput.value = '';
-                selectedKmlFileNameDashboard.textContent = '未選擇檔案';
-                uploadKmlSubmitBtnDashboard.disabled = true;
-
-            } catch (error) {
-                console.error("處理 KML 檔案或上傳時發生錯誤:", error);
-                showMessage('錯誤', `處理 KML 檔案或上傳時發生錯誤: ${error.message}`);
-            }
-        };
-        reader.readAsText(file);
-    });
+                
                 // 查詢是否存在相同名稱的 KML 圖層
                 const existingKmlQuery = await kmlLayersCollectionRef.where('name', '==', fileName).get();
                 let kmlLayerDocRef;
