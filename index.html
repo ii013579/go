@@ -75,18 +75,13 @@
           <p id="registrationExpiryDisplay" style="display: none;"></p>
       </div>
 
-<div id="userManagementSection" style="display: none;">
-    <button id="refreshUsersBtn" class="action-buttons">使用者列表</button> <div id="userList" class="user-list-container">
-        <div class="user-list-header">
-            <div class="header-item user-email-header">Email</div>
-            <div class="header-item user-nickname-header">暱稱</div>
-            <div class="header-item user-role-header">角色</div>
-            <div class="header-item user-actions-header">操作</div>
-        </div>
-        <div id="userListContent" class="user-list-content">
-            </div>
-    </div>
-</div>
+      <div id="userManagementSection" style="display: none;">
+          <button id="refreshUsersBtn" class="action-buttons">使用者管理</button>
+          <div id="userList">
+            <!-- 使用者列表會由 JavaScript 動態填充 -->
+          </div>
+      </div>
+
       <button id="logoutBtn" class="action-buttons">登出</button>
     </div>
   </div>
