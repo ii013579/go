@@ -7,6 +7,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const searchBox = document.getElementById('searchBox');
     const searchResults = document.getElementById('searchResults');
     const searchContainer = document.getElementById('searchContainer'); // 獲取搜尋容器
+    const userManagementSection = document.getElementById('userManagementSection');
+    const refreshUsersBtn = document.getElementById('refreshUsersBtn'); // 開關的按鈕
 
     authSection.style.display = 'none';
     controls.style.display = 'flex';
@@ -26,6 +28,29 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     } else {
         console.error('錯誤: 找不到編輯按鈕、認證區塊或控制項。');
+    }
+
+    // 新增：控制使用者管理區塊的顯示/隱藏
+    if (userManagementSection && refreshUsersBtn) {
+        // 預設使用者管理區塊是開啟的 (顯示)
+        userManagementSection.style.display = 'block'; // 使用 'block' 適合 div 元素
+
+        // 綁定點擊事件來切換顯示狀態
+        refreshUsersBtn.addEventListener('click', () => {
+            const isUserManagementVisible = userManagementSection.style.display === 'block';
+            if (isUserManagementVisible) {
+                userManagementSection.style.display = 'none'; // 隱藏
+                refreshUsersBtn.textContent = '使用者管理 (已關閉)'; // 修改按鈕文字
+            } else {
+                userManagementSection.style.display = 'block'; // 顯示
+                refreshUsersBtn.textContent = '使用者管理 (已開啟)'; // 修改按鈕文字
+            }
+        });
+
+        // 頁面載入時，更新按鈕文字以反映預設開啟狀態
+        refreshUsersBtn.textContent = '使用者管理 (已開啟)';
+    } else {
+        console.error('錯誤: 找不到使用者管理區塊或重新整理使用者按鈕。');
     }
 
 
