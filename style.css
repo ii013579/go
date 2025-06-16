@@ -615,65 +615,122 @@ body {
     }
 }
 
-/* 用戶列表樣式 */
-#userList {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    font-size: 14px;
+/* User List Table */
+/* [新增] 用於包裹表格的容器，允許水平滾動 */
+#userListContainer {
+    overflow-x: auto; /* 允許在小螢幕上水平滾動 */
 }
-.user-card {
-    background-color: #fdfdfd;
-    border: 1px solid #e0e0e0;
-    border-radius: 8px;
-    padding: 10px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
+
+/* [新增] 用戶列表表格的基本樣式 */
+#userTable {
+    width: 100%;
+    border-collapse: collapse; /* 合併單元格邊框 */
+    margin-top: 15px;
+    font-size: 15px;
 }
-.user-card-row-1, .user-card-row-2 {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 10px;
+
+/* [新增] 表格標頭行的樣式 */
+#userTable thead tr {
+    background-color: #e9ecef; /* 淺灰色背景 */
+    border-bottom: 2px solid #dee2e6; /* 底部邊框 */
 }
-.user-card-row-1 .user-email {
-    flex-basis: 60%;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    min-width: 120px;
+
+/* [新增] 表格標頭單元格的樣式 */
+#userTable th {
+    padding: 12px 15px;
+    text-align: left;
+    font-weight: 600;
+    color: #495057; /* 深灰色文字 */
+    white-space: nowrap; /* 防止標頭文字換行 */
 }
-.user-card-row-1 .user-nickname {
-    flex-basis: calc(40% - 10px);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    font-weight: 500;
-    min-width: 80px;
+
+/* [新增] 表格行 (tbody) 的樣式 */
+#userTable tbody tr {
+    border-bottom: 1px solid #e9ecef; /* 底部細邊框 */
+    transition: background-color 0.2s ease; /* 背景色過渡效果 */
 }
-.user-card-row-2 .user-role-controls {
-    display: flex;
-    align-items: center;
-    gap: 5px;
-    flex-shrink: 0;
-    min-width: 100px;
+
+/* [新增] 斑馬條紋效果 (偶數行不同背景色) */
+#userTable tbody tr:nth-child(even) {
+    background-color: #f8f9fa;
 }
-.user-card-row-2 .user-role-select {
-    padding: 6px 8px;
+
+/* [新增] 行懸停效果 */
+#userTable tbody tr:hover {
+    background-color: #e2e6ea;
+}
+
+/* [新增] 表格數據單元格的樣式 */
+#userTable td {
+    padding: 12px 15px;
+    vertical-align: middle;
+    color: #343a40; /* 深灰色文字 */
+    white-space: nowrap; /* 防止內容換行 */
+    overflow: hidden; /* 隱藏超出內容 */
+    text-overflow: ellipsis; /* 超出部分顯示省略號 */
+    max-width: 150px; /* 限制寬度以觸發省略號 */
+}
+
+/* [新增] "操作" 列的特殊調整，允許按鈕換行 */
+#userTable td:last-child {
+    white-space: normal; /* 允許操作按鈕換行 */
+    max-width: none; /* 取消最大寬度限制 */
+    text-align: center; /* 操作按鈕居中 */
+}
+
+/* [新增] 表格內角色選擇下拉選單的樣式 */
+.user-role-select {
+    padding: 6px 10px;
     border-radius: 6px;
-    border: 1px solid #dcdcdc;
+    border: 1px solid #ced4da; /* 淺灰色邊框 */
     font-size: 14px;
-    flex-grow: 1;
-    min-width: 80px;
+    background-color: #fff;
+    cursor: pointer;
+    appearance: none; /* 移除預設的 select 箭頭 */
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    /* [新增] 自定義下拉箭頭 */
+    background-image: url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23495057%22%20d%3D%22M287%2C197.6L155.2%2C65.8c-4.7-4.7-12.2-4.7-16.9%2C0L5.4%2C197.6c-4.7%2C4.7-4.7%2C12.2%2C0%2C16.9l16.9%2C16.9c4.7%2C4.7%2C12.2%2C4.7%2C16.9%2C0L147%2C118.9c4.7-4.7%2C12.2-4.7%2C16.9%2C0L253.2%2C231.4c4.7%2C4.7%2C12.2%2C4.7%2C16.9%2C0l16.9-16.9C291.7%2C209.8%2C291.7%2C202.3%2C287%2C197.6z%22%2F%3E%3C%2Fsvg%3E');
+    background-repeat: no-repeat;
+    background-position: right 10px top 50%;
+    background-size: 12px;
 }
-.user-card-row-2 .user-actions {
-    display: flex;
-    gap: 8px;
-    flex-grow: 1;
-    justify-content: flex-end;
-    flex-wrap: wrap;
+
+/* [新增] 表格內操作按鈕的通用樣式 */
+.table-action-button {
+    padding: 6px 10px;
+    font-size: 13px;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background-color 0.2s ease, transform 0.2s ease;
+    margin: 2px; /* 按鈕之間的小間距 */
+    white-space: nowrap; /* 防止按鈕文字換行 */
 }
+
+/* [新增] 變更角色按鈕的樣式 */
+.table-action-button.change-role-btn {
+    background-color: #28a745; /* 綠色 */
+    color: white;
+}
+
+.table-action-button.change-role-btn:hover {
+    background-color: #218838;
+    transform: translateY(-1px);
+}
+
+/* [新增] 刪除用戶按鈕的樣式 */
+.table-action-button.delete-user-btn {
+    background-color: #dc3545; /* 紅色 */
+    color: white;
+}
+
+.table-action-button.delete-user-btn:hover {
+    background-color: #c82333;
+    transform: translateY(-1px);
+}
+
+
 /* 變更按鈕樣式 */
 .user-card-row-2 .change-role-btn {
     padding: 6px 10px;
