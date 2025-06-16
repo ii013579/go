@@ -199,9 +199,9 @@ body {
 
 /* KML 控制項預設是隱藏的，由 JS 控制顯示 */
 #kmlControls {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
 }
 
 /* 輸入框統一樣式 */
@@ -615,97 +615,232 @@ body {
     }
 }
 
-/* 用戶列表樣式 */
-#userList {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    font-size: 14px;
-}
-.user-card {
-    background-color: #fdfdfd;
-    border: 1px solid #e0e0e0;
+/* ----------- 新增/更新的使用者管理表格樣式 ----------- */
+
+/* 確保 userManagementSection 的基本佈局 */
+#userManagementSection {
+    padding: 15px;
+    background-color: #ffffff;
     border-radius: 8px;
-    padding: 10px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    margin-top: 15px; /* 與上方元素保持距離 */
+    overflow: hidden; /* 確保內容不會溢出圓角 */
 }
-.user-card-row-1, .user-card-row-2 {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 10px;
+
+#userManagementSection h3 {
+    margin-top: 0;
+    color: #333;
+    font-size: 1.5em;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 10px;
+    margin-bottom: 15px;
 }
-.user-card-row-1 .user-email {
-    flex-basis: 60%;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    min-width: 120px;
+
+#userManagementSection .action-buttons {
+    margin-bottom: 15px; /* 按鈕與表格之間留有空間 */
 }
-.user-card-row-1 .user-nickname {
-    flex-basis: calc(40% - 10px);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    font-weight: 500;
-    min-width: 80px;
+
+/* 用戶列表容器 (div#userList) */
+#userList.user-list-container { /* 使用 ID 和 Class 提高特異性 */
+    width: 100%;
+    overflow-x: auto; /* 在小螢幕上允許水平滾動 */
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
 }
-.user-card-row-2 .user-role-controls {
+
+/* 用戶管理表格本身 (table#userTable) */
+#userTable { /* 使用 ID 提高特異性 */
+    width: 100%;
+    border-collapse: collapse; /* 移除單元格間距 */
+    font-size: 0.9em;
+    min-width: 600px; /* 確保表格在小螢幕下不會太窄，以便所有列都可見 */
+    border: none; /* 讓表格本身沒有邊框，由容器控制外部邊框 */
+}
+
+#userTable thead {
+    background-color: #f8f9fa;
+    color: #495057;
+    text-align: left;
+}
+
+/* 表格頭部和單元格的通用樣式 */
+#userTable th,
+#userTable td {
+    padding: 12px 15px;
+    border-bottom: 1px solid #dee2e6;
+    vertical-align: middle; /* 垂直居中對齊 */
+}
+
+/* 表頭樣式，用於排序互動 */
+.user-list-header th { /* 針對 th 應用 */
+    cursor: pointer;
+    position: relative;
+    padding-right: 25px; /* 為排序箭頭留出空間 */
+    user-select: none; /* 防止文字在點擊時被選中 */
+}
+
+.user-list-header th:hover {
+    background-color: #e2e6ea;
+}
+
+/* 排序箭頭的通用樣式 */
+.user-list-header .header-item::after {
+    content: '';
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    display: inline-block;
+    width: 0;
+    height: 0;
+    margin-left: 5px;
+    vertical-align: middle;
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    opacity: 0.6; /* 默認半透明 */
+    transition: opacity 0.2s ease, border-color 0.2s ease;
+}
+
+/* 鼠標懸停在未排序的標頭時，顯示一個中性的箭頭提示可排序 */
+.user-list-header .header-item:not(.sort-asc):not(.sort-desc):hover::after {
+    border-top: 5px solid #6c757d; /* 灰色向下箭頭 */
+    border-bottom: 0;
+    opacity: 0.8;
+}
+
+/* 升序排序箭頭 */
+.user-list-header .header-item.sort-asc::after {
+    border-bottom: 5px solid #007bff; /* 向上箭頭，強調藍色 */
+    border-top: 0;
+    opacity: 1; /* 完全顯示 */
+}
+
+/* 降序排序箭頭 */
+.user-list-header .header-item.sort-desc::after {
+    border-top: 5px solid #007bff; /* 向下箭頭，強調藍色 */
+    border-bottom: 0;
+    opacity: 1; /* 完全顯示 */
+}
+
+/* 表格內容行樣式 */
+#userTableBody tr:nth-child(even) { /* 針對 tbody 內的 tr 應用 */
+    background-color: #f8f9fa; /* 淺灰色背景 */
+}
+
+#userTableBody tr:hover {
+    background-color: #e9ecef; /* 懸停時顏色加深 */
+}
+
+/* 表格的最後一行去掉底部邊框 */
+#userTableBody tr:last-child td {
+    border-bottom: none;
+}
+
+/* 單元格內容的寬度分配 (可根據實際內容調整) */
+#userTable .user-email { /* 針對 td 應用 */
+    width: 30%;
+}
+#userTable .user-nickname {
+    width: 20%;
+}
+#userTable .user-role {
+    width: 25%;
+}
+#userTable .user-actions {
+    width: 25%;
+    text-align: right; /* 操作按鈕靠右對齊 */
+}
+
+/* 角色選擇下拉選單和按鈕的樣式 */
+.user-role-controls {
     display: flex;
     align-items: center;
     gap: 5px;
-    flex-shrink: 0;
-    min-width: 100px;
-}
-.user-card-row-2 .user-role-select {
-    padding: 6px 8px;
-    border-radius: 6px;
-    border: 1px solid #dcdcdc;
-    font-size: 14px;
-    flex-grow: 1;
-    min-width: 80px;
-}
-.user-card-row-2 .user-actions {
-    display: flex;
-    gap: 8px;
-    flex-grow: 1;
-    justify-content: flex-end;
-    flex-wrap: wrap;
-}
-/* 變更按鈕樣式 */
-.user-card-row-2 .change-role-btn {
-    padding: 6px 10px;
-    font-size: 14px;
-    width: auto;
-    flex-shrink: 0;
-    background-color: #007bff; /* 藍色 */
-    color: white;
-    border: none;
-    border-radius: 8px;
-    cursor: pointer;
-    font-weight: 600;
-    transition: background-color 0.2s, transform 0.2s;
-}
-.user-card-row-2 .change-role-btn:hover {
-    background-color: #0056b3; /* 懸停時顏色加深 */
-    transform: translateY(-1px);
-}
-.user-card-row-2 .change-role-btn:disabled {
-    background-color: #cccccc;
-    cursor: not-allowed;
-    transform: none;
-}
-/* 刪除按鈕樣式 (保持紅色) */
-.user-card-row-2 .delete-user-btn {
-    padding: 6px 10px;
-    font-size: 14px;
-    width: auto;
-    flex-shrink: 0;
 }
 
-/* 註冊碼模態框計時器樣式 */
+.user-role-select {
+    padding: 6px 8px;
+    border-radius: 5px;
+    border: 1px solid #ccc;
+    font-size: 0.9em;
+    flex-grow: 1; /* 讓選擇框盡可能填充空間 */
+    min-width: 90px;
+}
+
+.user-actions .action-buttons {
+    padding: 6px 12px;
+    border-radius: 5px;
+    border: none;
+    cursor: pointer;
+    font-size: 0.85em;
+    transition: background-color 0.2s ease;
+    white-space: nowrap; /* 防止按鈕文字換行 */
+}
+
+.change-role-btn {
+    background-color: #007bff; /* 藍色 */
+    color: white;
+}
+.change-role-btn:hover:not(:disabled) {
+    background-color: #0056b3;
+}
+.change-role-btn:disabled {
+    background-color: #cccccc;
+    cursor: not-allowed;
+    opacity: 0.7;
+}
+
+.delete-user-btn {
+    background-color: #dc3545; /* 紅色 */
+    color: white;
+}
+.delete-user-btn:hover:not(:disabled) {
+    background-color: #bd2130;
+}
+.delete-user-btn:disabled {
+    background-color: #cccccc;
+    cursor: not-allowed;
+    opacity: 0.7;
+}
+
+/* 載入和無數據訊息的樣式 */
+#userTableBody td[colspan="4"] { /* 針對 tbody 內的 td 應用 */
+    text-align: center;
+    padding: 20px;
+    color: #666;
+}
+
+/* 響應式設計：小螢幕調整 */
+@media (max-width: 768px) {
+    #userTable {
+        min-width: 500px; /* 根據需要調整，確保內容不會過度壓縮 */
+    }
+    #userTable th,
+    #userTable td {
+        padding: 8px 10px; /* 縮小內距 */
+        font-size: 0.8em; /* 縮小字體 */
+    }
+    .user-actions {
+        flex-direction: column; /* 操作按鈕垂直堆疊 */
+        align-items: stretch; /* 讓按鈕拉伸填滿空間 */
+        gap: 5px;
+    }
+    .user-actions .action-buttons {
+        width: 100%; /* 按鈕佔滿可用寬度 */
+        padding: 5px 8px;
+    }
+    .user-role-select {
+        padding: 4px 6px;
+        font-size: 0.8em;
+    }
+    .user-list-header .header-item {
+        font-size: 0.85em; /* 確保表頭文字在小螢幕下也適當縮小 */
+        padding-right: 20px; /* 調整箭頭空間 */
+    }
+}
+
+/* 註冊碼模態框倒數計時樣式 */
 #registrationModalMessage.countdown {
     font-size: 16px;
     font-weight: bold;

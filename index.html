@@ -75,13 +75,24 @@
           <p id="registrationExpiryDisplay" style="display: none;"></p>
       </div>
 
-      <div id="userManagementSection" style="display: none;">
-          <button id="refreshUsersBtn" class="action-buttons">使用者管理</button>
-          <div id="userList">
-            <!-- 使用者列表會由 JavaScript 動態填充 -->
-          </div>
-      </div>
-
+<div id="userManagementSection" style="display: none;">
+    <button id="refreshUsersBtn" class="action-buttons">使用者列表</button>
+     <div id="userList" class="user-list-container">
+       <table id="userTable" style="width: 100%; border-collapse: collapse;" border="1">
+         <thead>
+           <tr>
+             <th>Email</th>
+             <th>暱稱</th>
+             <th>角色</th>
+             <th>操作</th>
+           </tr>
+         </thead>
+         <tbody id="userTableBody">
+           <!-- 使用者資料將由 JavaScript 動態加入 -->
+         </tbody>
+       </table>
+     </div>
+</div>
       <button id="logoutBtn" class="action-buttons">登出</button>
     </div>
   </div>
