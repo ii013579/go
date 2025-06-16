@@ -25,7 +25,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const userManagementSection = document.getElementById('userManagementSection');
     const refreshUsersBtn = document.getElementById('refreshUsersBtn');
-    const userListDiv = document.getElementById('userList');
+    const userTableBody = document.getElementById('userTableBody'); 
 
     // 全局變數
     window.currentUserRole = null;
@@ -50,6 +50,158 @@ document.addEventListener('DOMContentLoaded', () => {
         'editor': 3,
         'owner': 4
     };
+
+   /**
+     * 函數：重新整理用戶列表 (Owner Only)
+     * [修改] 此函數已全面修改以渲染表格。
+     */
+    async function refreshUserList() {
+        console.log("嘗試重新整理用戶列表...");
+        userTableBody.innerHTML = ''; // [修改] 清空現有表格內容
+
+        try {
+            const usersRef = db.collection('users');
+            const snapshot = await usersRef.get();
+
+            if (snapshot.empty) {
+                // [新增] 如果沒有用戶，顯示無用戶訊息
+                const noUsersRow = userTableBody.insertRow();
+                const cell = noUsersRow.insertCell();
+                cell.colSpan = 4; // 跨越所有列
+                cell.textContent = '目前沒有其他用戶。';
+                cell.style.textAlign = 'center';
+                cell.style.padding = '20px';
+                return;
+            }
+
+            snapshot.forEach(doc => {
+                const userData = doc.data();
+                const userId = doc.id; // Document ID 即為用戶的 UID
+
+                if (userId === firebase.auth().currentUser.uid) {
+                    // 不在列表中顯示當前登入的用戶
+                    return;
+                }
+
+                // [新增] 創建新的表格列
+                const row = userTableBody.insertRow();
+                row.dataset.uid = userId; // 將 UID 儲存到行元素的 dataset 中
+
+                // [新增] Email 儲存格
+                const emailCell = row.insertCell();
+                emailCell.textContent = userData.email || 'N/A';
+
+                // [新增] 暱稱儲存格
+                const nicknameCell = row.insertCell();
+                nicknameCell.textContent = userData.nickname || 'N/A';
+
+                // [新增] 角色儲存格 (帶有選擇下拉選單)
+                const roleCell = row.insertCell();
+                const roleSelect = document.createElement('select');
+                roleSelect.className = 'user-role-select'; // 應用 CSS 樣式
+                roleSelect.dataset.uid = userId; // 將 UID 關聯到 select 元素
+
+                // 為角色下拉選單添加選項
+                ['user', 'manager', 'owner'].forEach(role => {
+                    const option = document.createElement('option');
+                    option.value = role;
+                    option.textContent = role.charAt(0).toUpperCase() + role.slice(1); // 首字母大寫
+                    if (userData.role === role) {
+                        option.selected = true; // 設置當前用戶的角色為選定
+                    }
+                    roleSelect.appendChild(option);
+                });
+                roleCell.appendChild(roleSelect);
+
+                // [新增] 操作儲存格 (變更角色按鈕, 刪除用戶按鈕)
+                const actionsCell = row.insertCell();
+                const changeRoleBtn = document.createElement('button');
+                changeRoleBtn.textContent = '變更角色';
+                changeRoleBtn.className = 'table-action-button change-role-btn'; // 應用 CSS 樣式
+                changeRoleBtn.dataset.uid = userId; // 將 UID 關聯到按鈕
+
+                const deleteUserBtn = document.createElement('button');
+                deleteUserBtn.textContent = '刪除';
+                deleteUserBtn.className = 'table-action-button delete-user-btn'; // 應用 CSS 樣式
+                deleteUserBtn.dataset.uid = userId; // 將 UID 關聯到按鈕
+
+
+                actionsCell.appendChild(changeRoleBtn);
+                actionsCell.appendChild(deleteUserBtn);
+
+                // [修改] 為表格內的 select 和按鈕添加事件監聽器
+                roleSelect.addEventListener('change', async (e) => {
+                    const selectedRole = e.target.value;
+                    const targetUid = e.target.dataset.uid;
+                    confirmAction('確認變更角色', `您確定要將此用戶的角色變更為 ${selectedRole} 嗎？`, async () => {
+                        await changeUserRole(targetUid, selectedRole);
+                    }, () => {
+                        // 如果取消，將 select 選項恢復為原始角色
+                        e.target.value = userData.role;
+                    });
+                });
+
+                changeRoleBtn.addEventListener('click', async (e) => {
+                    const targetUid = e.target.dataset.uid;
+                    const currentRow = e.target.closest('tr'); // 找到當前按鈕所在的行
+                    const currentSelect = currentRow.querySelector('.user-role-select'); // 找到該行中的 select
+                    const selectedRole = currentSelect.value; // 獲取 select 的當前值
+                    // select 的 change 事件已處理角色變更邏輯
+                    // 此按鈕點擊也將觸發角色變更
+                    confirmAction('確認變更角色', `您確定要將此用戶的角色變更為 ${selectedRole} 嗎？`, async () => {
+                        await changeUserRole(targetUid, selectedRole);
+                    }, () => {
+                        // 如果取消，將 select 選項恢復為原始角色
+                        currentSelect.value = userData.role;
+                    });
+                });
+
+
+                deleteUserBtn.addEventListener('click', (e) => {
+                    const targetUid = e.target.dataset.uid;
+                    confirmAction('確認刪除用戶', '您確定要刪除此用戶嗎？此操作無法撤銷！', async () => {
+                        await deleteUser(targetUid);
+                    });
+                });
+            });
+
+            console.log("用戶列表重新整理完成。");
+
+        } catch (error) {
+            console.error("獲取用戶列表時出錯:", error);
+            showMessage('錯誤', `載入用戶列表失敗: ${error.message}`);
+        }
+    }
+
+
+    // 函數：變更用戶角色 (Owner Only)
+    // [保持不變] 此函數的核心邏輯不變，它依賴於 Cloud Function。
+    async function changeUserRole(uid, newRole) {
+        if (window.currentUserRole !== 'owner') {
+            showMessage('權限不足', '只有管理員可以變更用戶角色。');
+            return;
+        }
+        if (!uid || !newRole) {
+            showMessage('錯誤', '用戶UID或新角色無效。');
+            return;
+        }
+
+        try {
+            // 使用 Cloud Function 來更新用戶的自定義聲明 (role)
+            const changeRoleFunction = firebase.functions().httpsCallable('setUserRole');
+            await changeRoleFunction({ uid: uid, role: newRole });
+
+            showMessage('成功', `用戶 ${uid} 的角色已更新為 ${newRole}。`);
+            refreshUserList(); // 更新列表顯示最新角色
+        } catch (error) {
+            console.error("變更用戶角色時出錯:", error);
+            if (error.code === 'permission-denied') {
+                showMessage('權限不足', '您沒有權限執行此操作。');
+            } else {
+                showMessage('錯誤', `變更用戶角色失敗: ${error.message}`);
+            }
+        }
+    }
 
     // 輔助函數：更新 KML 圖層選單
     const updateKmlLayerSelects = async () => {
@@ -515,57 +667,109 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // 實際執行上傳 KML 的函數
-    uploadKmlSubmitBtnDashboard.addEventListener('click', async () => {
-        const file = hiddenKmlFileInput.files[0];
-        if (!file) {
-            showMessage('提示', '請先選擇 KML 檔案。');
-            return;
+// 展平 coordinates 避免 Firestore nested array 錯誤
+function flattenCoordinates(geometry) {
+    const flatten = (coords) => {
+        if (typeof coords[0] === 'number') return coords;
+        return coords.map(flatten);
+    };
+    const newGeometry = { ...geometry };
+    newGeometry._coordinates = flatten(geometry.coordinates);
+    delete newGeometry.coordinates;
+    return newGeometry;
+}
+
+function prepareFirestoreSafeGeoJSON(geojson) {
+    const safeFeatures = geojson.features.map((f) => ({
+        ...f,
+        geometry: flattenCoordinates(f.geometry),
+    }));
+    return { type: 'FeatureCollection', features: safeFeatures };
+}
+
+// 實際執行上傳 KML 的函數 
+uploadKmlSubmitBtnDashboard.addEventListener('click', async () => {
+    const file = hiddenKmlFileInput.files[0];
+    if (!file) {
+        showMessage('提示', '請先選擇 KML 檔案。');
+        return;
+    }
+    if (!auth.currentUser || (window.currentUserRole !== 'owner' && window.currentUserRole !== 'editor')) {
+        showMessage('錯誤', '您沒有權限上傳 KML，請登入或等待管理員審核。');
+        return;
+    }
+
+    const fileName = file.name;
+    const reader = new FileReader();
+    reader.onload = async () => {
+        console.log(`正在處理 KML 檔案: ${file.name}`);
+        try {
+            const kmlString = reader.result;
+            const parser = new DOMParser();
+            const kmlDoc = parser.parseFromString(kmlString, 'text/xml');
+
+            if (kmlDoc.getElementsByTagName('parsererror').length > 0) {
+                const errorText = kmlDoc.getElementsByTagName('parsererror')[0].textContent;
+                throw new Error(`KML XML 解析錯誤: ${errorText}。請確保您的 KML 檔案是有效的 XML。`);
+            }
+
+            const geojson = toGeoJSON.kml(kmlDoc); 
+            const parsedFeatures = geojson.features || []; 
+
+            console.log('--- KML 檔案解析結果 (parsedFeatures) ---');
+            console.log(`已解析出 ${parsedFeatures.length} 個地理要素。`); 
+            if (parsedFeatures.length === 0) {
+                console.warn('KML 檔案不包含任何地理要素，請檢查 Placemark 結構。');
+                showMessage('KML 載入', 'KML 檔案中沒有找到任何可顯示的地理要素 (點、線、多邊形)。');
+                return;
+            }
+
+            parsedFeatures.forEach((f, index) => {
+                console.log(`Feature ${index + 1}:`);
+                console.log(`  類型: ${f.geometry?.type ?? 'N/A'}`);
+                console.log(`  名稱: ${f.properties?.name ?? '未命名'}`);
+                console.log(`  座標:`, f.geometry?.coordinates ?? 'N/A');
+            });
+            console.log('--- KML 檔案解析結果結束 ---');
+
+            // 將 GeoJSON 格式轉為 Firestore-safe
+            const safeGeojson = prepareFirestoreSafeGeoJSON(geojson);
+            const features = safeGeojson.features;
+
+            const kmlLayersCollectionRef = db
+                .collection('artifacts')
+                .doc(appId)
+                .collection('public')
+                .doc('data')
+                .collection('kmlLayers');
+
+            const newLayerRef = kmlLayersCollectionRef.doc();
+            const layerId = newLayerRef.id;
+            const batch = db.batch();
+
+            // 上傳每個 feature 到 Firestore 子集合
+            for (const f of features) {
+                const featureRef = newLayerRef.collection('features').doc();
+                batch.set(featureRef, f);
+            }
+
+            // 建立圖層 metadata
+            batch.set(newLayerRef, {
+                name: file.name.replace('.kml', ''),
+                timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+                owner: auth.currentUser.uid,
+            });
+
+            await batch.commit();
+            showMessage('上傳成功', `KML 圖層「${file.name}」已成功上傳。`);
+        } catch (error) {
+            console.error("KML 上傳錯誤：", error);
+            showMessage("錯誤", `KML 上傳失敗：${error.message}`);
         }
-        if (!auth.currentUser || (window.currentUserRole !== 'owner' && window.currentUserRole !== 'editor')) {
-            showMessage('錯誤', '您沒有權限上傳 KML，請登入或等待管理員審核。');
-            return;
-        }
+    };
 
-        const fileName = file.name;
-        const reader = new FileReader();
-        reader.onload = async () => {
-            console.log(`正在處理 KML 檔案: ${file.name}`);
-            try {
-                const kmlString = reader.result;
-                const parser = new DOMParser();
-                const kmlDoc = parser.parseFromString(kmlString, 'text/xml');
-
-                if (kmlDoc.getElementsByTagName('parsererror').length > 0) {
-                    const errorText = kmlDoc.getElementsByTagName('parsererror')[0].textContent;
-                    throw new Error(`KML XML 解析錯誤: ${errorText}。請確保您的 KML 檔案是有效的 XML。`);
-                }
-
-                const geojson = toGeoJSON.kml(kmlDoc); 
-                const parsedFeatures = geojson.features || []; 
-
-                console.log('--- KML 檔案解析結果 (parsedFeatures) ---');
-                console.log(`已解析出 ${parsedFeatures.length} 個地理要素。`); 
-                if (parsedFeatures.length === 0) {
-                    console.warn('togeojson.kml() 未能從 KML 檔案中識別出任何地理要素。請確認 KML 包含 <Placemark> 內的 <Point>, <LineString>, <Polygon> 及其有效座標和名稱。');
-                } else {
-                    parsedFeatures.forEach((f, index) => {
-                        console.log(`Feature ${index + 1}:`);
-                        console.log(`  類型 (geometry.type): ${f.geometry ? f.geometry.type : 'N/A (無幾何資訊)'}`);
-                        console.log(`  名稱 (properties.name): ${f.properties ? (f.properties.name || '未命名') : 'N/A (無屬性)'}`);
-                        console.log(`  座標 (geometry.coordinates):`, f.geometry ? f.geometry.coordinates : 'N/A');
-                    });
-                }
-                console.log('--- KML 檔案解析結果結束 ---');
-
-
-                if (parsedFeatures.length === 0) {
-                    showMessage('KML 載入', 'KML 檔案中沒有找到任何可顯示的地理要素 (點、線、多邊形)。請確認 KML 檔案內容包含 <Placemark> 及其有效的地理要素。');
-                    console.warn("KML 檔案不包含任何可用的 Point、LineString 或 Polygon 類型 feature。");
-                    return;
-                }
-
-                const kmlLayersCollectionRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('kmlLayers');
-                
+    reader.readAsText(file);
+});
                 // 查詢是否存在相同名稱的 KML 圖層
                 const existingKmlQuery = await kmlLayersCollectionRef.where('name', '==', fileName).get();
                 let kmlLayerDocRef;
