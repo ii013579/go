@@ -243,70 +243,82 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-    /*建立觀察器*/
-// ✅ 等待地圖容器真正顯示再載入圖層
-function waitForMapVisibleAndReady(callback) {
-  const mapElement = document.getElementById('map');
-  if (!mapElement) return;
-
-  const checkReady = () => {
-    if (mapElement.offsetHeight < 100 || mapElement.offsetWidth < 100) {
+    let map;
+    
+    document.addEventListener('DOMContentLoaded', () => {
+      map = L.map('map', {
+        zoomControl: false
+      }).setView([23.6, 120.9], 8);
+    
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap 貢獻者'
+      }).addTo(map);
+    });
+    
+        /*建立觀察器*/
+    // ✅ 等待地圖容器真正顯示再載入圖層
+    function waitForMapVisibleAndReady(callback) {
+      const mapElement = document.getElementById('map');
+      if (!mapElement) return;
+    
+      const checkReady = () => {
+        if (mapElement.offsetHeight < 100 || mapElement.offsetWidth < 100) {
+          requestAnimationFrame(checkReady);
+        } else {
+          setTimeout(callback, 100); // 額外延遲保險
+        }
+      };
+    
       requestAnimationFrame(checkReady);
-    } else {
-      setTimeout(callback, 100); // 額外延遲保險
     }
-  };
-
-  requestAnimationFrame(checkReady);
-}
-
-// ✅ 進入點：搜尋某個圖層 ID 時載入 KML
-window.loadKmlLayerFromFirestore = function (kmlId) {
-  waitForMapVisibleAndReady(() => {
-    internalLoadKmlLayer(kmlId);
-  });
-};
-
-// ✅ 實際執行圖層載入與顯示的函式
-async function internalLoadKmlLayer(kmlId) {
-  if (!kmlId) {
-    console.log("未提供 KML ID，不載入。");
-    window.clearAllKmlLayers();
-    return;
-  }
-
-  // 解決首次搜尋地圖破圖問題
-  setTimeout(() => {
-    if (map && map._loaded) {
-      map.invalidateSize();
-      map.setZoom(map.getZoom());
+    
+    // ✅ 進入點：搜尋某個圖層 ID 時載入 KML
+    window.loadKmlLayerFromFirestore = function (kmlId) {
+      waitForMapVisibleAndReady(() => {
+        internalLoadKmlLayer(kmlId);
+      });
+    };
+    
+    // ✅ 實際執行圖層載入與顯示的函式
+    async function internalLoadKmlLayer(kmlId) {
+      if (!kmlId) {
+        console.log("未提供 KML ID，不載入。");
+        window.clearAllKmlLayers();
+        return;
+      }
+    
+      // 解決首次搜尋地圖破圖問題
+      setTimeout(() => {
+        if (map && map._loaded) {
+          map.invalidateSize();
+          map.setZoom(map.getZoom());
+        }
+      }, 50);
+    
+      // 清除舊圖層
+      window.clearAllKmlLayers();
+    
+      try {
+        const kmlDoc = await db.collection('kml_files').doc(kmlId).get();
+        if (!kmlDoc.exists) {
+          console.error(`KML 文件 ${kmlId} 不存在`);
+          return;
+        }
+    
+        const geoJson = kmlDoc.data().geojson;
+        const loadedFeatures = L.geoJSON(geoJson, {
+          onEachFeature: onEachKmlFeature,
+          pointToLayer: kmlPointToLayer,
+          style: kmlLayerStyle,
+        }).addTo(map);
+    
+        window.allKmlFeatures = loadedFeatures;
+        map.fitBounds(loadedFeatures.getBounds());
+        window.addMarkers(loadedFeatures);
+      } catch (err) {
+        console.error(`無法載入 KML：`, err);
+      }
     }
-  }, 50);
-
-  // 清除舊圖層
-  window.clearAllKmlLayers();
-
-  try {
-    const kmlDoc = await db.collection('kml_files').doc(kmlId).get();
-    if (!kmlDoc.exists) {
-      console.error(`KML 文件 ${kmlId} 不存在`);
-      return;
-    }
-
-    const geoJson = kmlDoc.data().geojson;
-    const loadedFeatures = L.geoJSON(geoJson, {
-      onEachFeature: onEachKmlFeature,
-      pointToLayer: kmlPointToLayer,
-      style: kmlLayerStyle,
-    }).addTo(map);
-
-    window.allKmlFeatures = loadedFeatures;
-    map.fitBounds(loadedFeatures.getBounds());
-    window.addMarkers(loadedFeatures);
-  } catch (err) {
-    console.error(`無法載入 KML：`, err);
-  }
-}
 
     // 全局函數：清除所有 KML 圖層、標記和導航按鈕
     window.clearAllKmlLayers = function() {
