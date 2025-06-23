@@ -255,7 +255,6 @@ document.addEventListener('DOMContentLoaded', () => {
       }).addTo(map);
     });
     
-        /*建立觀察器*/
     // ✅ 等待地圖容器真正顯示再載入圖層
     function waitForMapVisibleAndReady(callback) {
       const mapElement = document.getElementById('map');
@@ -319,7 +318,7 @@ document.addEventListener('DOMContentLoaded', () => {
         console.error(`無法載入 KML：`, err);
       }
     }
-
+    
     // 全局函數：清除所有 KML 圖層、標記和導航按鈕
     window.clearAllKmlLayers = function() {
         markers.clearLayers();
