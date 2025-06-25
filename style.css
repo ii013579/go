@@ -615,94 +615,135 @@ body {
     }
 }
 
-/* 用戶列表樣式 */
+/* 列表容器 */
 #userList {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
     font-size: 14px;
 }
+
+/* 使用者列表標題列 */
+.user-list-header {
+    display: grid;
+    grid-template-columns: 2fr 1.5fr 1.5fr 2fr;
+    align-items: center;
+    padding: 10px 12px;
+    border-bottom: 2px solid #ccc;
+    background-color: #f0f0f0;
+    font-weight: bold;
+    font-size: 15px;
+}
+
+/*設定寬度*/
+.header-item {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    padding: 0 6px;
+}
+
+/* 每一筆使用者資料 */
 .user-card {
+    display: grid;
+    grid-template-columns: 2fr 1.5fr 1.5fr 2fr;
+    align-items: center;
+    padding: 10px 12px;
+    border-bottom: 1px solid #e0e0e0;
     background-color: #fdfdfd;
-    border: 1px solid #e0e0e0;
-    border-radius: 8px;
-    padding: 10px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
+    font-size: 14px;
 }
-.user-card-row-1, .user-card-row-2 {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 10px;
-}
-.user-card-row-1 .user-email {
-    flex-basis: 60%;
+
+/* Email 與暱稱欄位 */
+.user-email,
+.user-nickname {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    min-width: 120px;
 }
-.user-card-row-1 .user-nickname {
-    flex-basis: calc(40% - 10px);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    font-weight: 500;
-    min-width: 80px;
-}
-.user-card-row-2 .user-role-controls {
+
+/* 角色欄位（select + label） */
+.user-role-controls {
     display: flex;
     align-items: center;
-    gap: 5px;
-    flex-shrink: 0;
-    min-width: 100px;
+    gap: 6px;
 }
-.user-card-row-2 .user-role-select {
+.user-role-select {
     padding: 6px 8px;
     border-radius: 6px;
     border: 1px solid #dcdcdc;
     font-size: 14px;
-    flex-grow: 1;
+    flex: 1;
     min-width: 80px;
 }
-.user-card-row-2 .user-actions {
+
+/* 操作按鈕區塊 */
+.user-actions {
     display: flex;
     gap: 8px;
-    flex-grow: 1;
     justify-content: flex-end;
-    flex-wrap: wrap;
+    flex-wrap: nowrap; /* ✅ 改成 nowrap，避免按鈕掉到下一行 */
 }
-/* 變更按鈕樣式 */
-.user-card-row-2 .change-role-btn {
+
+/* 變更與刪除按鈕：統一寬度 */
+.user-actions .change-role-btn,
+.user-actions .delete-user-btn {
+    width: 80px;         /* ✅ 統一寬度 */
+    flex-shrink: 0;      /* ✅ 避免被壓縮 */
     padding: 6px 10px;
     font-size: 14px;
-    width: auto;
-    flex-shrink: 0;
-    background-color: #007bff; /* 藍色 */
-    color: white;
     border: none;
     border-radius: 8px;
-    cursor: pointer;
     font-weight: 600;
+    cursor: pointer;
     transition: background-color 0.2s, transform 0.2s;
 }
-.user-card-row-2 .change-role-btn:hover {
-    background-color: #0056b3; /* 懸停時顏色加深 */
+
+/* 變更按鈕樣式 */
+.user-actions .change-role-btn {
+    background-color: #007bff;
+    color: white;
+}
+.user-actions .change-role-btn:hover {
+    background-color: #0056b3;
     transform: translateY(-1px);
 }
-.user-card-row-2 .change-role-btn:disabled {
+.user-actions .change-role-btn:disabled {
     background-color: #cccccc;
     cursor: not-allowed;
     transform: none;
 }
-/* 刪除按鈕樣式 (保持紅色) */
+
+/* 刪除按鈕樣式 */
+.user-actions .delete-user-btn {
+    background-color: #dc3545;
+    color: white;
+}
+.user-actions .delete-user-btn:hover {
+    background-color: #a71d2a;
+}
+
+/* 如果有 user-card-row-2，也套用統一寬度 */
 .user-card-row-2 .delete-user-btn {
-    padding: 6px 10px;
-    font-size: 14px;
-    width: auto;
+    width: 80px;
     flex-shrink: 0;
+}
+
+/* 標題點擊排序箭頭樣式 */
+.user-list-header .sortable {
+    cursor: pointer;
+    position: relative;
+}
+
+.user-list-header .sortable.sort-asc::after {
+    content: ' ▲';
+    font-size: 0.8em;
+    position: absolute;
+    right: 4px;
+}
+
+.user-list-header .sortable.sort-desc::after {
+    content: ' ▼';
+    font-size: 0.8em;
+    position: absolute;
+    right: 4px;
 }
 
 /* 註冊碼模態框計時器樣式 */
