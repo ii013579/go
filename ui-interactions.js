@@ -66,8 +66,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             item.title = name;
                             item.addEventListener('click', () => {
                                 const originalLatLng = L.latLng(lat, lon);
-                                const safeZoom = Math.min(22, map.getMaxZoom()); // ✅ 預防 tile 不存在
-                                map.setView(originalLatLng, safeZoom);
+                                map.setView(originalLatLng, 18);
                             
                                 // ✅ 清除所有 label 高亮
                                 document.querySelectorAll('.marker-label span').forEach(el =>
