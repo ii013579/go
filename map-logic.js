@@ -9,34 +9,21 @@ window.allKmlFeatures = [];
 
 document.addEventListener('DOMContentLoaded', () => {
     // 初始化地圖
-    map = L.map('map', {
-      zoomControl: false,
-      maxZoom: 25,
-      minZoom: 5
-    }).setView([23.6, 120.9], 8);
+    map = L.map('map', { zoomControl: false }).setView([23.6, 120.9], 8); // 台灣中心經緯度，禁用預設縮放控制
 
     // 定義基本圖層
     const baseLayers = {
         'Google 街道圖': L.tileLayer('https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {
-            attribution: 'Google Maps',
-            maxZoom: 25,
-            maxNativeZoom: 20
+            attribution: 'Google Maps'
         }),
         'Google 衛星圖': L.tileLayer('https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
-            attribution: 'Google Maps',
-            maxZoom: 25,
-            maxNativeZoom: 20
-
+            attribution: 'Google Maps'
         }),
         'Google 地形圖': L.tileLayer('https://mt1.google.com/vt/lyrs=p&x={x}&y={y}&z={z}', {
-            attribution: 'Google Maps',
-            maxZoom: 25,
-            maxNativeZoom: 20
+            attribution: 'Google Maps'
         }),
         'OpenStreetMap': L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-            maxZoom: 25,
-            maxNativeZoom: 20
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         })
     };
 
@@ -100,7 +87,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 icon: L.divIcon({
                     className: 'user-location-dot',
                     iconSize: [16, 16],
-                    iconAnchor: [0, -10]
+                    iconAnchor: [8, 8]
                 })
             }).addTo(map);
 
@@ -174,56 +161,41 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             if (f.geometry.type === 'Point') {
-              const [lon, lat] = coordinates;
-              const latlng = L.latLng(lat, lon);
-              const labelLatLng = latlng;
-            
-              const labelId = `label-${lat}-${lon}`.replace(/\./g, '_');
-            
-              const dotIcon = L.divIcon({
-                className: 'custom-dot-icon',
-                iconSize: [16, 16],
-                iconAnchor: [8, 8]
-              });
-            
-              const dot = L.marker(latlng, {
-                icon: dotIcon,
-                interactive: true
-              });
-            
-              const label = L.marker(labelLatLng, {
-               icon: L.divIcon({
-                 className: 'marker-label',
-                 html: `<span id="${labelId}">${name}</span>`,
-                 iconSize: [null, null],
-                 iconAnchor: [0, 0]
-               }),
-               interactive: false,
-               zIndexOffset: 1000
-             });            
-             
-              dot.on('click', (e) => {
-                L.DomEvent.stopPropagation(e);
-            
-                // 清除所有高亮文字
-                document.querySelectorAll('.marker-label span.label-active').forEach(el => {
-                  el.classList.remove('label-active');
+                const [lon, lat] = coordinates;
+                const latlng = L.latLng(lat, lon);
+                const labelLatLng = L.latLng(lat, lon + 0.00015);
+
+                // 自定義圓點圖標
+                const dotIcon = L.divIcon({
+                    className: 'custom-dot-icon',
+                    iconSize: [18, 18],
+                    iconAnchor: [9, 9]
                 });
-                document.getElementById(labelId)?.classList.add('label-active');
-            
-                // 套用高亮到當前 label
-                const target = document.getElementById(labelId);
-                if (target) {
-                  target.classList.add('label-active');
-                }
-            
-                // 顯示導航按鈕
-                window.createNavButton(latlng, name);
-              });
-            
-              markers.addLayer(dot);
-              markers.addLayer(label);
-              console.log(`添加 Point: ${name} (Lat: ${latlng.lat}, Lng: ${latlng.lng})`);
+                layer = L.marker(latlng, {
+                    icon: dotIcon,
+                    interactive: true
+                });
+
+                // 永久顯示的文字標籤
+                const label = L.marker(labelLatLng, {
+                    icon: L.divIcon({
+                        className: 'marker-label',
+                        html: `<span>${name}</span>`,
+                        iconSize: [null, null],
+                        iconAnchor: [0, 0],
+                    }),
+                    interactive: false
+                });
+
+                // 點擊圓點標記時創建導航按鈕
+                layer.on('click', (e) => {
+                    L.DomEvent.stopPropagation(e);
+                    window.createNavButton(latlng, name);
+                });
+
+                markers.addLayer(layer);
+                markers.addLayer(label); // 為點添加標籤
+                console.log(`添加 Point: ${name} (Lat: ${latlng.lat}, Lng: ${latlng.lng})`);
 
             } else if (f.geometry.type === 'LineString') {
                 // 將 [lon, lat] 陣列轉換為 L.LatLng 陣列以用於 LineString
@@ -356,32 +328,24 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const navMarker = L.marker(latlng, {
             icon: buttonIcon,
-            zIndexOffset: 1000,
             interactive: true
         }).addTo(navButtons);
 
         console.log(`已為 ${name} 在 ${latlng.lat}, ${latlng.lng} 創建導航按鈕。`);
     };
 
-    // 處理地圖點擊事件，隱藏搜尋結果和導航按鈕與取消標籤高亮
+    // 處理地圖點擊事件，隱藏搜尋結果和導航按鈕
     map.on('click', () => {
-      const searchResults = document.getElementById('searchResults');
-      const searchContainer = document.getElementById('searchContainer');
-      if (searchResults) {
-        searchResults.style.display = 'none';
-        searchContainer.classList.remove('search-active');
-      }
-      const searchBox = document.getElementById('searchBox');
-      if (searchBox) {
-        searchBox.value = '';
-      }
-    
-      // 取消所有藍色高亮標籤
-      document.querySelectorAll('.marker-label span.label-active').forEach(el => {
-        el.classList.remove('label-active');
-      });
-    
-      // 清除導航按鈕
-      navButtons.clearLayers();
+        const searchResults = document.getElementById('searchResults');
+        const searchContainer = document.getElementById('searchContainer'); // 獲取搜尋容器
+        if (searchResults) {
+            searchResults.style.display = 'none';
+            searchContainer.classList.remove('search-active'); // 移除活躍狀態類別
+        }
+        const searchBox = document.getElementById('searchBox');
+        if (searchBox) {
+            searchBox.value = '';
+        }
+        navButtons.clearLayers();
     });
 });
