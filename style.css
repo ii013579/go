@@ -372,7 +372,7 @@ body {
   box-shadow: 0 0 3px rgba(0,0,0,0.2);
   z-index: 999;
   position: relative;
-  transform: translateX(10px);
+  transform: translateX(20px);
 }
 
 /* 導航按鈕圖標容器樣式 */
@@ -492,7 +492,7 @@ body {
 }
 .confirmation-modal-content .action-buttons {
     flex: 1;
-    max-width: 120px; /* 調整按鈕寬度 */
+    max-width: 120px;
 }
 
 
@@ -701,14 +701,14 @@ body {
     display: flex;
     gap: 8px;
     justify-content: flex-end;
-    flex-wrap: nowrap; /* ✅ 改成 nowrap，避免按鈕掉到下一行 */
+    flex-wrap: nowrap;
 }
 
 /* 變更與刪除按鈕：統一寬度 */
 .user-actions .change-role-btn,
 .user-actions .delete-user-btn {
-    width: 40px;         /* ✅ 統一寬度 */
-    flex-shrink: 0;      /* ✅ 避免被壓縮 */
+    width: 40px;
+    flex-shrink: 0;
     padding: 6px 10px;
     font-size: 14px;
     border: none;
