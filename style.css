@@ -287,8 +287,12 @@ body {
   gap: 8px; /* 項目間距 */
   padding: 10px;
   box-sizing: border-box;
+  position: relative;
+  z-index: 10000;
+
 }
-.result-item {
+
+.result-item { 
   padding: 10px 12px;
   border: 1px solid #e0e0e0;
   border-radius: 8px;
@@ -297,14 +301,27 @@ body {
   user-select: none;
   text-align: center;
   font-weight: 500;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+
+  white-space: nowrap;         /* 不換行 */
+  overflow-x: auto;            /* ✅ 橫向可捲動 */
+  overflow-y: hidden;          /* ✅ 不讓它上下溢出 */
+  text-overflow: unset;        /* ✅ 移除 ... 處理 */
+  -webkit-overflow-scrolling: touch;  /* ✅ 手機滑動更順 */
+
   transition: background-color 0.2s, transform 0.2s;
 }
+
 .result-item:hover {
   background-color: #e6f0ff;
   transform: translateY(-2px);
+}
+
+.result-item::-webkit-scrollbar {
+  height: 4px;
+}
+.result-item::-webkit-scrollbar-thumb {
+  background: #ccc;
+  border-radius: 2px;
 }
 
 /* 地圖容器樣式 */
@@ -330,51 +347,56 @@ body {
 }
 
 /* 地標文字標籤樣式 */
-.marker-label {
-  background: none !important;
-  color: rgba(0, 0, 0, 0.88);
-  font-weight: 700;
-  font-size: 26px;
-  text-shadow:
-    -1.5px -1.5px 0 #fff,
-    1.5px -1.5px 0 #fff,
-    -1.5px 1.5px 0 #fff,
-    1.5px 1.5px 0 #fff,
-    0 0 5px rgba(0,0,0,0.1);
-  padding: 0;
-  transform: translate(-50%, -50%);
-  pointer-events: none;
+.marker-label span {
+  display: inline-block;
+  transform: translate(10px, -6px);
+  font-size: 13px;
+  font-weight: 500;
+  font-weight: bold;
+  color: #333;
   white-space: nowrap;
-  display: block;
+  pointer-events: none;
+  z-index: 100;
+  position: relative;
+  background: none;
+}
+
+/* 點擊或搜尋結果時高亮 */
+.marker-label span.label-active {
+  color: #007bff;
+  font-weight: bold;
+  font-size: 18px;
+  background: white;
+  padding: 3px 6px;
+  border-radius: 6px;
+  box-shadow: 0 0 3px rgba(0,0,0,0.2);
+  z-index: 9999 !important;
+  position: relative;
+  transform: translateX(20px);
 }
 
 /* 導航按鈕圖標容器樣式 */
 .nav-button-icon {
-    pointer-events: auto;
-    background: none;
-    border: none;
-    box-shadow: none;
-    padding: 0;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    transform: translate(-50%, -100%); /* 稍微向上移動，避免遮擋地標 */
-    z-index: 999; /* 確保在標籤之上 */
+  transform: translate(-50%, -50%);
+  pointer-events: auto;
+  background: none;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
 }
 
 /* 導航按鈕實際內容 (圖片) 樣式 */
 .nav-button-content img {
-  width: 50px;
-  height: 50px;
+  width: 36px;
+  height: 36px;
   cursor: pointer;
   display: block;
   border-radius: 50%;
   background-color: rgba(255, 255, 255, 0.9);
   box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-  transition: transform 0.2s ease-in-out;
-}
-.nav-button-content img:hover {
-  transform: scale(1.1);
 }
 
 /* 自定義圓點圖標樣式 */
@@ -382,12 +404,12 @@ body {
     background-color: #e74c3c; /* 紅點 */
     border: 2px solid white;
     border-radius: 50%;
-    width: 18px;
-    height: 18px;
+    width: 7px;
+    height: 7px;
     pointer-events: auto;
     display: block;
-    margin-left: -9px;
-    margin-top: -9px;
+    margin-left: -7px;
+    margin-top: -7px;
     box-shadow: 0 2px 5px rgba(0,0,0,0.2);
 }
 
@@ -470,7 +492,7 @@ body {
 }
 .confirmation-modal-content .action-buttons {
     flex: 1;
-    max-width: 120px; /* 調整按鈕寬度 */
+    max-width: 120px;
 }
 
 
@@ -679,14 +701,14 @@ body {
     display: flex;
     gap: 8px;
     justify-content: flex-end;
-    flex-wrap: nowrap; /* ✅ 改成 nowrap，避免按鈕掉到下一行 */
+    flex-wrap: nowrap;
 }
 
 /* 變更與刪除按鈕：統一寬度 */
 .user-actions .change-role-btn,
 .user-actions .delete-user-btn {
-    width: 80px;         /* ✅ 統一寬度 */
-    flex-shrink: 0;      /* ✅ 避免被壓縮 */
+    width: 40px;
+    flex-shrink: 0;
     padding: 6px 10px;
     font-size: 14px;
     border: none;
@@ -746,9 +768,39 @@ body {
     right: 4px;
 }
 
+/* 點擊dot變藍字 */
+.label-active {
+  color: #007bff;
+  font-weight: bold;
+  font-size: 1.8em;     /* 放大字體（約兩倍） */
+  z-index: 9999 !important;        /* 確保在最上層 */
+  position: relative;   /* 讓 z-index 生效 */
+}
+
 /* 註冊碼模態框計時器樣式 */
 #registrationModalMessage.countdown {
     font-size: 16px;
     font-weight: bold;
     color: #007bff;
+}
+
+/* 優化渲染 */
+@media (max-width: 768px) {
+  /* 全面取消陰影與動畫 */
+  *,
+  *::before,
+  *::after {
+    box-shadow: none !important;
+    transition: none !important;
+  }
+
+  /* 不再全域取消圓角，讓需要圓角的元素可保留 */
+  /* 可針對個別容器或按鈕類別進行圓角優化 */
+  .user-card,
+  .action-buttons,
+  .message-box-content,
+  .registration-modal-content,
+  .confirmation-modal-content {
+    border-radius: 0 !important;
+  }
 }

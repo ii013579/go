@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>點位搜尋輔助地圖</title>
+  <title>點位搜尋輔助</title>
   <!-- 網址列ICO -->
   <link rel="icon" href="logo.ico" type="image/x-icon" />
   <link rel="shortcut icon" href="logo.ico" type="image/x-icon" />
@@ -12,10 +12,13 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <!-- 外部樣式表 -->
   <link rel="stylesheet" href="style.css">
+  <!-- Leaflet.markercluster CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
 </head>
 <body>
   <div id="title">
-    點位搜尋輔助地圖V1.0
+    點位搜尋輔助
     <button id="editButton">編輯</button>
   </div>
 
@@ -78,7 +81,12 @@
       <div id="userManagementSection" style="display: none;">
           <button id="refreshUsersBtn" class="action-buttons">使用者管理</button>
           <div id="userList">
-            <!-- 使用者列表會由 JavaScript 動態填充 -->
+            <div class="user-list-header">
+              <div class="header-item sortable" data-key="email">Email</div>
+              <div class="header-item sortable" data-key="nickname">暱稱</div>
+              <div class="header-item sortable" data-key="role">角色</div>
+              <div class="header-item">操作</div>
+            </div>            <!-- 使用者列表會由 JavaScript 動態填充 -->
           </div>
       </div>
 
@@ -131,15 +139,15 @@
 
   <!-- Leaflet CDN 載入 -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <!-- 恢復使用 togeojson 函式庫 -->
+  <!-- MarkerCluster 載入 -->
+  <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+  <!-- 其他函式庫 -->
   <script src="https://unpkg.com/togeojson"></script> 
-
   <!-- 自定義 JS 檔案載入 -->
   <!-- 順序很重要，請確保依賴的檔案先載入 -->
   <script src="firebase-init.js"></script>
   <script src="map-logic.js"></script>
   <script src="auth-kml-management.js"></script>
   <script src="ui-interactions.js"></script>
-
 </body>
 </html>

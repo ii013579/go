@@ -36,7 +36,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const getRoleDisplayName = (role) => {
         switch (role) {
             case 'unapproved': return '未審核';
-            case 'user': return '一般用戶';
+            case 'user': return '一般';
             case 'editor': return '編輯者';
             case 'owner': return '擁有者';
             default: return role;
@@ -167,138 +167,180 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 輔助函數：顯示用戶管理列表
     const refreshUserList = async () => {
-        userListDiv.innerHTML = '載入中...';
+    const cards = userListDiv.querySelectorAll('.user-card');
+    cards.forEach(card => card.remove());    
+
         try {
             const usersRef = db.collection('users');
             const snapshot = await usersRef.get();
-            userListDiv.innerHTML = '';
-
+    
             if (snapshot.empty) {
                 userListDiv.innerHTML = '<p>目前沒有註冊用戶。</p>';
                 return;
             }
-
+    
             let usersData = [];
             snapshot.forEach(doc => {
                 const user = doc.data();
                 const uid = doc.id;
-                if (uid !== auth.currentUser.uid) { // 不顯示當前登入用戶
+                if (uid !== auth.currentUser.uid) {
                     usersData.push({ id: uid, ...user });
                 }
             });
-
-            // 根據定義的角色順序進行排序
+    
+            // 預設先依角色排序
+            const roleOrder = {
+                'unapproved': 1,
+                'user': 2,
+                'editor': 3,
+                'owner': 4
+            };
             usersData.sort((a, b) => {
-                const roleA = roleOrder[a.role] || 99; // 如果角色未定義，則給予一個較大的值
+                const roleA = roleOrder[a.role] || 99;
                 const roleB = roleOrder[b.role] || 99;
                 return roleA - roleB;
             });
-
-
+    
+            // 建立 user-card 元素
             usersData.forEach(user => {
                 const uid = user.id;
+                const emailName = user.email ? user.email.split('@')[0] : 'N/A';
                 const userCard = document.createElement('div');
                 userCard.className = 'user-card';
                 userCard.dataset.nickname = user.name || 'N/A';
                 userCard.dataset.uid = uid;
-
-                userCard.innerHTML = `
-                    <div class="user-card-row-1">
-                        <span class="user-email">Email: ${user.email || 'N/A'}</span>
-                        <span class="user-nickname">暱稱: ${user.name || 'N/A'}</span>
-                    </div>
-                    <div class="user-card-row-2">
-                        <div class="user-role-controls">
-                            <label for="role-select-${uid}">角色:</label>
-                            <select id="role-select-${uid}" data-uid="${uid}" data-original-value="${user.role}" class="user-role-select">
-                                <option value="unapproved" ${user.role === 'unapproved' ? 'selected' : ''}>${getRoleDisplayName('unapproved')}</option>
-                                <option value="user" ${user.role === 'user' ? 'selected' : ''}>${getRoleDisplayName('user')}</option>
-                                <option value="editor" ${user.role === 'editor' ? 'selected' : ''}>${getRoleDisplayName('editor')}</option>
-                                <option value="owner" ${user.role === 'owner' ? 'selected' : ''} ${window.currentUserRole !== 'owner' ? 'disabled' : ''}>${getRoleDisplayName('owner')}</option>
-                            </select>
-                        </div>
-                        <div class="user-actions">
-                            <button class="change-role-btn" data-uid="${uid}" disabled>變更</button>
-                            <button class="delete-user-btn action-buttons delete-btn" data-uid="${uid}">刪除</button>
-                        </div>
-                    </div>
-                `;
+            
+            userCard.innerHTML = `
+                <div class="user-email">${emailName}</div>
+                <div class="user-nickname">${user.name || 'N/A'}</div>
+                <div class="user-role-controls">
+                    <select id="role-select-${uid}" data-uid="${uid}" data-original-value="${user.role}" class="user-role-select">
+                        <option value="unapproved" ${user.role === 'unapproved' ? 'selected' : ''}>未審核</option>
+                        <option value="user" ${user.role === 'user' ? 'selected' : ''}>一般</option>
+                        <option value="editor" ${user.role === 'editor' ? 'selected' : ''}>編輯者</option>
+                        <option value="owner" ${user.role === 'owner' ? 'selected' : ''} ${window.currentUserRole !== 'owner' ? 'disabled' : ''}>擁有者</option>
+                    </select>
+                </div>
+                <div class="user-actions">
+                    <button class="change-role-btn" data-uid="${uid}" disabled>變</button>
+                    <button class="delete-user-btn action-buttons delete-btn" data-uid="${uid}">刪</button>
+                </div>
+            `;
                 userListDiv.appendChild(userCard);
             });
-
+    
+            // 綁定角色下拉選單與變更按鈕事件
             userListDiv.querySelectorAll('.user-role-select').forEach(select => {
-                select.dataset.originalValue = select.value;
                 const changeButton = select.closest('.user-card').querySelector('.change-role-btn');
-
-                select.addEventListener('change', (event) => {
-                    changeButton.disabled = (event.target.value === select.dataset.originalValue);
+                select.addEventListener('change', () => {
+                    changeButton.disabled = (select.value === select.dataset.originalValue);
                 });
-
-                changeButton.addEventListener('click', async (event) => {
-                    const userCard = event.target.closest('.user-card');
+    
+                changeButton.addEventListener('click', async () => {
+                    const userCard = changeButton.closest('.user-card');
                     const uidToUpdate = userCard.dataset.uid;
                     const nicknameToUpdate = userCard.dataset.nickname;
                     const newRole = select.value;
-
+    
                     const confirmUpdate = await showConfirmationModal(
                         '確認變更角色',
-                        `確定要將用戶 ${nicknameToUpdate} (${uidToUpdate.substring(0,6)}...) 的角色變更為 ${getRoleDisplayName(newRole)} 嗎？` +
-                        (newRole === 'owner' ? ' (此操作會賦予最高權限)' : '')
+                        `確定要將用戶 ${nicknameToUpdate} (${uidToUpdate.substring(0,6)}...) 的角色變更為 ${getRoleDisplayName(newRole)} 嗎？`
                     );
-
+    
                     if (!confirmUpdate) {
-                        // 如果用戶取消，恢復選取狀態
                         select.value = select.dataset.originalValue;
                         changeButton.disabled = true;
                         return;
                     }
-
+    
                     try {
                         await db.collection('users').doc(uidToUpdate).update({ role: newRole });
-                        showMessage('成功', `用戶 ${nicknameToUpdate} (${uidToUpdate.substring(0,6)}...) 的角色已更新為 ${getRoleDisplayName(newRole)}。`);
+                        showMessage('成功', `用戶 ${nicknameToUpdate} 的角色已更新為 ${getRoleDisplayName(newRole)}。`);
                         select.dataset.originalValue = newRole;
                         changeButton.disabled = true;
                     } catch (error) {
-                        console.error("更新用戶角色時出錯:", error);
-                        showMessage('錯誤', `更新用戶角色失敗: ${error.message}`);
+                        showMessage('錯誤', `更新角色失敗: ${error.message}`);
                         select.value = select.dataset.originalValue;
                         changeButton.disabled = true;
                     }
                 });
             });
-
+    
+            // 綁定刪除按鈕事件
             userListDiv.querySelectorAll('.delete-user-btn').forEach(button => {
-                button.addEventListener('click', async (event) => {
-                    const userCard = event.target.closest('.user-card');
+                button.addEventListener('click', async () => {
+                    const userCard = button.closest('.user-card');
                     const uidToDelete = userCard.dataset.uid;
                     const nicknameToDelete = userCard.dataset.nickname;
-
+    
                     const confirmDelete = await showConfirmationModal(
                         '確認刪除用戶',
                         `確定要刪除用戶 ${nicknameToDelete} (${uidToDelete.substring(0,6)}...) 嗎？此操作不可逆！`
                     );
-
-                    if (!confirmDelete) {
-                        return;
-                    }
-
+    
+                    if (!confirmDelete) return;
+    
                     try {
                         await db.collection('users').doc(uidToDelete).delete();
-                        showMessage('成功', `用戶 ${nicknameToDelete} (${uidToDelete.substring(0,6)}...) 已刪除。`); // 簡化訊息
-                        refreshUserList();
+                        showMessage('成功', `用戶 ${nicknameToDelete} 已刪除。`);
+                        userCard.remove(); // ✅ 不重整，直接從畫面移除
                     } catch (error) {
-                        console.error("刪除用戶時出錯:", error);
-                        showMessage('錯誤', `刪除用戶失敗: ${error.message}`);
+                        showMessage('錯誤', `刪除失敗: ${error.message}`);
                     }
                 });
-            });
-
+            });   
         } catch (error) {
-            console.error("載入用戶列表時出錯:", error);
             userListDiv.innerHTML = `<p style="color: red;">載入用戶列表失敗: ${error.message}</p>`;
+            console.error("載入用戶列表時出錯:", error);
         }
-    };
-
+        // ✅ 排序邏輯（加在 refreshUserList 最後）
+        let currentSortKey = 'role';
+        let sortAsc = true;
+   
+        document.querySelectorAll('.user-list-header .sortable').forEach(header => {
+            header.addEventListener('click', () => {
+                const key = header.dataset.key;
+   
+                if (currentSortKey === key) {
+                    sortAsc = !sortAsc;
+                } else {
+                    currentSortKey = key;
+                    sortAsc = true;
+                }
+   
+                sortUserList(currentSortKey, sortAsc);
+                updateSortIndicators();
+            });
+        });
+   
+        function sortUserList(key, asc = true) {
+            const cards = Array.from(document.querySelectorAll('#userList .user-card'));
+            const container = document.getElementById('userList');
+   
+            const sorted = cards.sort((a, b) => {
+                const getValue = (el) => {
+                    if (key === 'email') return el.querySelector('.user-email')?.textContent?.toLowerCase() || '';
+                    if (key === 'nickname') return el.querySelector('.user-nickname')?.textContent?.toLowerCase() || '';
+                    if (key === 'role') return el.querySelector('.user-role-select')?.value || '';
+                    return '';
+                };
+                const aVal = getValue(a);
+                const bVal = getValue(b);
+                return asc ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+            });
+   
+            sorted.forEach(card => container.appendChild(card));
+        }
+   
+        function updateSortIndicators() {
+            document.querySelectorAll('.user-list-header .sortable').forEach(header => {
+                header.classList.remove('sort-asc', 'sort-desc');
+                if (header.dataset.key === currentSortKey) {
+                    header.classList.add(sortAsc ? 'sort-asc' : 'sort-desc');
+                }
+            });
+        }
+     };
 
     // Firestore 實時監聽器
     auth.onAuthStateChanged(async (user) => {
@@ -783,10 +825,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 事件監聽器：重新整理用戶列表 (Owner Only)
     refreshUsersBtn.addEventListener('click', () => {
-        if (window.currentUserRole === 'owner') {
-            refreshUserList();
+        if (window.currentUserRole !== 'owner') {
+            showMessage('權限不足', '只有管理員才能查看或編輯使用者列表。');
+            return;
+        }
+    
+        const isVisible = userListDiv.style.display !== 'none';
+    
+        if (isVisible) {
+            userListDiv.style.display = 'none';
         } else {
-            showMessage('權限不足', '只有管理員才能重新整理用戶列表。');
+            userListDiv.style.display = 'block';
+            refreshUserList();
         }
     });
 });
