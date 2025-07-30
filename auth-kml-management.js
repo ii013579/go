@@ -667,52 +667,99 @@ JavaScript
                 // 這是必要的，因為 Firestore 不支援巢狀陣列，某些複雜的GeoJSON結構可能導致問題
                 const standardizedGeojson = JSON.parse(JSON.stringify(geojson)); // 深度複製
 
-                // --- 診斷日誌：標準化前和標準化後 GeoJSON 結構的差異 (可選，調試完成後可移除) ---
+                // --- 診斷日誌：標準化前 GeoJSON 結構 (可選，調試完成後可移除) ---
                 console.log('--- 原始 GeoJSON (標準化前) ---');
                 console.log(JSON.stringify(geojson, null, 2)); // 輸出漂亮的 JSON 格式
                 // --- 診斷日誌結束 ---
 
                 standardizedGeojson.features = standardizedGeojson.features.map(feature => {
                     if (feature.geometry && feature.geometry.coordinates) {
+                        let currentCoords = feature.geometry.coordinates;
+
                         switch (feature.geometry.type) {
                             case 'Point':
-                                // Point: [lon, lat]
-                                // 如果是 [[lon, lat]]，則扁平化為 [lon, lat]
-                                if (Array.isArray(feature.geometry.coordinates[0]) && typeof feature.geometry.coordinates[0][0] === 'number') {
-                                    feature.geometry.coordinates = feature.geometry.coordinates[0];
+                                // Point: [lon, lat] (GeoJSON expected depth 1, i.e., an array of numbers)
+                                // If it's [[lon, lat]], or [[[lon, lat]]], etc., flatten until it's just [lon, lat]
+                                while (Array.isArray(currentCoords) && currentCoords.length > 0 && Array.isArray(currentCoords[0]) && typeof currentCoords[0][0] === 'number') {
+                                    currentCoords = currentCoords[0];
+                                }
+                                // Final check and fallback to ensure it's a simple [number, number] array
+                                if (Array.isArray(currentCoords) && currentCoords.length === 2 && typeof currentCoords[0] === 'number' && typeof currentCoords[1] === 'number') {
+                                    feature.geometry.coordinates = currentCoords;
+                                } else {
+                                    console.warn(`Point coordinates could not be normalized to [lon, lat]:`, feature.geometry.coordinates);
+                                    // Fallback for truly malformed points, try to extract first two numbers
+                                    const flatVals = (Array.isArray(currentCoords) ? currentCoords.flat(Infinity) : [currentCoords]).filter(val => typeof val === 'number');
+                                    if (flatVals.length >= 2) {
+                                        feature.geometry.coordinates = [flatVals[0], flatVals[1]];
+                                    } else {
+                                        feature.geometry.coordinates = [0, 0]; // Default to a safe point if all else fails
+                                    }
                                 }
                                 break;
+
                             case 'LineString':
-                                // LineString: [[lon1, lat1], [lon2, lat2], ...]
-                                // 持續扁平化直到 coordinates 是一個二維陣列（例如 [[lon,lat],[lon,lat]]）
-                                let lineCoords = feature.geometry.coordinates;
-                                while (Array.isArray(lineCoords) && Array.isArray(lineCoords[0]) && Array.isArray(lineCoords[0][0])) {
-                                    lineCoords = lineCoords.flat(); // 無限扁平化一層
+                                // LineString: [[lon, lat], [lon, lat], ...] (GeoJSON expected depth 2)
+                                // Flatten until the elements are [lon, lat] arrays, not deeper arrays
+                                while (Array.isArray(currentCoords) && currentCoords.length > 0 && Array.isArray(currentCoords[0]) && Array.isArray(currentCoords[0][0]) && typeof currentCoords[0][0][0] === 'number') {
+                                    currentCoords = currentCoords.flat(1);
                                 }
-                                feature.geometry.coordinates = lineCoords;
-                                break;
-                            case 'Polygon':
-                                // Polygon: [[[lon1, lat1], ...], [[hole_lon1, lat1], ...]]
-                                // 對每個環扁平化，直到環內部是 [lon, lat] 對
-                                let polygonCoords = feature.geometry.coordinates;
-                                if (Array.isArray(polygonCoords) && polygonCoords.length > 0) {
-                                    feature.geometry.coordinates = polygonCoords.map(ring => {
-                                        let currentRing = ring;
-                                        while (Array.isArray(currentRing) && Array.isArray(currentRing[0]) && Array.isArray(currentRing[0][0])) {
-                                            currentRing = currentRing.flat(); // 無限扁平化一層
+                                // Basic validation: ensure all sub-arrays are [lon,lat] pairs
+                                if (Array.isArray(currentCoords) && currentCoords.every(pair => Array.isArray(pair) && pair.length === 2 && typeof pair[0] === 'number' && typeof pair[1] === 'number')) {
+                                    feature.geometry.coordinates = currentCoords;
+                                } else {
+                                    console.warn(`LineString coordinates could not be normalized to [[lon, lat], ...]:`, feature.geometry.coordinates);
+                                    // Attempt a deeper flatten if validation fails, then reconstruct pairs
+                                    feature.geometry.coordinates = (Array.isArray(currentCoords) ? currentCoords.flat(Infinity) : [currentCoords]).reduce((acc, val, idx, arr) => {
+                                        if (idx % 2 === 0 && typeof val === 'number' && typeof arr[idx + 1] === 'number') {
+                                            acc.push([val, arr[idx + 1]]);
                                         }
-                                        return currentRing;
-                                    });
+                                        return acc;
+                                    }, []);
                                 }
                                 break;
+
+                            case 'Polygon':
+                                // Polygon: [[[lon, lat], ...], [[hole_lon, lat], ...]] (GeoJSON expected depth 3)
+                                // Iterate through each ring and flatten it to depth 2 if needed
+                                if (Array.isArray(currentCoords)) {
+                                    feature.geometry.coordinates = currentCoords.map(ring => {
+                                        let currentRing = ring;
+                                        // Flatten each ring until its elements are [lon, lat] arrays (depth 2 for the ring)
+                                        while (Array.isArray(currentRing) && currentRing.length > 0 && Array.isArray(currentRing[0]) && Array.isArray(currentRing[0][0]) && typeof currentRing[0][0][0] === 'number') {
+                                            currentRing = currentRing.flat(1);
+                                        }
+                                        // Validate inner ring structure to be [[lon,lat],...]
+                                        if (Array.isArray(currentRing) && currentRing.every(pair => Array.isArray(pair) && pair.length === 2 && typeof pair[0] === 'number' && typeof pair[1] === 'number')) {
+                                            return currentRing;
+                                        } else {
+                                            console.warn(`Polygon ring coordinates could not be normalized to [[lon, lat], ...]:`, ring);
+                                            // Fallback for truly malformed rings, flatten and reconstruct pairs
+                                            return (Array.isArray(currentRing) ? currentRing.flat(Infinity) : [currentRing]).reduce((acc, val, idx, arr) => {
+                                                if (idx % 2 === 0 && typeof val === 'number' && typeof arr[idx + 1] === 'number') {
+                                                    acc.push([val, arr[idx + 1]]);
+                                                }
+                                                return acc;
+                                            }, []);
+                                        }
+                                    });
+                                } else {
+                                    console.warn(`Polygon top-level coordinates not an array:`, feature.geometry.coordinates);
+                                    feature.geometry.coordinates = []; // Default to empty polygon if top-level isn't an array
+                                }
+                                break;
+
                             case 'MultiPoint':
                             case 'MultiLineString':
                             case 'MultiPolygon':
-                                // 對於 Multi-geometry 類型，GeoJSON 規範本身就允許更高的嵌套
-                                // Firestore 處理這類型的資料可能更複雜，通常需要將其分解為單一幾何類型
-                                // 或確保其座標結構完全符合 Firestore 的巢狀陣列限制。
-                                // 這裡不進行額外扁平化，因為這類型的頂層陣列通常直接包裝多個幾何單元。
-                                // 如果仍然遇到錯誤，可能需要更複雜的解析和重組邏輯。
+                                // These Multi-geometries inherently have higher nesting levels.
+                                // The current `map` processes features individually. If the problem is
+                                // specifically with the nesting *within* a sub-geometry of a Multi-type
+                                // (e.g., a MultiLineString containing a LineString that is [[[lon,lat]]]),
+                                // the LineString/Polygon logic above should catch it for that sub-geometry.
+                                // If the issue persists for Multi-types, it might indicate that Firestore
+                                // has a deeper restriction on these types, potentially requiring decomposition
+                                // into multiple single-geometry features (more complex).
                                 break;
                         }
                     }
@@ -830,7 +877,6 @@ JavaScript
         };
         reader.readAsText(file);
     });
-
 
     // 事件監聽器：刪除 KML
     deleteSelectedKmlBtn.addEventListener('click', async () => {
