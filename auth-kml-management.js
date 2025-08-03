@@ -609,23 +609,60 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // 實際執行上傳 KML 的函數
-好的，您希望取得包含所有最新改進的 uploadKmlSubmitBtnDashboard.addEventListener('click', async () => { ... }); 函式完整程式碼。這包括了：
+// **新增：通用的 GeoJSON 座標標準化函數**
+function normalizeCoordinates(coords, geometryType) {
+    if (!Array.isArray(coords)) {
+        // 如果不是陣列，對於點可能就是一個數字，或無效值，嘗試轉為點
+        return [0, 0]; // 預設為安全點
+    }
 
-強健的 GeoJSON 座標標準化邏輯，用於處理 KML 轉換後可能出現的過度巢狀陣列問題。
+    // 扁平化所有內部陣列，只保留數字，然後重建到正確的 GeoJSON 深度
+    if (geometryType === 'Point') {
+        // Point: [lon, lat]
+        let flattened = coords.flat(Infinity).filter(val => typeof val === 'number');
+        return flattened.slice(0, 2); // 確保是 [經度, 緯度]
+    } else if (geometryType === 'LineString' || geometryType === 'MultiPoint') {
+        // LineString: [[lon, lat], ...]
+        // MultiPoint: [[lon, lat], ...] (每個元素都是一個點)
+        return coords.map(pair => {
+            let flattenedPair = Array.isArray(pair) ? pair.flat(Infinity).filter(val => typeof val === 'number') : [0, 0];
+            return flattenedPair.slice(0, 2); // 確保每個元素都是 [經度, 緯度]
+        }).filter(pair => pair.length === 2 && typeof pair[0] === 'number' && typeof pair[1] === 'number'); // 過濾掉無效的座標對
+    } else if (geometryType === 'Polygon' || geometryType === 'MultiLineString') {
+        // Polygon: [[[lon, lat], ...], ...] (環陣列)
+        // MultiLineString: [[[lon, lat], ...], ...] (線陣列)
+        return coords.map(ringOrLine => {
+            if (!Array.isArray(ringOrLine)) {
+                console.warn(`Malformed ring/line in ${geometryType}:`, ringOrLine);
+                return []; // 無效的環/線
+            }
+            return ringOrLine.map(pair => {
+                let flattenedPair = Array.isArray(pair) ? pair.flat(Infinity).filter(val => typeof val === 'number') : [0, 0];
+                return flattenedPair.slice(0, 2);
+            }).filter(pair => pair.length === 2 && typeof pair[0] === 'number' && typeof pair[1] === 'number');
+        }).filter(ringOrLine => Array.isArray(ringOrLine) && ringOrLine.length > 0 && ringOrLine.every(p => p.length === 2)); // 過濾掉空或無效的環/線
+    } else if (geometryType === 'MultiPolygon') {
+        // MultiPolygon: [[[[lon, lat], ...], ...], ...] (多個多邊形陣列)
+        return coords.map(polygon => {
+            if (!Array.isArray(polygon)) {
+                console.warn(`Malformed polygon in MultiPolygon:`, polygon);
+                return []; // 無效的多邊形
+            }
+            return polygon.map(ring => {
+                if (!Array.isArray(ring)) {
+                    console.warn(`Malformed ring in MultiPolygon's polygon:`, ring);
+                    return []; // 無效的環
+                }
+                return ring.map(pair => {
+                    let flattenedPair = Array.isArray(pair) ? pair.flat(Infinity).filter(val => typeof val === 'number') : [0, 0];
+                    return flattenedPair.slice(0, 2);
+                }).filter(pair => pair.length === 2 && typeof pair[0] === 'number' && typeof pair[1] === 'number');
+            }).filter(ring => Array.isArray(ring) && ring.length > 0 && ring.every(p => p.length === 2));
+        }).filter(polygon => Array.isArray(polygon) && polygon.length > 0 && polygon.every(r => Array.isArray(r) && r.length > 0));
+    }
+    return coords; // 如果類型未處理或未知，則原樣返回
+}
 
-移除所有彈出視窗 (bindPopup) 的相關程式碼，確保點擊圖徵時不會出現資訊視窗。
-
-保持原有的檔案選擇、權限檢查、重複檔案覆蓋確認等邏輯。
-
-請將您 auth-kml-management.js 檔案中，整個 uploadKmlSubmitBtnDashboard.addEventListener('click', async () => { ... }); 函式的內容完全替換為以下程式碼。
-
-auth-kml-management.js 檔案更新 (完整 uploadKmlSubmitBtnDashboard 函式)：
-JavaScript
-
-// auth-kml-management.js
-
-// ... (檔案開頭的其他程式碼和變數定義，例如 db, auth, appId, toGeoJSON, showMessageCustom, showConfirmationModal 等都應該已定義) ...
 
     // 實際執行上傳 KML 的函數
     uploadKmlSubmitBtnDashboard.addEventListener('click', async () => {
@@ -674,94 +711,8 @@ JavaScript
 
                 standardizedGeojson.features = standardizedGeojson.features.map(feature => {
                     if (feature.geometry && feature.geometry.coordinates) {
-                        let currentCoords = feature.geometry.coordinates;
-
-                        switch (feature.geometry.type) {
-                            case 'Point':
-                                // Point: [lon, lat] (GeoJSON expected depth 1, i.e., an array of numbers)
-                                // If it's [[lon, lat]], or [[[lon, lat]]], etc., flatten until it's just [lon, lat]
-                                while (Array.isArray(currentCoords) && currentCoords.length > 0 && Array.isArray(currentCoords[0]) && typeof currentCoords[0][0] === 'number') {
-                                    currentCoords = currentCoords[0];
-                                }
-                                // Final check and fallback to ensure it's a simple [number, number] array
-                                if (Array.isArray(currentCoords) && currentCoords.length === 2 && typeof currentCoords[0] === 'number' && typeof currentCoords[1] === 'number') {
-                                    feature.geometry.coordinates = currentCoords;
-                                } else {
-                                    console.warn(`Point coordinates could not be normalized to [lon, lat]:`, feature.geometry.coordinates);
-                                    // Fallback for truly malformed points, try to extract first two numbers
-                                    const flatVals = (Array.isArray(currentCoords) ? currentCoords.flat(Infinity) : [currentCoords]).filter(val => typeof val === 'number');
-                                    if (flatVals.length >= 2) {
-                                        feature.geometry.coordinates = [flatVals[0], flatVals[1]];
-                                    } else {
-                                        feature.geometry.coordinates = [0, 0]; // Default to a safe point if all else fails
-                                    }
-                                }
-                                break;
-
-                            case 'LineString':
-                                // LineString: [[lon, lat], [lon, lat], ...] (GeoJSON expected depth 2)
-                                // Flatten until the elements are [lon, lat] arrays, not deeper arrays
-                                while (Array.isArray(currentCoords) && currentCoords.length > 0 && Array.isArray(currentCoords[0]) && Array.isArray(currentCoords[0][0]) && typeof currentCoords[0][0][0] === 'number') {
-                                    currentCoords = currentCoords.flat(1);
-                                }
-                                // Basic validation: ensure all sub-arrays are [lon,lat] pairs
-                                if (Array.isArray(currentCoords) && currentCoords.every(pair => Array.isArray(pair) && pair.length === 2 && typeof pair[0] === 'number' && typeof pair[1] === 'number')) {
-                                    feature.geometry.coordinates = currentCoords;
-                                } else {
-                                    console.warn(`LineString coordinates could not be normalized to [[lon, lat], ...]:`, feature.geometry.coordinates);
-                                    // Attempt a deeper flatten if validation fails, then reconstruct pairs
-                                    feature.geometry.coordinates = (Array.isArray(currentCoords) ? currentCoords.flat(Infinity) : [currentCoords]).reduce((acc, val, idx, arr) => {
-                                        if (idx % 2 === 0 && typeof val === 'number' && typeof arr[idx + 1] === 'number') {
-                                            acc.push([val, arr[idx + 1]]);
-                                        }
-                                        return acc;
-                                    }, []);
-                                }
-                                break;
-
-                            case 'Polygon':
-                                // Polygon: [[[lon, lat], ...], [[hole_lon, lat], ...]] (GeoJSON expected depth 3)
-                                // Iterate through each ring and flatten it to depth 2 if needed
-                                if (Array.isArray(currentCoords)) {
-                                    feature.geometry.coordinates = currentCoords.map(ring => {
-                                        let currentRing = ring;
-                                        // Flatten each ring until its elements are [lon, lat] arrays (depth 2 for the ring)
-                                        while (Array.isArray(currentRing) && currentRing.length > 0 && Array.isArray(currentRing[0]) && Array.isArray(currentRing[0][0]) && typeof currentRing[0][0][0] === 'number') {
-                                            currentRing = currentRing.flat(1);
-                                        }
-                                        // Validate inner ring structure to be [[lon,lat],...]
-                                        if (Array.isArray(currentRing) && currentRing.every(pair => Array.isArray(pair) && pair.length === 2 && typeof pair[0] === 'number' && typeof pair[1] === 'number')) {
-                                            return currentRing;
-                                        } else {
-                                            console.warn(`Polygon ring coordinates could not be normalized to [[lon, lat], ...]:`, ring);
-                                            // Fallback for truly malformed rings, flatten and reconstruct pairs
-                                            return (Array.isArray(currentRing) ? currentRing.flat(Infinity) : [currentRing]).reduce((acc, val, idx, arr) => {
-                                                if (idx % 2 === 0 && typeof val === 'number' && typeof arr[idx + 1] === 'number') {
-                                                    acc.push([val, arr[idx + 1]]);
-                                                }
-                                                return acc;
-                                            }, []);
-                                        }
-                                    });
-                                } else {
-                                    console.warn(`Polygon top-level coordinates not an array:`, feature.geometry.coordinates);
-                                    feature.geometry.coordinates = []; // Default to empty polygon if top-level isn't an array
-                                }
-                                break;
-
-                            case 'MultiPoint':
-                            case 'MultiLineString':
-                            case 'MultiPolygon':
-                                // These Multi-geometries inherently have higher nesting levels.
-                                // The current `map` processes features individually. If the problem is
-                                // specifically with the nesting *within* a sub-geometry of a Multi-type
-                                // (e.g., a MultiLineString containing a LineString that is [[[lon,lat]]]),
-                                // the LineString/Polygon logic above should catch it for that sub-geometry.
-                                // If the issue persists for Multi-types, it might indicate that Firestore
-                                // has a deeper restriction on these types, potentially requiring decomposition
-                                // into multiple single-geometry features (more complex).
-                                break;
-                        }
+                        // 使用新的 normalizeCoordinates 函式處理所有幾何類型
+                        feature.geometry.coordinates = normalizeCoordinates(feature.geometry.coordinates, feature.geometry.type);
                     }
                     return feature;
                 });
@@ -877,7 +828,6 @@ JavaScript
         };
         reader.readAsText(file);
     });
-
     // 事件監聽器：刪除 KML
     deleteSelectedKmlBtn.addEventListener('click', async () => {
         const kmlIdToDelete = kmlLayerSelectDashboard.value;
@@ -1035,6 +985,7 @@ JavaScript
             refreshUserList();
         }
     });
+    
         // ===== 圖釘按鈕邏輯（改用 img + 背景顏色）=====
 
   const kmlLayerSelect = document.getElementById('kmlLayerSelect');
