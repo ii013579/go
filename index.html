@@ -24,10 +24,13 @@
 
   <div id="controls">
     <div style="display: flex; gap: 10px; align-items: center; flex-wrap: nowrap;">
-        <label for="kmlLayerSelect" style="flex-shrink: 0;">選擇資料庫圖層:</label>
+        <label for="kmlLayerSelect" style="flex-shrink: 0;">選擇資料庫:</label>
         <select id="kmlLayerSelect" style="flex-grow: 1; min-width: 150px;">
-            <option value="">-- 請選擇 KML 圖層 --</option>
+            <option value="">-- 請選擇 KML  --</option>
         </select>
+        <button class="pin-button-icon" id="pinButton" aria-label="釘選" disabled>
+             <img src="https://fonts.gstatic.com/s/i/materialicons/push_pin/v12/24px.svg" alt="釘選" class="pin-icon">
+         </button>
     </div>
     <div id="searchContainer">
         <span class="material-symbols-outlined">search</span>

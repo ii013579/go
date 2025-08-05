@@ -1,0 +1,87 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // 輔助函式：檢查當前用戶是否為 owner 角色
+    function isOwner() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'owner';
+    }
+
+    // 輔助函式：檢查當前用戶是否為 editor 角色
+    function isEditor() {
+        return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'editor';
+    }
+
+    // 輔助函式：檢查當前用戶是否為 editor 或 owner 角色
+    function isEditorOrOwner() {
+      return isEditor() || isOwner();
+    }
+
+    // 集合：users (用戶管理)
+    match /users/{uid} {
+      // 允許用戶讀取自己的文檔，或 owner 讀取任何用戶文檔
+      allow read: if request.auth.uid == uid || isOwner();
+
+      // 允許創建新用戶文檔 (需通過註冊碼驗證)
+      allow create: if request.auth.uid == uid
+                      && request.resource.data.email == request.auth.token.email
+                      && request.resource.data.name is string // 新增：驗證 name 欄位必須是字串
+                      && request.resource.data.role == 'unapproved'
+                      && request.resource.data.registeredWithCode == true
+                      && request.resource.data.registrationCodeUsed == get(/databases/$(database)/documents/settings/registration).data.oneTimeCode
+                      && request.time < get(/databases/$(database)/documents/settings/registration).data.oneTimeCodeExpiry;
+
+      // 允許更新用戶文檔 (owner 可更新所有；用戶只能更新自己的，且不能修改角色)
+      allow update: if isOwner() || (request.auth.uid == uid && request.resource.data.role == resource.data.role);
+
+      // 允許 owner 刪除任何用戶文檔
+      allow delete: if isOwner();
+    }
+
+    // 集合：artifacts (基於您應用程式的根路徑)
+    match /artifacts/{appId} {
+      // 允許所有使用者讀取 artifacts 集合 (包括未登入/匿名使用者)
+      // 注意: 這表示 /artifacts/appId/public/data/kmlLayers 的父層級都允許讀取
+      allow read: if true;
+
+      // public 子集合
+      match /public {
+        allow read: if true; // 父層級已允許，此處可選擇性移除或保留
+
+        // data 子集合
+        match /data {
+          allow read: if true; // 父層級已允許，此處可選擇性移除或保留
+
+          // KML Layers 集合 (主 KML 圖層信息)
+          // 現在 GeoJSON 內容也會直接儲存在這裡
+          match /kmlLayers/{kmlLayerId} {
+            // 允許所有使用者讀取主 KML 圖層文檔及其內部的 geojsonContent
+            allow read: if true;
+
+            // 允許 editor 或 owner 創建主 KML 圖層文檔
+            // 新增時，editor 必須確保 uploadedBy 是自己的 email
+            allow create: if isOwner() || (isEditor() && request.resource.data.uploadedBy == request.auth.token.email);
+
+            // 允許 editor 或 owner 更新主 KML 圖層文檔
+            // owner 可更新所有；editor 只能更新自己上傳的 KML
+            allow update: if isOwner() || (isEditor() && resource.data.uploadedBy == request.auth.token.email);
+
+            // 允許 editor 或 owner 刪除主 KML 圖層文檔
+            // owner 可刪除所有；editor 只能刪除自己上傳的 KML
+            allow delete: if isOwner() || (isEditor() && resource.data.uploadedBy == request.auth.token.email);
+
+          }
+        }
+      }
+    }
+
+    // 集合：settings (設定)
+    match /settings/{docId} {
+      // 允許所有用戶讀取 (包括未登入/匿名使用者)
+      allow read: if true;
+
+      // 只允許 owner 寫入 (創建、更新、刪除)
+      allow write: if isOwner();
+    }
+  }
+}

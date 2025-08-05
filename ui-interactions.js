@@ -56,6 +56,16 @@ document.addEventListener('DOMContentLoaded', () => {
                     noResult.style.gridColumn = 'span 3';
                     searchResults.appendChild(noResult);
                 } else {
+                	  // 🔍 判斷名稱最大長度，套用欄數 class
+                    let maxNameLength = 0;
+                    results.forEach(f => {
+                      const name = f.properties?.name || '';
+                      if (name.length > maxNameLength) maxNameLength = name.length;
+                    });
+                  
+                    searchResults.classList.remove('columns-2', 'columns-3');
+                    searchResults.classList.add(maxNameLength > 9 ? 'columns-2' : 'columns-3');
+
                     results.forEach(f => {
                         const name = f.properties.name || '未命名';
                         if (f.geometry && f.geometry.type === 'Point' && f.geometry.coordinates) {
