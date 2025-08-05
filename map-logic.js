@@ -252,17 +252,21 @@ window.addGeoJsonLayers = function(geojsonFeatures) {
             // **修正點**: 在 onEachFeature 中加入點擊事件處理邏輯
             onEachFeature: function(feature, layer) {
                 layer.on('click', function(e) {
+                    // **偵錯點 1**: 確認點擊事件有被觸發
+                    console.log('點擊了地圖要素:', feature.properties.name);
+            
                     const featureName = feature.properties.name || '未命名地圖要素';
-
-                    // 根據幾何類型計算中心點
+            
                     let centerPoint = null;
                     if (feature.geometry.type === 'Polygon') {
                         centerPoint = window.getPolygonCentroid(feature.geometry.coordinates[0]);
                     } else if (feature.geometry.type === 'LineString') {
                         centerPoint = window.getLineStringMidpoint(feature.geometry.coordinates);
                     }
-
-                    // 如果成功計算出中心點，則創建導航按鈕
+            
+                    // **偵錯點 2**: 檢查計算出的中心點座標是否有效
+                    console.log('計算出的中心點座標:', centerPoint);
+            
                     if (centerPoint) {
                         const centerLatLng = L.latLng(centerPoint[1], centerPoint[0]);
                         window.createNavButton(centerLatLng, featureName);
