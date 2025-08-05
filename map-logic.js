@@ -1,8 +1,9 @@
-// map-logic.js
+﻿// map-logic.js
 
 let map;
-let markers = L.featureGroup(); // 用於儲存所有標記以便管理
+let markers = L.featureGroup(); // 用於儲存所有自定義點標記 (圓點和文字標籤)
 let navButtons = L.featureGroup(); // 用於儲存導航按鈕
+let geoJsonLayers = L.featureGroup(); // 用於儲存所有 GeoJSON 圖層 (線、多邊形、點)
 
 // 新增一個全局變數，用於儲存所有地圖上 KML Point Features 的數據，供搜尋使用
 window.allKmlFeatures = [];
@@ -10,6 +11,7 @@ window.allKmlFeatures = [];
 document.addEventListener('DOMContentLoaded', () => {
     // 初始化地圖
     map = L.map('map', {
+      attributionControl: true,
       zoomControl: false,
       maxZoom: 25,
       minZoom: 5
@@ -34,14 +36,25 @@ document.addEventListener('DOMContentLoaded', () => {
             maxNativeZoom: 20
         }),
         'OpenStreetMap': L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+            attribution: 'c <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
             maxZoom: 25,
             maxNativeZoom: 20
         })
     };
 
-    // 預設將 'Google 街道圖' 添加到地圖
-    baseLayers['Google 街道圖'].addTo(map);
+    // 嘗試從 localStorage 取得上次選擇的圖層名稱
+       const lastLayerName = localStorage.getItem('lastBaseLayer');
+       
+       if (lastLayerName && baseLayers[lastLayerName]) {
+         baseLayers[lastLayerName].addTo(map);
+         console.log(`已還原上次使用的圖層：${lastLayerName}`);
+       } else {
+         localStorage.removeItem('lastBaseLayer');
+         console.warn(`找不到記憶圖層 "${lastLayerName}"，已清除記錄。`);
+       
+         // ? 預設載入 Google 街道圖
+         baseLayers['Google 街道圖'].addTo(map);
+       }
 
     // 將縮放控制添加到地圖的右上角
     L.control.zoom({ position: 'topright' }).addTo(map);
@@ -88,8 +101,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 enableHighAccuracy: true,
                 watch: false
             });
-            window.showMessage('定位中', '正在獲取您的位置...');
-        },
+            window.showMessageCustom({
+                title: '定位中',
+                message: '正在獲取您的位置...',
+                buttonText: '取消',
+                autoClose: false
+              });
+            },
 
         _onLocationFound: function(e) {
             this._clearLocationMarkers();
@@ -100,7 +118,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 icon: L.divIcon({
                     className: 'user-location-dot',
                     iconSize: [16, 16],
-                    iconAnchor: [0, -10]
+                    iconAnchor: [8, 8]
                 })
             }).addTo(map);
 
@@ -111,8 +129,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 weight: 2
             }).addTo(map);
 
-            window.showMessage('定位成功', `您的位置已定位，誤差約 ${radius.toFixed(0)} 公尺。`);
-        },
+            window.showMessageCustom({
+                title: '定位成功',
+                message: `您的位置已定位，誤差約 ${radius.toFixed(0)} 公尺。`,
+                buttonText: '確定',
+                autoClose: true,
+                autoCloseDelay: 3000
+              });
+            },
 
         _onLocationError: function(e) {
             this._clearLocationMarkers();
@@ -131,6 +155,40 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
     });
+    
+    window.showMessageCustom = function({
+      title = '',
+      message = '',
+      buttonText = '確定',
+      autoClose = false,
+      autoCloseDelay = 3000,
+      onClose = null
+    }) {
+      const overlay = document.querySelector('.message-box-overlay');
+      const content = overlay.querySelector('.message-box-content');
+      const header = content.querySelector('h3');
+      const paragraph = content.querySelector('p');
+      const button = content.querySelector('button');
+    
+      header.textContent = title;
+      paragraph.textContent = message;
+      button.textContent = buttonText;
+      overlay.classList.add('visible');
+    
+      // 移除舊的 onclick
+      button.onclick = () => {
+        overlay.classList.remove('visible');
+        if (typeof onClose === 'function') onClose();
+      };
+    
+      if (autoClose) {
+        setTimeout(() => {
+          overlay.classList.remove('visible');
+          if (typeof onClose === 'function') onClose();
+        }, autoCloseDelay);
+      }
+    };
+    
 
     // 將自定義定位控制項添加到地圖的右上角
     new LocateMeControl({ position: 'topright' }).addTo(map);
@@ -141,6 +199,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // 監聽基本圖層變更事件，並在變更後自動隱藏圖層控制面板
     map.on('baselayerchange', function (e) {
         console.log("基本圖層已變更:", e.name);
+        localStorage.setItem('lastBaseLayer', e.name);
         const controlContainer = layerControl.getContainer();
         if (controlContainer && controlContainer.classList.contains('leaflet-control-layers-expanded')) {
             // 移除 'leaflet-control-layers-expanded' 類別來收起控制面板
@@ -152,194 +211,320 @@ document.addEventListener('DOMContentLoaded', () => {
     // 將 markers 和 navButtons 添加到地圖
     markers.addTo(map);
     navButtons.addTo(map);
+    geoJsonLayers.addTo(map);
 
-    // 全局函數：添加標記到地圖 (現在支援 Point, LineString, Polygon)
-    window.addMarkers = function(featuresToDisplay) {
-        markers.clearLayers(); // 清除現有標記
+// 全局函數：添加標記到地圖 (現在支援 Point, LineString, Polygon)
+window.addGeoJsonLayers = function(geojsonFeatures) {
+    if (!map) {
+        console.error("地圖尚未初始化。");
+        return;
+    }
 
-        if (!featuresToDisplay || featuresToDisplay.length === 0) {
-            console.log("沒有 features 可顯示。");
-            window.showMessage('載入警示', 'KML 圖層載入完成但未發現有效地圖元素。');
-            return;
+    // 每次添加新圖層前，先清除舊的 GeoJSON 圖層和自定義點標記
+    if (geoJsonLayers) {
+        geoJsonLayers.clearLayers();
+    } else {
+        geoJsonLayers = L.featureGroup().addTo(map);
+    }
+    
+    if (markers) {
+        markers.clearLayers(); // 清除所有為點位創建的自定義圓點和文字標籤
+    } else {
+        markers = L.featureGroup().addTo(map);
+    }
+    
+    const linePolygonFeatures = [];
+    const pointFeatures = [];
+
+    // 將 features 分類
+    geojsonFeatures.forEach(feature => {
+        if (feature.geometry && feature.geometry.type === 'Point') {
+            pointFeatures.push(feature);
+        } else if (feature.geometry && (feature.geometry.type === 'LineString' || feature.geometry.type === 'Polygon')) {
+            linePolygonFeatures.push(feature);
         }
-        console.log(`正在將 ${featuresToDisplay.length} 個 features 添加到地圖。`);
-        featuresToDisplay.forEach(f => {
-            const name = f.properties.name || '未命名';
-            const coordinates = f.geometry.coordinates;
-            let layer;
+        // 其他未知的幾何類型將被忽略
+    });
 
-            if (!coordinates) {
-                console.warn(`跳過缺少座標的 feature: ${name} (類型: ${f.geometry.type || '未知'})`);
-                return;
+// 處理 LineString 和 Polygon features
+if (linePolygonFeatures.length > 0) {
+    L.geoJSON(linePolygonFeatures, {
+        onEachFeature: function(feature, layer) {
+            layer.on('click', function(e) {
+                // 清除舊的導航按鈕
+                if (navButtons) {
+                    navButtons.clearLayers();
+                }
+
+                const featureName = feature.properties.name || '未命名地圖要素';
+                
+                // **修正點**: 移除呼叫不存在的 window.showFeatureDetails 函式，以避免 TypeError 錯誤
+                // 如果您想重新啟用此功能，請自行定義 window.showFeatureDetails 函式
+
+                // 根據幾何類型計算中心點
+                let centerPoint = null;
+                if (feature.geometry.type === 'Polygon') {
+                    centerPoint = window.getPolygonCentroid(feature.geometry.coordinates[0]);
+                } else if (feature.geometry.type === 'LineString') {
+                    centerPoint = window.getLineStringMidpoint(feature.geometry.coordinates);
+                }
+
+                // 如果成功計算出中心點，則創建導航按鈕
+                if (centerPoint) {
+                    const centerLatLng = L.latLng(centerPoint[1], centerPoint[0]);
+                    window.createNavButton(centerLatLng, featureName);
+                }
+            });
+        },
+        // 自定義 LineString 和 Polygon 樣式
+        style: function(feature) {
+            switch (feature.geometry.type) {
+                case 'LineString':
+                    return { color: '#FF0000', weight: 3, opacity: 0.8 }; // 紅色線
+                case 'Polygon':
+                    return { color: '#0000FF', weight: 2, opacity: 0.6, fillOpacity: 0.3 }; // 藍色多邊形
+                default:
+                    return {}; // 默認樣式
             }
+        }
+    }).addTo(geoJsonLayers); // 將線和多邊形添加到 geoJsonLayers
+}
 
-            if (f.geometry.type === 'Point') {
-              const [lon, lat] = coordinates;
-              const latlng = L.latLng(lat, lon);
-              const labelLatLng = latlng;
-            
-              const labelId = `label-${lat}-${lon}`.replace(/\./g, '_');
-            
-              const dotIcon = L.divIcon({
+    // 處理 Point features (使用您原有的自定義樣式和行為)
+    pointFeatures.forEach(f => {
+        if (f.geometry && f.geometry.coordinates) {
+            const [lon, lat] = f.geometry.coordinates;
+            const latlng = L.latLng(lat, lon);
+            const name = f.properties ? (f.properties.name || '未命名') : '未命名';
+            const labelId = `label-${lat}-${lon}`.replace(/\./g, '_'); // 確保唯一 ID
+
+            // 自定義圓點圖標
+            const dotIcon = L.divIcon({
                 className: 'custom-dot-icon',
                 iconSize: [16, 16],
                 iconAnchor: [8, 8]
-              });
-            
-              const dot = L.marker(latlng, {
+            });
+
+            // 圓點標記
+            const dot = L.marker(latlng, {
                 icon: dotIcon,
                 interactive: true
-              });
-            
-              const label = L.marker(labelLatLng, {
-               icon: L.divIcon({
-                 className: 'marker-label',
-                 html: `<span id="${labelId}">${name}</span>`,
-                 iconSize: [null, null],
-                 iconAnchor: [0, 0]
-               }),
-               interactive: false,
-               zIndexOffset: 1000
-             });            
-             
-              dot.on('click', (e) => {
+            });
+
+            // 文字標籤標記
+            const label = L.marker(latlng, {
+                icon: L.divIcon({
+                    className: 'marker-label',
+                    html: `<span id="${labelId}">${name}</span>`,
+                    iconSize: [null, null],
+                    iconAnchor: [0, 0]
+                }),
+                interactive: false,
+                zIndexOffset: 1000
+            });
+
+            // 為圓點標記綁定點擊事件
+            dot.on('click', (e) => {
                 L.DomEvent.stopPropagation(e);
-            
-                // 清除所有高亮文字
+
                 document.querySelectorAll('.marker-label span.label-active').forEach(el => {
-                  el.classList.remove('label-active');
+                    el.classList.remove('label-active');
                 });
-                document.getElementById(labelId)?.classList.add('label-active');
-            
-                // 套用高亮到當前 label
+                
                 const target = document.getElementById(labelId);
                 if (target) {
-                  target.classList.add('label-active');
+                    target.classList.add('label-active');
                 }
+
+                if (typeof window.createNavButton === 'function') {
+                    window.createNavButton(latlng, name);
+                } else {
+                    console.warn('createNavButton 函式未定義或不可用。');
+                }
+            });
             
-                // 顯示導航按鈕
-                window.createNavButton(latlng, name);
-              });
-            
-              markers.addLayer(dot);
-              markers.addLayer(label);
-              console.log(`添加 Point: ${name} (Lat: ${latlng.lat}, Lng: ${latlng.lng})`);
-
-            } else if (f.geometry.type === 'LineString') {
-                // 將 [lon, lat] 陣列轉換為 L.LatLng 陣列以用於 LineString
-                const latlngs = coordinates.map(coord => L.latLng(coord[1], coord[0]));
-                layer = L.polyline(latlngs, {
-                    color: '#1a73e8', // 藍色
-                    weight: 4,
-                    opacity: 0.7
-                });
-                layer.bindPopup(`<b>${name}</b>`); // 為線添加彈出視窗顯示名稱
-                markers.addLayer(layer);
-                console.log(`添加 LineString: ${name} (${coordinates.length} 點)`);
-
-            } else if (f.geometry.type === 'Polygon') {
-                // 對於 Polygon，座標是 [ [[lon,lat],[lon,lat],...]] 用於外環
-                // 並且可能包含內環。L.polygon 期望一個 LatLng 陣列的陣列。
-                const latlngs = coordinates[0].map(coord => L.latLng(coord[1], coord[0]));
-                layer = L.polygon(latlngs, {
-                    color: '#1a73e8', // 藍色邊框
-                    fillColor: '#6dd5ed', // 淺藍色填充
-                    fillOpacity: 0.3,
-                    weight: 2
-                });
-                layer.bindPopup(`<b>${name}</b>`); // 為多邊形添加彈出視窗顯示名稱
-                markers.addLayer(layer);
-                console.log(`添加 Polygon: ${name} (${coordinates[0].length} 點)`);
-
-            } else {
-                console.warn(`跳過不支援的幾何類型: ${f.geometry.type} (名稱: ${name})`);
-            }
-        });
-
-        // 調整地圖視角以包含所有添加的標記和幾何圖形
-        if (markers.getLayers().length > 0 && markers.getBounds().isValid()) {
-            map.fitBounds(markers.getBounds());
-            console.log("地圖視圖已調整以包含所有載入的地理要素。");
-        } else if (featuresToDisplay.length > 0) {
-            // 如果有 features 但沒有一個被添加到地圖 (例如，所有都是不支援的類型)
-            console.warn("KML features 已載入，但地圖上沒有可顯示的幾何類型。請檢查控制台日誌以獲取詳細資訊。");
+            markers.addLayer(dot);
+            markers.addLayer(label);
+            console.log(`添加 Point: ${name} (Lat: ${latlng.lat}, Lng: ${latlng.lng})`);
         }
-    };
+    });
 
-    // 全局函數：從 Firestore 載入 KML 圖層 (保留原版 logic，僅為了讓 auth-kml-management.js 找到)
-    // 實際的 KML features 處理會透過 window.addMarkers 完成
-    window.loadKmlLayerFromFirestore = async function(kmlId) {
-        if (!kmlId) {
-            console.log("未提供 KML ID，不載入。");
-            window.clearAllKmlLayers();
+    console.log(`已添加 ${geojsonFeatures.length} 個 GeoJSON features 到地圖 (${pointFeatures.length} 點, ${linePolygonFeatures.length} 線/多邊形)。`);
+};
+
+// **新增輔助函式**: 計算多邊形的中心點
+window.getPolygonCentroid = function(coords) {
+    let centroid = [0, 0];
+    let count = 0;
+    
+    coords.forEach(point => {
+        centroid[0] += point[0];
+        centroid[1] += point[1];
+        count++;
+    });
+
+    if (count > 0) {
+        centroid[0] /= count;
+        centroid[1] /= count;
+    }
+    return centroid;
+};
+
+// **新增輔助函式**: 計算線段的中點
+window.getLineStringMidpoint = function(coords) {
+    const midIndex = Math.floor(coords.length / 2);
+    return coords[midIndex];
+};
+
+    // ✅ 最後設定目前已載入的圖層 ID（避免下次重複載入）
+    window.currentKmlLayerId = null;
+    
+// 載入 KML 圖層
+window.loadKmlLayerFromFirestore = async function(kmlId) {
+    // 避免重複載入相同的 KML 圖層
+    if (window.currentKmlLayerId === kmlId) {
+        console.log(`✅ 已載入圖層 ${kmlId}，略過重複讀取`);
+        // 確保在有圖層的情況下，也能重新執行縮放邏輯
+        if (geoJsonLayers && geoJsonLayers.getLayers().length > 0 || markers && markers.getLayers().length > 0) {
+            const allLayers = L.featureGroup([geoJsonLayers, markers]);
+            const bounds = allLayers.getBounds();
+            if (bounds && bounds.isValid()) {
+                map.fitBounds(bounds, { padding: L.point(50, 50) });
+            }
+        }
+        return;
+    }
+
+    // 如果沒有提供 KML ID，則清除地圖上的所有 KML 圖層
+    if (!kmlId) {
+        console.log("未提供 KML ID，不載入。");
+        window.clearAllKmlLayers(); // 清除地圖上的 KML 圖層
+        return;
+    }
+
+    // 在載入新圖層之前，先清除地圖上已有的所有 KML 圖層
+    window.clearAllKmlLayers();
+
+    try {
+        const docRef = db
+            .collection('artifacts')
+            .doc(appId)
+            .collection('public')
+            .doc('data')
+            .collection('kmlLayers')
+            .doc(kmlId);
+
+        const doc = await docRef.get();
+
+        if (!doc.exists) {
+            console.error('KML 圖層文檔未找到 ID:', kmlId);
+            window.showMessageCustom({
+                title: '錯誤',
+                message: '找不到指定的 KML 圖層資料。',
+                buttonText: '確定'
+            });
             return;
         }
 
-        // 移除現有 KML 圖層和所有標記 (包括導航按鈕)
-        window.clearAllKmlLayers();
+        const kmlData = doc.data();
+        console.log(`正在載入 KML Features，圖層名稱: ${kmlData.name || kmlId}`);
 
-        try {
-            // 從 Firestore 獲取 KML 文件的元數據
-            const doc = await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('kmlLayers').doc(kmlId).get();
-            if (!doc.exists) {
-                console.error('KML 圖層文檔未找到 ID:', kmlId);
-                showMessage('錯誤', '找不到指定的 KML 圖層資料。');
+        let geojson = kmlData.geojsonContent;
+
+        // **修正點 1**: 檢查並解析 GeoJSON 字串
+        if (typeof geojson === 'string') {
+            try {
+                geojson = JSON.parse(geojson);
+            } catch (parseError) {
+                console.error("解析 geojsonContent 字串時發生錯誤:", parseError);
+                window.showMessageCustom({
+                    title: '載入錯誤',
+                    message: `無法解析 KML 圖層 "${kmlData.name || kmlId}" 的地理資料。`,
+                    buttonText: '確定'
+                });
                 return;
             }
-            const kmlData = doc.data();
-
-            console.log(`正在載入 KML Features，圖層名稱: ${kmlData.name || kmlId}`);
-
-            // 從 kmlLayers/{kmlId}/features 子集合中獲取所有 GeoJSON features
-            const featuresSubCollectionRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('kmlLayers').doc(kmlId).collection('features');
-            const querySnapshot = await featuresSubCollectionRef.get();
-
-            const loadedFeatures = [];
-            if (querySnapshot.empty) {
-                console.log(`KML 圖層 "${kmlData.name}" 的 features 子集合為空。`);
-            } else {
-                querySnapshot.forEach(featureDoc => {
-                    const feature = featureDoc.data();
-                    // 確保 feature 包含 geometry 和 properties
-                    if (feature.geometry && feature.geometry.coordinates && feature.properties) {
-                        loadedFeatures.push(feature);
-                    } else {
-                        console.warn('正在跳過來自 Firestore 的無效 feature:', feature);
-                    }
-                });
-            }
-
-            window.allKmlFeatures = loadedFeatures; // 更新全局搜尋數據
-            window.addMarkers(window.allKmlFeatures); // 將所有地理要素添加到地圖
-
-            // 如果有地理要素，設定地圖視角以包含所有要素
-            if (window.allKmlFeatures.length > 0 && markers.getLayers().length > 0 && markers.getBounds().isValid()) {
-                 map.fitBounds(markers.getBounds());
-            } else {
-                 console.warn("地理要素存在，但其邊界對於地圖視圖不適用，或地圖上沒有圖層可適合。");
-            }
-
-        } catch (error) {
-            console.error("獲取 KML Features 或載入 KML 時出錯:", error);
-            // 為了幫助調試，這裡可以顯示更詳細的錯誤訊息，例如安全規則相關的錯誤
-            showMessage('錯誤', `無法載入 KML 圖層: ${error.message}。請確認 Firebase 安全規則已正確設定，允許讀取 /artifacts/{appId}/public/data/kmlLayers。`);
         }
-    };
+
+        if (!geojson || !geojson.features || geojson.features.length === 0) {
+            console.warn(`KML 圖層 "${kmlData.name}" 沒有有效的 geojsonContent 或 features 為空。`);
+            window.showMessageCustom({
+                title: '載入警示',
+                message: 'KML 圖層載入完成但未發現有效地圖元素。',
+                buttonText: '確定'
+            });
+            window.allKmlFeatures = [];
+            window.currentKmlLayerId = kmlId;
+            return;
+        }
+
+        // 過濾掉沒有有效 geometry 或 properties 的 features
+        const loadedFeatures = geojson.features.filter(f =>
+            f.geometry && f.geometry.coordinates && f.properties
+        );
+
+        if (loadedFeatures.length !== geojson.features.length) {
+            console.warn(`從 KML 圖層 "${kmlData.name}" 中跳過了 ${geojson.features.length - loadedFeatures.length} 個無效 features。`);
+        }
+
+        // 3️⃣ 更新全域變數並顯示圖層
+        window.allKmlFeatures = loadedFeatures;
+        window.addGeoJsonLayers(window.allKmlFeatures);
+
+        // **修正點 2**: 重新調整自動縮放邏輯，讓它同時考慮所有 GeoJSON 圖層和點標記
+        // 將所有圖層合併到一個臨時的 FeatureGroup 中，然後計算邊界
+        const allLayers = L.featureGroup([geoJsonLayers, markers]);
+        
+        if (allLayers.getLayers().length > 0) {
+            const bounds = allLayers.getBounds();
+            if (bounds && bounds.isValid()) {
+                map.fitBounds(bounds, {
+                    padding: L.point(50, 50) // 添加一些邊距，讓圖層不會貼近邊緣
+                });
+            } else {
+                console.warn("地理要素存在，但其邊界對於地圖視圖不適用。");
+            }
+        } else {
+            console.warn("地圖上沒有圖層可適合。");
+        }
+        
+        window.currentKmlLayerId = kmlId;
+
+    } catch (error) {
+        console.error("獲取 KML Features 或載入 KML 時出錯:", error);
+        window.showMessageCustom({
+            title: '錯誤',
+            message: `無法載入 KML 圖層: ${error.message}。請確認 Firebase 安全規則已正確設定，允許讀取 /artifacts/{appId}/public/data/kmlLayers。`,
+            buttonText: '確定'
+        });
+    }
+};
 
     // 全局函數：清除所有 KML 圖層、標記和導航按鈕
     window.clearAllKmlLayers = function() {
-        markers.clearLayers();
-        navButtons.clearLayers();
-        window.allKmlFeatures = [];
-        console.log("所有 KML 圖層、標記和導航按鈕已清除。");
-    };
+        if (markers) {
+            markers.clearLayers(); // 清除所有自定義點標記 (圓點和文字標籤)
+        }
+        if (navButtons) {
+            navButtons.clearLayers(); // 清除所有導航按鈕
+        }
+        if (geoJsonLayers) {
+            geoJsonLayers.clearLayers(); // 清除所有 GeoJSON 圖層 (線、多邊形)
+        }
 
+        window.allKmlFeatures = []; // 清空緩存的 KML features 數據
+        window.currentKmlLayerId = null; // 清除當前載入的 KML ID
+
+        console.log('所有 KML 圖層和相關數據已清除。');
+    };
+    
+    
     // 全局函數：創建導航按鈕
     window.createNavButton = function(latlng, name) {
         navButtons.clearLayers();
 
         // 使用通用的 Google Maps 查詢 URL，現代手機會自動識別並提供開啟地圖應用的選項。
-        const googleMapsUrl = `https://www.google.com/maps/search/?api=1&query=${latlng.lat},${latlng.lng}`;
+        const googleMapsUrl = `http://maps.google.com/maps?q=${latlng.lat},${latlng.lng}`;
 
 
         const buttonHtml = `
@@ -356,9 +541,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const navMarker = L.marker(latlng, {
             icon: buttonIcon,
-            zIndexOffset: 1000,
+            zIndexOffset: 2000, // **修正點 1**: 將 zIndexOffset 提高到 2000，確保按鈕永遠在最上層
             interactive: true
         }).addTo(navButtons);
+    
+        // **修正點 2**: 在建立按鈕後，平移地圖中心到按鈕的位置，確保用戶能看到
+        map.panTo(latlng, {
+            duration: 0.5 // 平移動畫時間
+        });
+
 
         console.log(`已為 ${name} 在 ${latlng.lat}, ${latlng.lng} 創建導航按鈕。`);
     };
