@@ -914,3 +914,14 @@ body {
   pointer-events: none;
 }
 
+/* 確保地圖的各個圖層有明確的 z-index 順序 */
+
+/* 降低多邊形和線段圖層的 z-index，確保它們在標記下方 */
+.leaflet-pane.leaflet-overlay-pane {
+    z-index: 500 !important;
+}
+
+/* 確保標記和按鈕所在的圖層有更高的 z-index */
+.leaflet-pane.leaflet-marker-pane {
+    z-index: 600 !important;
+}
