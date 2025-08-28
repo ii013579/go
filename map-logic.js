@@ -1,4 +1,4 @@
-﻿// map-logic.js v1.8
+﻿// map-logic.js v1.8.1
 
 // 全域變數初始化，確保它們在整個腳本中可被訪問
 let map;
@@ -68,7 +68,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const LocateMeControl = L.Control.extend({
         _userLocationMarker: null,
         _userLocationCircle: null,
-
+        _watchId: null,
+        _firstViewCentered: false,
+        _button: null,
+    
         onAdd: function(map) {
             const container = L.DomUtil.create('div', 'leaflet-bar leaflet-control leaflet-control-locate-me');
             const button = L.DomUtil.create('a', '', container);
@@ -77,74 +80,114 @@ document.addEventListener('DOMContentLoaded', () => {
             button.setAttribute("role", "button");
             button.setAttribute("aria-label", "顯示我的位置");
             button.innerHTML = `<span class="material-symbols-outlined" style="font-size: 24px; line-height: 30px;">my_location</span>`;
-
-            L.DomEvent.on(button, 'click', this._locateUser, this);
-
-            map.on('locationfound', this._onLocationFound, this);
-            map.on('locationerror', this._onLocationError, this);
-
+    
+            this._button = button;
+            L.DomEvent.on(button, 'click', this._toggleLocate.bind(this));
             return container;
         },
-
-        onRemove: function(map) {
-            map.off('locationfound', this._onLocationFound, this);
-            map.off('locationerror', this._onLocationError, this);
-            this._clearLocationMarkers();
+    
+        onRemove: function() {
+            this._stopTracking();
         },
-
-        _locateUser: function(e) {
+    
+        _toggleLocate: function(e) {
             L.DomEvent.stopPropagation(e);
             L.DomEvent.preventDefault(e);
-            this._clearLocationMarkers();
-            map.locate({
-                setView: true,
-                maxZoom: 16,
-                enableHighAccuracy: true,
-                watch: false
-            });
+            if (this._watchId) {
+                this._stopTracking();
+            } else {
+                this._startTracking();
+            }
+        },
+    
+        _startTracking: function() {
+            if (!navigator.geolocation) {
+                alert("您的裝置不支援定位功能");
+                return;
+            }
+    
+            this._firstViewCentered = false;
+    
+            // 顯示「定位中」訊息
             window.showMessageCustom({
                 title: '定位中',
-                message: '正在獲取您的位置...',
-                buttonText: '取消',
-                autoClose: false
+                message: '正在追蹤您的位置...',
+                buttonText: '停止',
+                autoClose: false,
+                onConfirm: () => this._stopTracking()
+            });
+    
+            this._watchId = navigator.geolocation.watchPosition(
+                (pos) => {
+                    const latlng = [pos.coords.latitude, pos.coords.longitude];
+                    const accuracy = pos.coords.accuracy;
+    
+                    // ✅ 第一次定位時移動地圖視角，並關閉「定位中」訊息
+                    if (!this._firstViewCentered) {
+                        map.setView(latlng, 16);
+                        this._firstViewCentered = true;
+                        window.closeMessageCustom?.();
+                    }
+    
+                    // ✅ 更新藍點（不會干擾地圖操作）
+                    this._updateLocation(latlng, accuracy);
+                },
+                (err) => {
+                    console.error("定位失敗:", err.message);
+                    this._stopTracking();
+                    window.showMessageCustom({
+                        title: "定位失敗",
+                        message: err.message,
+                        buttonText: "確定"
+                    });
+                },
+                {
+                    enableHighAccuracy: true,
+                    maximumAge: 0,
+                    timeout: 10000
+                }
+            );
+    
+            this._setButtonActive(true);
+        },
+    
+        _stopTracking: function() {
+            if (this._watchId !== null) {
+                navigator.geolocation.clearWatch(this._watchId);
+                this._watchId = null;
+            }
+    
+            this._clearLocationMarkers();
+            this._setButtonActive(false);
+            window.closeMessageCustom?.();
+            window.showMessageCustom({
+                title: '定位已停止',
+                message: '位置追蹤已關閉。',
+                buttonText: '確定',
+                autoClose: true,
+                autoCloseDelay: 2000
             });
         },
-
-        _onLocationFound: function(e) {
+    
+        _updateLocation: function(latlng, accuracy) {
             this._clearLocationMarkers();
-            const radius = e.accuracy / 2;
-            this._userLocationMarker = L.marker(e.latlng, {
+    
+            this._userLocationMarker = L.marker(latlng, {
                 icon: L.divIcon({
                     className: 'user-location-dot',
                     iconSize: [16, 16],
                     iconAnchor: [8, 8]
                 })
             }).addTo(map);
-            this._userLocationCircle = L.circle(e.latlng, radius, {
+    
+            this._userLocationCircle = L.circle(latlng, accuracy / 2, {
                 color: '#1a73e8',
                 fillColor: '#1a73e8',
                 fillOpacity: 0.15,
                 weight: 2
             }).addTo(map);
-            window.showMessageCustom({
-                title: '定位成功',
-                message: `您的位置已定位，誤差約 ${radius.toFixed(0)} 公尺。`,
-                buttonText: '確定',
-                autoClose: true,
-                autoCloseDelay: 3000
-            });
         },
-
-        _onLocationError: function(e) {
-            this._clearLocationMarkers();
-            window.showMessageCustom({
-                title: '定位失敗',
-                message: `無法獲取您的位置: ${e.message}`,
-                buttonText: '確定'
-            });
-            console.error('Geolocation error:', e.message);
-        },
-
+    
         _clearLocationMarkers: function() {
             if (this._userLocationMarker) {
                 map.removeLayer(this._userLocationMarker);
@@ -153,6 +196,13 @@ document.addEventListener('DOMContentLoaded', () => {
             if (this._userLocationCircle) {
                 map.removeLayer(this._userLocationCircle);
                 this._userLocationCircle = null;
+            }
+        },
+    
+        _setButtonActive: function(active) {
+            if (this._button) {
+                this._button.style.backgroundColor = active ? 'red' : '';
+                this._button.style.color = active ? 'white' : '';
             }
         }
     });
@@ -167,6 +217,7 @@ document.addEventListener('DOMContentLoaded', () => {
         onClose = null
     }) {
         const overlay = document.querySelector('.message-box-overlay');
+        if (overlay) overlay.classList.remove('visible');
         const content = overlay.querySelector('.message-box-content');
         const header = content.querySelector('h3');
         const paragraph = content.querySelector('p');
@@ -187,6 +238,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 overlay.classList.remove('visible');
                 if (typeof onClose === 'function') onClose();
             }, autoCloseDelay);
+        }
+    };
+    
+        window.closeMessageCustom = function() {
+        const overlay = document.querySelector('.message-box-overlay');
+        if (overlay) {
+            overlay.classList.remove('visible');
         }
     };
 
@@ -432,17 +490,10 @@ window.clearAllKmlLayers = function() {
     console.log('所有 KML 圖層和相關數據已清除。');
 };
 
-// 載入 KML 圖層 (請確認這個函式有被調用)
+// 載入 KML 圖層
 window.loadKmlLayerFromFirestore = async function(kmlId) {
     if (window.currentKmlLayerId === kmlId) {
         console.log(`✅ 已載入圖層 ${kmlId}，略過重複讀取`);
-        if (geoJsonLayers.getLayers().length > 0 || markers.getLayers().length > 0) {
-            const allLayers = L.featureGroup([geoJsonLayers, markers]);
-            const bounds = allLayers.getBounds();
-            if (bounds && bounds.isValid()) {
-                map.fitBounds(bounds, { padding: L.point(50, 50) });
-            }
-        }
         return;
     }
 
@@ -456,7 +507,7 @@ window.loadKmlLayerFromFirestore = async function(kmlId) {
 
     try {
         const docRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('kmlLayers').doc(kmlId);
-        const doc = await docRef.get();
+        const doc = await docRef.get(); // ✅ 唯一的一次讀取
 
         if (!doc.exists) {
             console.error('KML 圖層文檔未找到 ID:', kmlId);
@@ -469,7 +520,6 @@ window.loadKmlLayerFromFirestore = async function(kmlId) {
         }
 
         const kmlData = doc.data();
-        console.log(`正在載入 KML Features，圖層名稱: ${kmlData.name || kmlId}`);
 
         let geojson = kmlData.geojsonContent;
         if (typeof geojson === 'string') {
@@ -503,31 +553,26 @@ window.loadKmlLayerFromFirestore = async function(kmlId) {
         );
 
         if (loadedFeatures.length !== geojson.features.length) {
-            console.warn(`從 KML 圖層 "${kmlData.name}" 中跳過了 ${geojson.features.length - loadedFeatures.length} 個無效 features。`);
+            console.warn(`從 geojsonContent 中跳過了 ${geojson.features.length - loadedFeatures.length} 個無效 features。`);
         }
 
         window.allKmlFeatures = loadedFeatures;
-        window.addGeoJsonLayers(window.allKmlFeatures);
-        
-        const allLayers = L.featureGroup([geoJsonLayers, markers]);
-        if (allLayers.getLayers().length > 0) {
-            const bounds = allLayers.getBounds();
-            if (bounds && bounds.isValid()) {
-                map.fitBounds(bounds, { padding: L.point(50, 50) });
-            } else {
-                console.warn("地理要素存在，但其邊界對於地圖視圖不適用。");
-            }
-        } else {
-            console.warn("地圖上沒有圖層可適合。");
-        }
-        
         window.currentKmlLayerId = kmlId;
+
+        window.addGeoJsonLayers(loadedFeatures);
+
+        const allLayers = L.featureGroup([geoJsonLayers, markers]);
+        const bounds = allLayers.getBounds();
+        if (bounds && bounds.isValid()) {
+            map.fitBounds(bounds, { padding: L.point(50, 50) });
+        }
     } catch (error) {
-        console.error("獲取 KML Features 或載入 KML 時出錯:", error);
+        console.error("獲取 KML Features 時出錯:", error);
         window.showMessageCustom({
             title: '錯誤',
-            message: `無法載入 KML 圖層: ${error.message}。請確認 Firebase 安全規則已正確設定，允許讀取 /artifacts/{appId}/public/data/kmlLayers。`,
+            message: `無法載入 KML 圖層: ${error.message}`,
             buttonText: '確定'
         });
     }
+
 };
