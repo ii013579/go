@@ -490,89 +490,93 @@ window.clearAllKmlLayers = function() {
     console.log('所有 KML 圖層和相關數據已清除。');
 };
 
-// 載入 KML 圖層
-window.loadKmlLayerFromFirestore = async function(kmlId) {
-    if (window.currentKmlLayerId === kmlId) {
-        console.log(`✅ 已載入圖層 ${kmlId}，略過重複讀取`);
-        return;
-    }
+// 建立全域快取
+window.kmlCache = {};
 
+// 載入 KML 圖層
+// 全域快取與請求快取
+window.kmlCache = {};
+window.kmlRequestCache = {}; // 用來避免同一圖層多次發請求
+
+window.loadKmlLayerFromFirestore = async function(kmlId) {
     if (!kmlId) {
         console.log("未提供 KML ID，不載入。");
         window.clearAllKmlLayers();
         return;
     }
 
-    window.clearAllKmlLayers();
-
-    try {
-        const docRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('kmlLayers').doc(kmlId);
-        const doc = await docRef.get(); // ✅ 唯一的一次讀取
-
-        if (!doc.exists) {
-            console.error('KML 圖層文檔未找到 ID:', kmlId);
-            window.showMessageCustom({
-                title: '錯誤',
-                message: '找不到指定的 KML 圖層資料。',
-                buttonText: '確定'
-            });
-            return;
-        }
-
-        const kmlData = doc.data();
-
-        let geojson = kmlData.geojsonContent;
-        if (typeof geojson === 'string') {
-            try {
-                geojson = JSON.parse(geojson);
-            } catch (parseError) {
-                console.error("解析 geojsonContent 字串時發生錯誤:", parseError);
-                window.showMessageCustom({
-                    title: '載入錯誤',
-                    message: `無法解析 KML 圖層 "${kmlData.name || kmlId}" 的地理資料。`,
-                    buttonText: '確定'
-                });
-                return;
-            }
-        }
-
-        if (!geojson || !geojson.features || geojson.features.length === 0) {
-            console.warn(`KML 圖層 "${kmlData.name}" 沒有有效的 geojsonContent 或 features 為空。`);
-            window.showMessageCustom({
-                title: '載入警示',
-                message: 'KML 圖層載入完成但未發現有效地圖元素。',
-                buttonText: '確定'
-            });
-            window.allKmlFeatures = [];
-            window.currentKmlLayerId = kmlId;
-            return;
-        }
-
-        const loadedFeatures = geojson.features.filter(f =>
-            f.geometry && f.geometry.coordinates && f.properties
-        );
-
-        if (loadedFeatures.length !== geojson.features.length) {
-            console.warn(`從 geojsonContent 中跳過了 ${geojson.features.length - loadedFeatures.length} 個無效 features。`);
-        }
-
-        window.allKmlFeatures = loadedFeatures;
-        window.currentKmlLayerId = kmlId;
-
-        window.addGeoJsonLayers(loadedFeatures);
-
-        const allLayers = L.featureGroup([geoJsonLayers, markers]);
-        const bounds = allLayers.getBounds();
-        if (bounds && bounds.isValid()) {
-            map.fitBounds(bounds, { padding: L.point(50, 50) });
-        }
-    } catch (error) {
-        console.error("獲取 KML Features 時出錯:", error);
-        window.showMessageCustom({
-            title: '錯誤',
-            message: `無法載入 KML 圖層: ${error.message}`,
-            buttonText: '確定'
-        });
+    // ✅ 如果已經載入，直接跳過
+    if (window.currentKmlLayerId === kmlId) {
+        console.log(`⚠️ 圖層 ${kmlId} 已載入，略過重複讀取`);
+        return;
     }
 
+    // ✅ 如果快取有資料，直接用
+    if (window.kmlCache[kmlId]) {
+        console.log(`⚡ 從快取載入圖層 ${kmlId}`);
+        window.clearAllKmlLayers();
+        window.allKmlFeatures = window.kmlCache[kmlId];
+        window.currentKmlLayerId = kmlId;
+        window.addGeoJsonLayers(window.kmlCache[kmlId]);
+        fitToLayers();
+        return;
+    }
+
+    // ✅ 如果已經有請求在進行，直接等它完成
+    if (window.kmlRequestCache[kmlId]) {
+        console.log(`⏳ 等待圖層 ${kmlId} 的請求完成...`);
+        await window.kmlRequestCache[kmlId];
+        return;
+    }
+
+    // 🚀 發送新的請求，存入請求快取
+    window.kmlRequestCache[kmlId] = (async () => {
+        try {
+            const docRef = db.collection('artifacts').doc(appId)
+                .collection('public').doc('data').collection('kmlLayers').doc(kmlId);
+            const doc = await docRef.get();
+
+            if (!doc.exists) {
+                console.error('KML 圖層文檔未找到 ID:', kmlId);
+                return;
+            }
+
+            let geojson = doc.data().geojsonContent;
+            if (typeof geojson === 'string') {
+                geojson = JSON.parse(geojson);
+            }
+
+            const loadedFeatures = (geojson.features || []).filter(f =>
+                f.geometry && f.geometry.coordinates && f.properties
+            );
+
+            // ✅ 存入快取
+            window.kmlCache[kmlId] = loadedFeatures;
+
+            // ✅ 更新狀態
+            window.clearAllKmlLayers();
+            window.allKmlFeatures = loadedFeatures;
+            window.currentKmlLayerId = kmlId;
+            window.addGeoJsonLayers(loadedFeatures);
+            fitToLayers();
+
+        } catch (error) {
+            console.error("獲取 KML Features 時出錯:", error);
+        } finally {
+            // ❌ 移除請求快取（避免卡住）
+            delete window.kmlRequestCache[kmlId];
+        }
+    })();
+
+    // 等待請求完成
+    await window.kmlRequestCache[kmlId];
 };
+
+// 🔧 輔助函式：縮放到目前圖層
+function fitToLayers() {
+    const allLayers = L.featureGroup([geoJsonLayers, markers]);
+    const bounds = allLayers.getBounds();
+    if (bounds && bounds.isValid()) {
+        map.fitBounds(bounds, { padding: L.point(50, 50) });
+    }
+}
