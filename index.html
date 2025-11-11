@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>點位搜尋輔助</title>
+  <!-- 網址列ICO -->
+  <link rel="icon" href="logo.ico" type="image/x-icon" />
+  <link rel="shortcut icon" href="logo.ico" type="image/x-icon" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <!-- 外部樣式表 -->
+  <link rel="stylesheet" href="style.css">
+  <!-- Leaflet.markercluster CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+</head>
+<body>
+  <div id="title">
+    點位搜尋輔助
+    <button id="editButton">編輯</button>
+  </div>
+
+  <div id="controls">
+    <div style="display: flex; gap: 10px; align-items: center; flex-wrap: nowrap;">
+        <label for="kmlLayerSelect" style="flex-shrink: 0;">選擇資料庫:</label>
+        <select id="kmlLayerSelect" style="flex-grow: 1; min-width: 150px;">
+            <option value="">-- 請選擇 KML  --</option>
+        </select>
+        <button class="pin-button-icon" id="pinButton" aria-label="釘選" disabled>
+             <img src="https://fonts.gstatic.com/s/i/materialicons/push_pin/v12/24px.svg" alt="釘選" class="pin-icon">
+         </button>
+    </div>
+    <div id="searchContainer">
+        <span class="material-symbols-outlined">search</span>
+        <input type="text" id="searchBox" placeholder="搜尋地點..." autocomplete="off" />
+        <div id="searchResults"></div>
+    </div>
+  </div>
+
+  <div id="authSection">
+    <div id="loginForm">
+      <h3>請登入</h3>
+      <button id="googleSignInBtn" class="action-buttons google-btn">
+        <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google icon" />
+        使用 Google 登入
+      </button>
+      <p id="loginMessage"></p>
+    </div>
+
+    <div id="loggedInDashboard" style="display: none;">
+      <h3 id="userEmailDisplay"></h3>
+
+      <div id="kmlControlsDashboard">
+          <div id="uploadKmlSectionDashboard">
+              <label for="hiddenKmlFileInput">上傳 KML:</label>
+              <!-- hiddenKmlFileInput 僅用於程式碼邏輯，不直接顯示 -->
+              <input type="file" id="hiddenKmlFileInput" accept=".kml" style="display: none;" />
+              <!-- 這個 span 用於顯示選擇的檔案名稱，並透過點擊觸發 hiddenKmlFileInput -->
+              <span id="selectedKmlFileNameDashboard">尚未選擇檔案</span>
+              <button id="uploadKmlSubmitBtnDashboard" class="action-buttons upload-btn" disabled>上傳</button>
+          </div>
+          <div id="deleteKmlSectionDashboard">
+              <label for="kmlLayerSelectDashboard">刪除 KML:</label>
+              <select id="kmlLayerSelectDashboard" disabled>
+                  <option value="">-- 請選擇 KML 圖層 --</option>
+              </select>
+              <button id="deleteSelectedKmlBtn" class="action-buttons delete-btn">刪除</button>
+          </div>
+      </div>
+
+      <div id="registrationSettingsSection" style="display: none;">
+          <div class="registration-code-display-group">
+            <button id="generateRegistrationCodeBtn" class="action-buttons">產生一次性註冊碼</button>
+            <div class="registration-code-content-wrapper">
+                <span id="registrationCodeDisplay" style="display: none;"></span>
+                <span id="registrationCodeCountdown" style="display: none;"></span>
+            </div>
+          </div>
+          <p id="registrationExpiryDisplay" style="display: none;"></p>
+      </div>
+
+      <div id="userManagementSection" style="display: none;">
+          <button id="refreshUsersBtn" class="action-buttons">使用者管理</button>
+          <div id="userList">
+            <div class="user-list-header">
+              <div class="header-item sortable" data-key="email">Email</div>
+              <div class="header-item sortable" data-key="nickname">暱稱</div>
+              <div class="header-item sortable" data-key="role">角色</div>
+              <div class="header-item">操作</div>
+            </div>            <!-- 使用者列表會由 JavaScript 動態填充 -->
+          </div>
+      </div>
+
+      <button id="logoutBtn" class="action-buttons">登出</button>
+    </div>
+  </div>
+
+  <div id="map"></div>
+
+  <!-- 訊息框 -->
+  <div id="messageBoxOverlay" class="message-box-overlay">
+    <div class="message-box-content">
+      <h3 id="messageBoxTitle"></h3>
+      <p id="messageBoxMessage"></p>
+      <button id="messageBoxCloseBtn">確定</button>
+    </div>
+  </div>
+
+  <!-- 註冊碼模態框 -->
+  <div id="registrationCodeModalOverlay" class="registration-modal-overlay">
+    <div class="registration-modal-content">
+      <h3>輸入註冊碼</h3>
+      <p id="registrationModalMessage">請輸入管理員提供的一次性註冊碼。</p>
+      <input type="text" id="registrationCodeInput" placeholder="註冊碼" />
+      <input type="text" id="nicknameInput" placeholder="您的暱稱" />
+      <div class="button-group">
+          <button id="confirmRegistrationCodeBtn" class="action-buttons">確認</button>
+          <button id="cancelRegistrationCodeBtn" class="action-buttons">取消</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 新增的確認模態框 -->
+  <div id="confirmationModalOverlay" class="confirmation-modal-overlay">
+    <div class="confirmation-modal-content">
+      <h3 id="confirmationModalTitle"></h3>
+      <p id="confirmationModalMessage"></p>
+      <div class="button-group">
+        <button id="confirmYesBtn" class="action-buttons">是</button>
+        <button id="confirmNoBtn" class="action-buttons">否</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Firebase CDN 載入 -->
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-storage.js"></script>
+
+  <!-- Leaflet CDN 載入 -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <!-- MarkerCluster 載入 -->
+  <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+  <!-- 其他函式庫 -->
+  <script src="https://unpkg.com/togeojson"></script> 
+  <!-- 自定義 JS 檔案載入 -->
+  <!-- 順序很重要，請確保依賴的檔案先載入 -->
+  <script src="firebase-init.js"></script>
+  <script src="map-logic.js"></script>
+  <script src="auth-kml-management.js"></script>
+  <script src="ui-interactions.js"></script>
+</body>
+</html>
