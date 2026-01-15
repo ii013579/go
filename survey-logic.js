@@ -1,45 +1,34 @@
-// survey-logic.js
+// survey-logic.js v2.0.0
 (function() {
-    // 點擊點位時由 map-logic 調用
     window.openSurveyPanel = async function(feature, latlng) {
-        const name = feature.properties.name || "未命名點位";
+        const name = feature.properties.name || "未知點位";
         
-        // 建立清查 UI
+        // 建立 UI
         const panel = document.createElement('div');
-        panel.className = 'survey-panel-floating';
+        panel.id = 'surveyPanel';
+        panel.style = "position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:white; padding:15px; border-radius:10px; box-shadow:0 0 15px rgba(0,0,0,0.3); z-index:2000; min-width:250px;";
         panel.innerHTML = `
-            <div class="survey-header">清查點位: ${name}</div>
-            <div class="survey-content">
-                <label>清查狀態:</label>
-                <select id="surveyStatus">
-                    <option value="待清查">待清查</option>
-                    <option value="已完成">已完成</option>
-                    <option value="異常">異常</option>
-                </select>
-                <br>
-                <label>備註:</label>
-                <textarea id="surveyNote" rows="3"></textarea>
-                <button id="saveSurveyBtn">儲存清查結果</button>
-                <button onclick="this.parentElement.parentElement.remove()">關閉</button>
-            </div>
+            <h4 style="margin:0 0 10px 0">清查點位: ${name}</h4>
+            <label>狀態: </label>
+            <select id="s_status" style="width:100%"><option>待清查</option><option>已完成</option><option>異常</option></select><br><br>
+            <label>備註: </label>
+            <textarea id="s_note" style="width:100%"></textarea><br><br>
+            <button id="s_save" style="background:#4CAF50; color:white; border:none; padding:5px 10px; width:100%">儲存結果</button>
+            <button onclick="this.parentElement.remove()" style="margin-top:5px; width:100%">關閉</button>
         `;
         document.body.appendChild(panel);
 
-        // 儲存邏輯 (存入專屬的 surveys 集合)
-        document.getElementById('saveSurveyBtn').onclick = async () => {
-            const status = document.getElementById('surveyStatus').value;
-            const note = document.getElementById('surveyNote').value;
-
+        document.getElementById('s_save').onclick = async () => {
+            const status = document.getElementById('s_status').value;
+            const note = document.getElementById('s_note').value;
             await window.db.collection('artifacts').doc(window.appId)
                 .collection('surveys').doc(window.currentKmlLayerId)
                 .collection('results').doc(name).set({
-                    status: status,
-                    note: note,
-                    checker: window.auth.currentUser.email,
-                    checkTime: firebase.firestore.FieldValue.serverTimestamp()
+                    status, note, 
+                    user: window.auth.currentUser.email,
+                    time: firebase.firestore.FieldValue.serverTimestamp()
                 });
-            
-            window.showMessage("成功", "清查紀錄已儲存");
+            window.showMessage("紀錄成功", `${name} 已標記為 ${status}`);
             panel.remove();
         };
     };

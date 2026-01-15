@@ -1,106 +1,52 @@
-﻿// map-logic.js (恢復 v1.9.6 繪製邏輯並修正初始化)
+﻿// map-logic.js v2.0.0
+let map;
+let geoJsonLayers = L.featureGroup();
+window.allKmlFeatures = [];
 
-// 1. 初始化地圖
-window.map = L.map('map').setView([25.06, 121.23], 13); // 預設位置
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '© OpenStreetMap'
-}).addTo(window.map);
+document.addEventListener('DOMContentLoaded', () => {
+    map = L.map('map', { maxZoom: 25, zoomControl: false }).setView([23.6, 120.9], 8);
+    window.map = map;
 
-window.allKmlFeatures = []; // 儲存所有點位供搜尋使用
-window.currentKmlLayerId = null; 
-let currentLayerInstance = null; // 記錄當前圖層以便更換時移除
+    const baseLayers = {
+        'Google 街道圖': L.tileLayer('https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', { maxZoom: 25, maxNativeZoom: 20 }).addTo(map),
+        'Google 衛星圖': L.tileLayer('https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', { maxZoom: 25, maxNativeZoom: 20 })
+    };
+    L.control.layers(baseLayers).addTo(map);
+    geoJsonLayers.addTo(map);
+});
 
-// 2. 更新下拉選單函式
-window.updateKmlLayerSelects = async function() {
-    const kmlRef = window.db.collection('artifacts').doc(window.appId)
-        .collection('public').doc('data').collection('kmlLayers');
-    
-    try {
-        const snapshot = await kmlRef.get();
-        const select = document.getElementById('kmlLayerSelect');
-        const dashSelect = document.getElementById('kmlLayerSelectDashboard');
-        
-        const optionsHTML = ['<option value="">-- 請選擇 KML --</option>'];
-        snapshot.forEach(doc => {
-            optionsHTML.push(`<option value="${doc.id}">${doc.data().name}</option>`);
-        });
-
-        if (select) select.innerHTML = optionsHTML.join('');
-        if (dashSelect) dashSelect.innerHTML = optionsHTML.join('');
-        
-        // 檢查是否有圖釘釘選的圖層
-        const pinnedId = localStorage.getItem('pinnedKmlId');
-        if (pinnedId && select) {
-            select.value = pinnedId;
-            window.loadKmlLayerFromFirestore(pinnedId);
-        }
-    } catch (error) {
-        console.error("更新選單失敗:", error);
-    }
-};
-
-// 3. 從 Firestore 載入 KML 並繪製
 window.loadKmlLayerFromFirestore = async function(kmlId) {
     if (!kmlId) return;
     window.currentKmlLayerId = kmlId;
     
-    window.showMessage("載入中", "正在從資料庫讀取點位...");
-
     try {
         const doc = await window.db.collection('artifacts').doc(window.appId)
             .collection('public').doc('data').collection('kmlLayers').doc(kmlId).get();
         
         if (!doc.exists) return;
         const data = doc.data();
-        const geojson = JSON.parse(data.geojson);
+        const geojson = typeof data.geojson === 'string' ? JSON.parse(data.geojson) : data.geojson;
         
-        // 清除舊圖層
-        if (currentLayerInstance) window.map.removeLayer(currentLayerInstance);
-        window.allKmlFeatures = geojson.features; // 更新快取供搜尋用
+        geoJsonLayers.clearLayers();
+        window.allKmlFeatures = geojson.features;
 
-        // 繪製新圖層
-        currentLayerInstance = L.geoJSON(geojson, {
+        L.geoJSON(geojson, {
             pointToLayer: (feature, latlng) => {
-                // 恢復 v1.9.6 的紅點樣式
                 const marker = L.circleMarker(latlng, {
-                    radius: 8,
-                    fillColor: "#ff4d4d", // 較鮮豔的紅
-                    color: "#fff",
-                    weight: 2,
-                    opacity: 1,
-                    fillOpacity: 0.9
+                    radius: 8, fillColor: "#ff4d4d", color: "#fff", weight: 2, fillOpacity: 0.9
                 });
-                
-                // 綁定永久顯示的文字標籤
                 marker.bindTooltip(feature.properties.name || "", {
-                    permanent: true, 
-                    direction: 'right',
-                    offset: [10, 0],
-                    className: 'marker-label-v196'
+                    permanent: true, direction: 'right', className: 'marker-label-v196'
                 });
-
-                // 點擊觸發清查面板 (survey-logic.js)
+                // 點擊觸發清查
                 marker.on('click', () => {
                     if(window.openSurveyPanel) window.openSurveyPanel(feature, latlng);
                 });
-
                 return marker;
             }
-        }).addTo(window.map);
+        }).addTo(geoJsonLayers);
 
-        // 自動縮放至圖層範圍
-        const bounds = currentLayerInstance.getBounds();
-        if (bounds.isValid()) window.map.fitBounds(bounds);
-        
-        window.hideMessage(); // 關閉載入提示
-    } catch (error) {
-        window.showMessage("錯誤", "載入圖層失敗: " + error.message);
-    }
+        const bounds = geoJsonLayers.getBounds();
+        if (bounds.isValid()) map.fitBounds(bounds, { padding: [50, 50] });
+    } catch (e) { console.error("載入失敗", e); }
 };
-
-// 4. 監聽選單切換事件
-document.addEventListener('DOMContentLoaded', () => {
-    document.getElementById('kmlLayerSelect')?.addEventListener('change', (e) => {
-        window.loadKmlLayerFromFirestore(e.target.value);
-    });
-});
