@@ -1,33 +1,27 @@
-﻿// auth-kml-management.js v2.0.0 (修復版)
+﻿// auth-kml-management.js
 (function() {
-    // 更新所有下拉選單
     window.updateKmlLayerSelects = async function() {
-        const snap = await window.db.collection('artifacts').doc(window.appId)
-            .collection('public').doc('data').collection('kmlLayers').get();
-        
-        let html = '<option value="">-- 請選擇圖層 --</option>';
+        const snap = await window.db.collection('artifacts').doc(window.appId).collection('public').doc('data').collection('kmlLayers').get();
+        let options = '<option value="">-- 請選擇圖層 --</option>';
         snap.forEach(doc => {
-            html += `<option value="${doc.id}">${doc.data().name}</option>`;
+            options += `<option value="${doc.id}">${doc.data().name}</option>`;
         });
 
-        const mainSelect = document.getElementById('kmlLayerSelect');
-        const dashSelect = document.getElementById('kmlLayerSelectDashboard');
-        
-        if (mainSelect) mainSelect.innerHTML = html;
-        if (dashSelect) dashSelect.innerHTML = html;
+        const s1 = document.getElementById('kmlLayerSelect');
+        const s2 = document.getElementById('kmlLayerSelectDashboard');
+        if (s1) s1.innerHTML = options;
+        if (s2) s2.innerHTML = options;
     };
 
-    // 監聽選單切換 (首頁)
+    // 監聽首頁選單切換
     document.getElementById('kmlLayerSelect')?.addEventListener('change', (e) => {
-        if (window.loadKmlLayerFromFirestore) {
-            window.loadKmlLayerFromFirestore(e.target.value);
-        }
+        window.loadKmlLayerFromFirestore(e.target.value);
     });
 
-    // 初始載入
     window.auth.onAuthStateChanged((user) => {
         if (user) {
             window.updateKmlLayerSelects();
+            document.getElementById('userEmailDisplay').textContent = user.email;
         }
     });
 })();
