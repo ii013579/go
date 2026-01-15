@@ -1,172 +1,122 @@
-// ui-interactions.js v2.0.0
-// 職責：服務台 (介面切換、即時搜尋、對接全域彈窗)
+// ui-interactions.js (回歸舊版 ID 與結構)
 
 document.addEventListener('DOMContentLoaded', () => {
     const editButton = document.getElementById('editButton');
     const authSection = document.getElementById('authSection');
     const controls = document.getElementById('controls');
-    const searchBox = document.getElementById('searchBox');
-    const searchResults = document.getElementById('searchResults');
-    const searchContainer = document.getElementById('searchContainer');
+    const pinButton = document.getElementById('pinButton');
 
-    // 1. 介面初始狀態
-    if (authSection) authSection.style.display = 'none';
-    if (controls) controls.style.display = 'flex';
-
-    // --- 2. 編輯模式切換 (清查功能入口) ---
-    if (editButton && authSection && controls) {
+    // 1. 編輯按鈕切換邏輯 (控制 authSection 顯示)
+    if (editButton) {
         editButton.addEventListener('click', () => {
-            const isAuthSectionVisible = authSection.style.display === 'flex';
-            if (isAuthSectionVisible) {
-                // 關閉管理模式，切換回一般導覽
+            const isAuthVisible = authSection.style.display === 'block';
+            if (isAuthVisible) {
                 authSection.style.display = 'none';
-                controls.style.display = 'flex';
+                controls.style.display = 'flex'; // 恢復導覽列
                 editButton.textContent = '編輯';
-                editButton.classList.remove('active');
             } else {
-                // 開啟管理/登入模式
-                controls.style.display = 'none';
-                authSection.style.display = 'flex';
-                editButton.textContent = '關閉';
-                editButton.classList.add('active');
+                authSection.style.display = 'block';
+                controls.style.display = 'none'; // 隱藏導覽列
+                editButton.textContent = '返回';
             }
         });
     }
 
-    // --- 3. 搜尋功能 (與 map-logic 共享 window.allKmlFeatures) ---
-    if (searchBox && searchResults && searchContainer) {
+    // 2. 搜尋功能 (對齊 searchBox 與 searchResults)
+    const searchBox = document.getElementById('searchBox');
+    const searchResults = document.getElementById('searchResults');
+
+    if (searchBox) {
         searchBox.addEventListener('input', (e) => {
-            const query = e.target.value.trim().toLowerCase();
+            const query = e.target.value.toLowerCase().trim();
             searchResults.innerHTML = '';
+            
+            if (!query || !window.allKmlFeatures) return;
 
-            if (query.length > 0) {
-                let results = [];
-                // 核心：直接使用指揮官抓下來的快取資料，不重複向 Firebase 請求
-                if (window.allKmlFeatures && window.allKmlFeatures.length > 0) {
-                    results = window.allKmlFeatures.filter(feature =>
-                        feature.properties && 
-                        feature.properties.name && 
-                        typeof feature.properties.name === 'string' && 
-                        feature.properties.name.toLowerCase().includes(query)
-                    );
-                }
+            const matches = window.allKmlFeatures.filter(f => 
+                f.properties && f.properties.name && 
+                f.properties.name.toLowerCase().includes(query)
+            );
 
-                searchContainer.classList.add('search-active');
-                searchResults.style.display = 'grid';
-
-                if (results.length === 0) {
-                    const noResult = document.createElement('div');
-                    noResult.className = 'result-item no-result';
-                    noResult.textContent = '沒有找到清查結果';
-                    noResult.style.gridColumn = 'span 3';
-                    searchResults.appendChild(noResult);
-                } else {
-                    // 動態計算欄數 (美化介面)
-                    let maxNameLength = 0;
-                    results.forEach(f => {
-                        const name = f.properties?.name || '';
-                        if (name.length > maxNameLength) maxNameLength = name.length;
-                    });
-                    
-                    searchResults.classList.remove('columns-2', 'columns-3');
-                    searchResults.classList.add(maxNameLength > 9 ? 'columns-2' : 'columns-3');
-
-                    results.forEach(f => {
-                        const name = f.properties.name || '未命名';
-                        if (f.geometry && f.geometry.type === 'Point') {
-                            const [lon, lat] = f.geometry.coordinates;
-                            const item = document.createElement('div');
-                            item.className = 'result-item';
-                            item.textContent = name;
-                            item.title = name;
-                            
-                            // 搜尋結果點擊連動
-                            item.addEventListener('click', () => {
-                                const latLng = L.latLng(lat, lon);
-                                
-                                // 1. 移動地圖
-                                if (window.map) {
-                                    window.map.setView(latLng, 18);
-                                }
-                            
-                                // 2. 高亮地圖上的標籤
-                                document.querySelectorAll('.marker-label span').forEach(el =>
-                                    el.classList.remove('label-active')
-                                );
-                                const labelId = `label-${lat}-${lon}`.replace(/\./g, '_');
-                                const targetLabel = document.getElementById(labelId);
-                                if (targetLabel) targetLabel.classList.add('label-active');
-                            
-                                // 3. 觸發導航/清查詳細資訊
-                                if (typeof window.createNavButton === 'function') {
-                                    window.createNavButton(latLng, name);
-                                }
-                                
-                                // 4. 收合搜尋框
-                                searchResults.style.display = 'none';
-                                searchBox.value = '';
-                                searchContainer.classList.remove('search-active');
-                            });
-                            searchResults.appendChild(item);
+            if (matches.length > 0) {
+                searchResults.style.display = 'block';
+                matches.slice(0, 10).forEach(f => {
+                    const item = document.createElement('div');
+                    item.className = 'search-result-item'; // 請確保 CSS 有對應
+                    item.textContent = f.properties.name;
+                    item.onclick = () => {
+                        const [lon, lat] = f.geometry.coordinates;
+                        window.map.setView([lat, lon], 18);
+                        
+                        // 觸發導覽按鈕 (survey-logic.js)
+                        if (window.createNavButton) {
+                            window.createNavButton(L.latLng(lat, lon), f.properties.name);
                         }
-                    });
-                }
+                        
+                        searchResults.style.display = 'none';
+                        searchBox.value = '';
+                    };
+                    searchResults.appendChild(item);
+                });
             } else {
                 searchResults.style.display = 'none';
-                searchContainer.classList.remove('search-active');
             }
         });
+    }
 
-        // 點擊外部自動收合
-        document.addEventListener('click', (event) => {
-            if (!searchContainer.contains(event.target)) {
-                searchResults.style.display = 'none';
-                searchContainer.classList.remove('search-active');
+    // 3. 圖釘按鈕功能 (ID: pinButton)
+    if (pinButton) {
+        pinButton.addEventListener('click', () => {
+            const currentId = document.getElementById('kmlLayerSelect').value;
+            if (!currentId) {
+                window.showMessage("提示", "請先選擇一個資料庫圖層再進行釘選");
+                return;
             }
-        });
 
-        // ESC 鍵快速關閉
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape') {
-                searchResults.style.display = 'none';
-                searchContainer.classList.remove('search-active');
-                searchBox.blur();
+            const pinnedId = localStorage.getItem('pinnedKmlId');
+            if (pinnedId === currentId) {
+                // 取消釘選
+                localStorage.removeItem('pinnedKmlId');
+                pinButton.classList.remove('active');
+                window.showMessage("取消成功", "已移除預設載入設定");
+            } else {
+                // 設定釘選
+                localStorage.setItem('pinnedKmlId', currentId);
+                pinButton.classList.add('active');
+                window.showMessage("釘選成功", "下次開啟網頁將自動載入此圖層");
             }
         });
     }
 });
 
-// --- 4. 對接系統全域函式 ---
+// 全域選單更新方法 (供 auth-kml-management 呼叫)
+window.updateKmlLayerSelects = async function() {
+    const select = document.getElementById('kmlLayerSelect');
+    const dashSelect = document.getElementById('kmlLayerSelectDashboard');
+    if (!select) return;
 
-/**
- * 進階訊息視窗 (支援釘選成功後的自動消失)
- */
-window.showMessageCustom = function(options) {
-    const { title, message, autoClose = false, autoCloseDelay = 3000 } = options;
-    
-    // 使用 firebase-init.js 定義的基礎彈窗
-    if (typeof window.showMessage === 'function') {
-        window.showMessage(title, message);
-    } else {
-        console.log(`[${title}] ${message}`);
+    try {
+        const snap = await window.db.collection('artifacts').doc(window.appId)
+            .collection('public').doc('data').collection('kmlLayers')
+            .orderBy('uploadTime', 'desc').get();
+
+        let html = '<option value="">-- 請選擇 KML --</option>';
+        snap.forEach(doc => {
+            html += `<option value="${doc.id}">${doc.data().name || '未命名'}</option>`;
+        });
+
+        select.innerHTML = html;
+        if (dashSelect) {
+            dashSelect.innerHTML = html;
+            dashSelect.disabled = false;
+        }
+
+        // 同步圖釘按鈕狀態
+        const pinnedId = localStorage.getItem('pinnedKmlId');
+        if (pinnedId && document.getElementById('pinButton')) {
+            document.getElementById('pinButton').classList.add('active');
+        }
+    } catch (err) {
+        console.error("選單更新失敗:", err);
     }
-
-    // 如果開啟自動關閉 (例如用於「圖釘釘選成功」)
-    if (autoClose && typeof window.hideMessage === 'function') {
-        setTimeout(() => {
-            window.hideMessage();
-        }, autoCloseDelay);
-    }
-};
-
-/**
- * 確認對話框 (支援上傳覆蓋前的確認)
- * @returns {Promise<boolean>}
- */
-window.showConfirmationModal = function(title, message) {
-    return new Promise((resolve) => {
-        // 這裡可以使用漂亮的 Modal 替換原生 confirm
-        const result = confirm(`${title}\n\n${message}`);
-        resolve(result);
-    });
 };

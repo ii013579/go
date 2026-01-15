@@ -1,6 +1,7 @@
-﻿// firebase-init.js v1.9.4
+﻿// auth-kml-management.js
+// 職責：身分驗證、KML 搬運管理 (對齊舊版 ID)
 
-// 1. Firebase 配置 (請確保與您的 Firebase Console 一致)
+// 1. Firebase 配置
 const firebaseConfig = {
     apiKey: "AIzaSyC-uaCnvgtYacPf_7BtwbwdDUw-WMx4d8s",
     authDomain: "kmldata-d22fb.firebaseapp.com",
@@ -11,131 +12,122 @@ const firebaseConfig = {
     measurementId: "G-TJFH5SXNJX"
 };
 
-// 2. 初始化 Firebase (防止重複初始化)
+// 2. 初始化 (如果尚未初始化)
 if (!firebase.apps.length) {
     firebase.initializeApp(firebaseConfig);
 }
+const db = firebase.firestore();
+const auth = firebase.auth();
+const appId = "kmldata-d22fb"; // 用於規則路徑
 
-// 3. 核心服務掛載到 window，確保跨檔案 (守門員、搬運工) 都能共用
-window.auth = firebase.auth();
-window.db = firebase.firestore();
-window.storage = firebase.storage();
+// 3. 監聽登入狀態與權限切換
+auth.onAuthStateChanged(async (user) => {
+    const loginForm = document.getElementById('loginForm');
+    const loggedInDashboard = document.getElementById('loggedInDashboard');
+    const userEmailDisplay = document.getElementById('userEmailDisplay');
+    const adminSection = document.getElementById('registrationSettingsSection');
+    const userManagement = document.getElementById('userManagementSection');
 
-/**
- * 4. 關鍵全域變數：appId
- * 確保 Firestore 路徑 artifacts/{appId}/public/... 正確
- * 優先讀取環境變數 __app_id，若無則使用配置的 projectId
- */
-window.appId = typeof __app_id !== 'undefined' ? __app_id : firebaseConfig.projectId;
-console.log("Firebase Init: 全域 appId 設定為 ->", window.appId);
+    if (user) {
+        console.log("登入成功:", user.email);
+        if (loginForm) loginForm.style.display = 'none';
+        if (loggedInDashboard) loggedInDashboard.style.display = 'block';
+        if (userEmailDisplay) userEmailDisplay.textContent = user.email;
 
+        // 檢查角色
+        try {
+            const userDoc = await db.collection('users').doc(user.uid).get();
+            const userData = userDoc.data();
+            window.currentUserRole = userData ? userData.role : 'unapproved';
 
-// --- 5. 全域 UI 彈窗控制系統 ---
-
-/**
- * 顯示通用彈窗
- * @param {string} title 標題
- * @param {string} message 內容
- * @param {function} callback 關閉後執行的函式
- */
-window.showMessage = function(title, message, callback) {
-    const messageBoxOverlay = document.getElementById('messageBoxOverlay');
-    const messageBoxTitle = document.getElementById('messageBoxTitle');
-    const messageBoxMessage = document.getElementById('messageBoxMessage');
-    const messageBoxCloseBtn = document.getElementById('messageBoxCloseBtn');
-
-    if (!messageBoxOverlay || !messageBoxTitle || !messageBoxMessage) {
-        console.warn("找不到彈窗 HTML 元素，改用原生 alert");
-        alert(`${title}: ${message}`);
-        if (callback) callback();
-        return;
-    }
-
-    messageBoxTitle.textContent = title;
-    messageBoxMessage.textContent = message;
-    messageBoxOverlay.classList.add('visible'); // 加入 CSS 的顯示類別
-
-    const closeHandler = () => {
-        window.hideMessage();
-        messageBoxCloseBtn.removeEventListener('click', closeHandler);
-        if (callback) callback();
-    };
-    messageBoxCloseBtn.addEventListener('click', closeHandler);
-};
-
-/**
- * 隱藏彈窗 (配合地圖載入成功後的自動消失功能)
- */
-window.hideMessage = function() {
-    const messageBoxOverlay = document.getElementById('messageBoxOverlay');
-    if (messageBoxOverlay) {
-        messageBoxOverlay.classList.remove('visible');
-    }
-};
-
-/**
- * 註冊碼驗證彈窗 (含 60 秒倒數計時)
- */
-window.showRegistrationCodeModal = function(callback) {
-    const modalOverlay = document.getElementById('registrationCodeModalOverlay');
-    const registrationCodeInput = document.getElementById('registrationCodeInput');
-    const nicknameInput = document.getElementById('nicknameInput');
-    const confirmBtn = document.getElementById('confirmRegistrationCodeBtn');
-    const cancelBtn = document.getElementById('cancelRegistrationCodeBtn');
-    const modalMessage = document.getElementById('registrationModalMessage');
-
-    if (!modalOverlay) return;
-
-    // 重置狀態
-    registrationCodeInput.value = '';
-    nicknameInput.value = '';
-    modalMessage.textContent = '請輸入管理員提供的一次性註冊碼。';
-    modalMessage.classList.remove('countdown');
-    modalOverlay.classList.add('visible');
-
-    let countdown = 60;
-    let timerInterval;
-
-    const updateTimer = () => {
-        modalMessage.textContent = `請輸入管理員提供的一次性註冊碼。剩餘時間: ${countdown} 秒`;
-        modalMessage.classList.add('countdown');
-        if (countdown <= 0) {
-            clearInterval(timerInterval);
-            modalOverlay.classList.remove('visible');
-            cleanupListeners();
-            callback(null);
+            if (window.currentUserRole === 'owner') {
+                if (adminSection) adminSection.style.display = 'block';
+                if (userManagement) userManagement.style.display = 'block';
+            }
+            
+            // 更新選單
+            await window.updateKmlLayerSelects();
+            
+            // 圖釘自動載入
+            const pinnedId = localStorage.getItem('pinnedKmlId');
+            if (pinnedId && window.loadKmlLayerFromFirestore) {
+                window.loadKmlLayerFromFirestore(pinnedId);
+            }
+        } catch (err) {
+            console.error("權限讀取失敗:", err);
         }
-        countdown--;
-    };
+    } else {
+        if (loginForm) loginForm.style.display = 'block';
+        if (loggedInDashboard) loggedInDashboard.style.display = 'none';
+    }
+});
 
-    const cleanupListeners = () => {
-        clearInterval(timerInterval);
-        confirmBtn.removeEventListener('click', confirmHandler);
-        cancelBtn.removeEventListener('click', cancelHandler);
-    };
+// 4. Google 登入功能 (對應 ID: googleSignInBtn)
+document.getElementById('googleSignInBtn')?.addEventListener('click', () => {
+    const provider = new firebase.auth.GoogleAuthProvider();
+    auth.signInWithPopup(provider).catch(err => alert("登入錯誤: " + err.message));
+});
 
-    const confirmHandler = () => {
-        const code = registrationCodeInput.value.trim();
-        const nickname = nicknameInput.value.trim();
-        if (code && nickname) {
-            modalOverlay.classList.remove('visible');
-            cleanupListeners();
-            callback({ code: code, nickname: nickname });
-        } else {
-            modalMessage.textContent = '請輸入註冊碼和您的暱稱。';
-            modalMessage.classList.remove('countdown');
+// 5. 登出功能 (對應 ID: logoutBtn)
+document.getElementById('logoutBtn')?.addEventListener('click', () => {
+    auth.signOut().then(() => location.reload());
+});
+
+// 6. 整包上傳 KML 邏輯
+document.getElementById('uploadKmlSubmitBtnDashboard')?.addEventListener('click', async () => {
+    const fileInput = document.getElementById('hiddenKmlFileInput');
+    const file = fileInput.files[0];
+    if (!file) return alert("請先選擇 KML 檔案");
+
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+        try {
+            // 需要 toGeoJSON 套件支援
+            const kmlDoc = new DOMParser().parseFromString(e.target.result, 'text/xml');
+            const geojson = toGeoJSON.kml(kmlDoc);
+
+            // 路徑：artifacts/{appId}/public/data/kmlLayers
+            const docRef = db.collection('artifacts').doc(appId)
+                .collection('public').doc('data').collection('kmlLayers').doc();
+
+            await docRef.set({
+                name: file.name,
+                uploadedBy: auth.currentUser.email,
+                uploadTime: firebase.firestore.FieldValue.serverTimestamp(),
+                geojson: JSON.stringify(geojson)
+            });
+
+            alert("整包上傳成功！");
+            await window.updateKmlLayerSelects();
+        } catch (err) {
+            alert("上傳失敗: " + err.message);
         }
     };
+    reader.readAsText(file);
+});
 
-    const cancelHandler = () => {
-        modalOverlay.classList.remove('visible');
-        cleanupListeners();
-        callback(null);
-    };
+// 7. 更新選單全域方法 (對應 kmlLayerSelect 與 kmlLayerSelectDashboard)
+window.updateKmlLayerSelects = async function() {
+    const select = document.getElementById('kmlLayerSelect');
+    const dashSelect = document.getElementById('kmlLayerSelectDashboard');
+    if (!select) return;
 
-    timerInterval = setInterval(updateTimer, 1000);
-    updateTimer();
+    try {
+        const snap = await db.collection('artifacts').doc(appId)
+            .collection('public').doc('data').collection('kmlLayers')
+            .orderBy('uploadTime', 'desc').get();
 
-    confirmBtn.addEventListener('click', confirmHandler);
-    cancelBtn.addEventListener('click', cancelHandler);
+        let html = '<option value="">-- 請選擇 KML --</option>';
+        snap.forEach(doc => {
+            html += `<option value="${doc.id}">${doc.data().name || '未命名'}</option>`;
+        });
+
+        select.innerHTML = html;
+        if (dashSelect) {
+            dashSelect.innerHTML = html;
+            dashSelect.disabled = false;
+        }
+    } catch (err) {
+        console.error("選單更新失敗:", err);
+    }
 };
