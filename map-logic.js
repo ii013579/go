@@ -10,18 +10,12 @@ document.addEventListener('DOMContentLoaded', () => {
         maxNativeZoom: 20 
     }).addTo(map);
     geoJsonLayers.addTo(map);
-
-    document.getElementById('kmlLayerSelect')?.addEventListener('change', (e) => {
-        window.loadKmlLayerFromFirestore(e.target.value);
-    });
 });
 
 window.updateKmlLayerSelects = async function() {
     const snap = await window.db.collection('artifacts').doc(window.appId).collection('public').doc('data').collection('kmlLayers').get();
-    let options = '<option value="">-- 請選擇圖層 --</option>';
-    snap.forEach(doc => {
-        options += `<option value="${doc.id}">${doc.data().name}</option>`;
-    });
+    let options = '<option value="">-- 請選擇 --</option>';
+    snap.forEach(doc => options += `<option value="${doc.id}">${doc.data().name}</option>`);
     document.getElementById('kmlLayerSelect').innerHTML = options;
     document.getElementById('kmlLayerSelectDashboard').innerHTML = options;
 };
@@ -30,7 +24,6 @@ window.loadKmlLayerFromFirestore = async function(kmlId) {
     if (!kmlId) return;
     window.currentKmlLayerId = kmlId;
     const doc = await window.db.collection('artifacts').doc(window.appId).collection('public').doc('data').collection('kmlLayers').doc(kmlId).get();
-    
     if (doc.exists) {
         const data = doc.data();
         const geojson = typeof data.geojson === 'string' ? JSON.parse(data.geojson) : data.geojson;
@@ -39,7 +32,7 @@ window.loadKmlLayerFromFirestore = async function(kmlId) {
 
         L.geoJSON(geojson, {
             pointToLayer: (feature, latlng) => {
-                // 完全還原 v1.9.6 橘紅點樣式
+                // 還原 1.9.6 正確樣式：橘紅點
                 const marker = L.circleMarker(latlng, {
                     radius: 8,
                     fillColor: "#ff7800",
@@ -48,11 +41,9 @@ window.loadKmlLayerFromFirestore = async function(kmlId) {
                     opacity: 1,
                     fillOpacity: 0.8
                 });
-                // 綁定 v1.9.6 標籤樣式
+                // 連結 CSS 中的 .marker-label-v196
                 marker.bindTooltip(feature.properties.name || "", { 
-                    permanent: true, 
-                    direction: 'right', 
-                    className: 'marker-label-v196' 
+                    permanent: true, direction: 'right', className: 'marker-label-v196' 
                 });
                 marker.on('click', () => {
                     if(window.openSurveyPanel) window.openSurveyPanel(feature, latlng);
