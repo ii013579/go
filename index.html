@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>點位搜尋輔助</title>
+  <link rel="icon" href="logo.ico" type="image/x-icon" />
+  <link rel="shortcut icon" href="logo.ico" type="image/x-icon" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+</head>
+<body>
+  <div id="title">
+    點位搜尋輔助
+    <button id="editButton">編輯</button>
+  </div>
+
+  <div id="controls">
+    <div style="display: flex; gap: 10px; align-items: center; flex-wrap: nowrap;">
+        <label for="kmlLayerSelect" style="flex-shrink: 0;">選擇資料庫:</label>
+        <select id="kmlLayerSelect" style="flex-grow: 1; min-width: 150px;">
+            <option value="">-- 請選擇 KML --</option>
+        </select>
+        <button class="pin-button-icon" id="pinButton" aria-label="釘選">
+             <img src="https://fonts.gstatic.com/s/i/materialicons/push_pin/v12/24px.svg" alt="釘選" class="pin-icon">
+         </button>
+    </div>
+    <div id="searchContainer">
+        <span class="material-symbols-outlined">search</span>
+        <input type="text" id="searchBox" placeholder="搜尋地點..." autocomplete="off" />
+        <div id="searchResults"></div>
+    </div>
+  </div>
+
+  <div id="authSection" style="display: none;">
+    <div id="loginForm">
+      <h3>請登入</h3>
+      <button id="loginBtn" class="action-buttons google-btn">
+        <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google icon" />
+        使用 Google 登入
+      </button>
+      <p id="loginMessage"></p>
+    </div>
+
+    <div id="loggedInDashboard" style="display: none;">
+      <h3 id="userRoleDisplay">正在取得使用者資訊...</h3>
+
+      <div id="kmlControlsDashboard">
+          <div id="uploadKmlSectionDashboard">
+              <label for="hiddenKmlFileInput">上傳 KML:</label>
+              <input type="file" id="hiddenKmlFileInput" accept=".kml" style="display: none;" />
+              <span id="selectedKmlFileNameDashboard" onclick="document.getElementById('hiddenKmlFileInput').click()" style="cursor: pointer; text-decoration: underline;">尚未選擇檔案</span>
+              <button id="uploadKmlSubmitBtnDashboard" class="action-buttons upload-btn">整包上傳</button>
+          </div>
+          <div id="deleteKmlSectionDashboard">
+              <label for="kmlLayerSelectDashboard">管理 KML:</label>
+              <select id="kmlLayerSelectDashboard">
+                  <option value="">-- 請選擇 KML 圖層 --</option>
+              </select>
+              <button id="deleteSelectedKmlBtn" class="action-buttons delete-btn">刪除</button>
+          </div>
+      </div>
+
+      <div id="adminSection" style="display: none;">
+          <div class="registration-code-display-group">
+            <button id="generateRegistrationCodeBtn" class="action-buttons">產生一次性註冊碼</button>
+            <div class="registration-code-content-wrapper">
+                <span id="registrationCodeDisplay" style="display: none;"></span>
+                <span id="registrationCodeCountdown" style="display: none;"></span>
+            </div>
+          </div>
+          <p id="registrationExpiryDisplay" style="display: none;"></p>
+      </div>
+
+      <button id="logoutBtn" class="action-buttons">登出</button>
+    </div>
+  </div>
+
+  <div id="map"></div>
+
+  <div id="messageBoxOverlay" class="message-box-overlay">
+    <div class="message-box-content">
+      <h3 id="messageBoxTitle"></h3>
+      <p id="messageBoxMessage"></p>
+      <button id="messageBoxCloseBtn">確定</button>
+    </div>
+  </div>
+
+  <div id="registrationCodeModalOverlay" class="registration-modal-overlay">
+    <div class="registration-modal-content">
+      <h3>輸入註冊碼</h3>
+      <p id="registrationModalMessage">請輸入管理員提供的一次性註冊碼。</p>
+      <input type="text" id="registrationCodeInput" placeholder="註冊碼" />
+      <input type="text" id="nicknameInput" placeholder="您的暱稱" />
+      <div class="button-group">
+          <button id="confirmRegistrationCodeBtn" class="action-buttons">確認</button>
+          <button id="cancelRegistrationCodeBtn" class="action-buttons">取消</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="confirmationModalOverlay" class="confirmation-modal-overlay">
+    <div class="confirmation-modal-content">
+      <h3 id="confirmationModalTitle"></h3>
+      <p id="confirmationModalMessage"></p>
+      <div class="button-group">
+        <button id="confirmYesBtn" class="action-buttons">是</button>
+        <button id="confirmNoBtn" class="action-buttons">否</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-storage.js"></script>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+  <script src="https://unpkg.com/togeojson"></script> 
+  
+  <script src="firebase-init.js"></script>     <script src="auth-core.js"></script>        <script src="kml-worker.js"></script>       <script src="map-logic.js"></script>        <script src="ui-interactions.js"></script>  <script>
+    // 確保地圖在所有邏輯載入前已存在於全域
+    window.map = L.map('map').setView([23.6, 121.0], 7);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap'
+    }).addTo(window.map);
+  </script>
+</body>
+</html>
