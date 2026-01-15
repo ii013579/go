@@ -1,49 +1,33 @@
-﻿// auth-kml-management.js v2.0.0
+﻿// auth-kml-management.js v2.0.0 (修復版)
 (function() {
-    window.auth.onAuthStateChanged(async (user) => {
-        const dashboard = document.getElementById('loggedInDashboard');
-        const adminSection = document.getElementById('registrationSettingsSection');
-        if (user) {
-            const userDoc = await window.db.collection('users').doc(user.uid).get();
-            if (userDoc.exists) {
-                const userData = userDoc.data();
-                window.currentUserRole = userData.role;
-                document.getElementById('userEmailDisplay').textContent = `${user.email} (${userData.role})`;
-                document.getElementById('loginForm').style.display = 'none';
-                dashboard.style.display = 'block';
-                
-                if (userData.role === 'owner') {
-                    adminSection.style.display = 'block';
-                    loadUserList();
-                }
-                window.updateKmlLayerSelects();
-            } else { window.showRegistrationModal(true); }
-        } else {
-            document.getElementById('loginForm').style.display = 'block';
-            dashboard.style.display = 'none';
+    // 更新所有下拉選單
+    window.updateKmlLayerSelects = async function() {
+        const snap = await window.db.collection('artifacts').doc(window.appId)
+            .collection('public').doc('data').collection('kmlLayers').get();
+        
+        let html = '<option value="">-- 請選擇圖層 --</option>';
+        snap.forEach(doc => {
+            html += `<option value="${doc.id}">${doc.data().name}</option>`;
+        });
+
+        const mainSelect = document.getElementById('kmlLayerSelect');
+        const dashSelect = document.getElementById('kmlLayerSelectDashboard');
+        
+        if (mainSelect) mainSelect.innerHTML = html;
+        if (dashSelect) dashSelect.innerHTML = html;
+    };
+
+    // 監聽選單切換 (首頁)
+    document.getElementById('kmlLayerSelect')?.addEventListener('change', (e) => {
+        if (window.loadKmlLayerFromFirestore) {
+            window.loadKmlLayerFromFirestore(e.target.value);
         }
     });
 
-    async function loadUserList() {
-        const snapshot = await window.db.collection('users').get();
-        const tbody = document.getElementById('userTableBody');
-        if (!tbody) return;
-        tbody.innerHTML = '';
-        snapshot.forEach(doc => {
-            const u = doc.data();
-            tbody.innerHTML += `<tr><td>${u.email}</td><td>${u.name}</td><td>${u.role}</td>
-                <td><button onclick="changeRole('${doc.id}','${u.role}')">權限</button></td></tr>`;
-        });
-    }
-
-    window.changeRole = async (uid, role) => {
-        const newRole = role === 'editor' ? 'unapproved' : 'editor';
-        await window.db.collection('users').doc(uid).update({ role: newRole });
-        loadUserList();
-    };
-
-    document.getElementById('googleSignInBtn')?.addEventListener('click', () => {
-        window.auth.signInWithPopup(new firebase.auth.GoogleAuthProvider());
+    // 初始載入
+    window.auth.onAuthStateChanged((user) => {
+        if (user) {
+            window.updateKmlLayerSelects();
+        }
     });
-    document.getElementById('logoutBtn')?.addEventListener('click', () => window.auth.signOut().then(()=>location.reload()));
 })();

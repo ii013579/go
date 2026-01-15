@@ -1,21 +1,22 @@
 ﻿<!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>點位搜尋輔助 v2.0.0</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>點位搜尋輔助 v1.9.6+</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
-  <link rel="stylesheet" href="style.css"> </head>
+  <link rel="stylesheet" href="style.css">
+</head>
 <body>
   <div id="title">
-    點位搜尋輔助 v2.0.0
+    點位搜尋輔助
     <button id="editButton">編輯</button>
   </div>
 
   <div id="controls">
     <div class="control-group">
-      <select id="kmlLayerSelect"><option value="">載入中...</option></select>
+      <select id="kmlLayerSelect"><option value="">-- 請選擇 --</option></select>
       <button id="pinButton" class="pin-btn"><span class="material-symbols-outlined">push_pin</span></button>
     </div>
     <div id="searchContainer">
@@ -45,11 +46,9 @@
 
       <div id="registrationSettingsSection" style="display: none;">
         <button id="generateRegistrationCodeBtn" class="action-buttons green-btn">產生註冊碼</button>
-        <div id="userManagementSection">
-          <table border="1" style="width:100%; border-collapse: collapse; margin-top:10px;">
-            <tbody id="userTableBody"></tbody>
-          </table>
-        </div>
+        <table border="1" style="width:100%; border-collapse: collapse; margin-top:10px; font-size:12px;">
+          <tbody id="userTableBody"></tbody>
+        </table>
       </div>
       <button id="logoutBtn" class="action-buttons">登出</button>
     </div>
@@ -69,7 +68,6 @@
   <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://unpkg.com/togeojson"></script>
-
   <script src="firebase-init.js"></script>
   <script src="map-logic.js"></script>
   <script src="auth-kml-management.js"></script>
