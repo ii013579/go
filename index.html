@@ -1,109 +1,83 @@
 ﻿<!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>點位搜尋輔助 v2.0.0</title>
-  <link rel="icon" href="logo.ico" type="image/x-icon" />
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
-  <link rel="stylesheet" href="style.css">
-  <style>
-    /* 確保標籤樣式與 v1.9.6 一致 */
-    .marker-label-v196 {
-        background: rgba(255, 255, 255, 0.85);
-        border: 1px solid #666;
-        border-radius: 4px;
-        padding: 2px 5px;
-        font-weight: 600;
-        color: #333;
-        white-space: nowrap;
-        box-shadow: 1px 1px 3px rgba(0,0,0,0.2);
-    }
-  </style>
-</head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>點位搜尋輔助 v2.0.0</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="style.css"> </head>
 <body>
-
-  <div id="title">
-    點位搜尋輔助 v2.0.0
-    <button id="editButton" class="top-close-btn">編輯</button>
-  </div>
-
-  <div id="controls">
-    <div class="control-group">
-        <label>資料庫:</label>
-        <select id="kmlLayerSelect"><option value="">載入中...</option></select>
-        <button id="pinButton" class="pin-btn"><span class="material-symbols-outlined">push_pin</span></button>
-    </div>
-    <div id="searchContainer">
-        <input type="text" id="searchBox" placeholder="搜尋點位名稱..." autocomplete="off" />
-        <div id="searchResults" style="display: none;"></div>
-    </div>
-  </div>
-
-  <div id="authSection" style="display: none;">
-    <div id="loginForm">
-      <button id="googleSignInBtn" class="action-buttons google-btn">Google 登入</button>
+    <div id="title">
+        點位搜尋輔助 v2.0.0
+        <button id="editButton">編輯</button>
     </div>
 
-    <div id="loggedInDashboard" style="display: none;">
-      <div id="userEmailDisplay" class="user-status-bar"></div>
-      
-      <div class="admin-panel">
-          <div class="admin-row">
-              <input type="file" id="hiddenKmlFileInput" style="display: none;" accept=".kml" />
-              <button onclick="document.getElementById('hiddenKmlFileInput').click()" class="action-buttons">選擇 KML</button>
-              <span id="selectedKmlFileNameDashboard">未選擇</span>
-              <button id="uploadKmlSubmitBtnDashboard" class="action-buttons blue-btn">上傳</button>
-          </div>
-          <div class="admin-row">
-              <select id="kmlLayerSelectDashboard"></select>
-              <button id="deleteSelectedKmlBtn" class="action-buttons red-btn">刪除圖層</button>
-          </div>
-
-          <div id="registrationSettingsSection" style="display: none;">
-              <button id="generateRegistrationCodeBtn" class="action-buttons green-btn">產生註冊碼</button>
-              <div id="userManagementSection" style="margin-top:10px;">
-                  <table border="1" style="width:100%; font-size: 12px;">
-                      <thead><tr><th>Email</th><th>角色</th><th>操作</th></tr></thead>
-                      <tbody id="userTableBody"></tbody>
-                  </table>
-              </div>
-          </div>
-          <button id="logoutBtn" class="action-buttons">登出</button>
-      </div>
+    <div id="controls">
+        <div class="control-group">
+            <select id="kmlLayerSelect"><option value="">-- 請選擇 --</option></select>
+            <button id="pinButton" class="pin-btn">📌</button>
+        </div>
+        <div id="searchContainer">
+            <input type="text" id="searchBox" placeholder="搜尋點位..." autocomplete="off" />
+            <div id="searchResults" style="display: none;"></div>
+        </div>
     </div>
-  </div>
 
-  <div id="map"></div>
+    <div id="authSection">
+        <div id="loginForm">
+            <button id="googleSignInBtn" class="action-buttons blue-btn">Google 登入</button>
+        </div>
+        <div id="loggedInDashboard" style="display: none;">
+            <div id="userEmailDisplay" style="margin-bottom: 10px; font-weight: bold;"></div>
+            
+            <div class="admin-panel">
+                <div class="admin-row">
+                    <input type="file" id="hiddenKmlFileInput" style="display: none;" />
+                    <button onclick="document.getElementById('hiddenKmlFileInput').click()" class="action-buttons">選擇 KML</button>
+                    <span id="selectedKmlFileNameDashboard">尚未選擇</span>
+                    <button id="uploadKmlSubmitBtnDashboard" class="action-buttons blue-btn">上傳</button>
+                </div>
 
-  <div id="messageBoxOverlay" class="modal-overlay" style="display: none;">
-    <div class="modal-content">
-      <h3 id="messageBoxTitle"></h3><p id="messageBoxMessage"></p>
-      <button id="messageBoxCloseBtn">確定</button>
+                <div class="admin-row">
+                    <select id="kmlLayerSelectDashboard"></select>
+                    <button id="deleteSelectedKmlBtn" class="action-buttons red-btn">刪除圖層</button>
+                </div>
+
+                <div id="registrationSettingsSection" style="display: none;">
+                    <div class="admin-row">
+                        <button id="generateRegistrationCodeBtn" class="action-buttons green-btn">產生註冊碼</button>
+                    </div>
+                    <table border="1" style="width:100%; margin-top:10px; font-size:12px; background:white;">
+                        <thead><tr><th>Email</th><th>權限</th><th>操作</th></tr></thead>
+                        <tbody id="userTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+            <button id="logoutBtn" class="action-buttons" style="margin-top:10px;">登出</button>
+        </div>
     </div>
-  </div>
 
-  <div id="registrationCodeModalOverlay" class="modal-overlay" style="display: none;">
-    <div class="modal-content">
-      <h3>註冊新帳號</h3>
-      <input type="text" id="registrationCodeInput" placeholder="註冊碼" />
-      <input type="text" id="nicknameInput" placeholder="暱稱" />
-      <button id="confirmRegistrationCodeBtn">送出</button>
+    <div id="map"></div>
+
+    <div id="messageBoxOverlay" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <h3 id="messageBoxTitle"></h3>
+            <p id="messageBoxMessage"></p>
+            <button id="messageBoxCloseBtn" class="action-buttons blue-btn">確定</button>
+        </div>
     </div>
-  </div>
 
-  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="https://unpkg.com/togeojson"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/togeojson"></script>
 
-  <script src="firebase-init.js"></script>
-  <script src="map-logic.js"></script>
-  <script src="auth-kml-management.js"></script>
-  <script src="kml-worker.js"></script>
-  <script src="survey-logic.js"></script>
-  <script src="ui-interactions.js"></script>
+    <script src="firebase-init.js"></script>
+    <script src="map-logic.js"></script>
+    <script src="auth-kml-management.js"></script>
+    <script src="kml-worker.js"></script>
+    <script src="survey-logic.js"></script>
+    <script src="ui-interactions.js"></script>
 </body>
 </html>

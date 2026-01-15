@@ -3,15 +3,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const editButton = document.getElementById('editButton');
     const authSection = document.getElementById('authSection');
     const controls = document.getElementById('controls');
-    const searchBox = document.getElementById('searchBox');
-    const searchResults = document.getElementById('searchResults');
 
-    // 1. 管理介面切換
+    // 切換編輯模式 (配合 v1.9.6 CSS 的 Flex 屬性)
     editButton?.addEventListener('click', () => {
-        if (authSection.style.display === 'none') {
-            authSection.style.display = 'block';
+        if (authSection.style.display === 'none' || authSection.style.display === '') {
+            authSection.style.display = 'flex'; // 必須是 flex
             controls.style.display = 'none';
-            editButton.textContent = '返回';
+            editButton.textContent = '關閉';
         } else {
             authSection.style.display = 'none';
             controls.style.display = 'flex';
@@ -19,49 +17,35 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // 2. 搜尋連動清查功能
+    // 搜尋連動邏輯
+    const searchBox = document.getElementById('searchBox');
+    const searchResults = document.getElementById('searchResults');
+
     searchBox?.addEventListener('input', (e) => {
-        const query = e.target.value.toLowerCase().trim();
-        if (!query || !window.allKmlFeatures) {
+        const val = e.target.value.toLowerCase().trim();
+        if (!val || !window.allKmlFeatures) {
             searchResults.style.display = 'none';
             return;
         }
 
         const matches = window.allKmlFeatures.filter(f => 
-            f.properties?.name?.toLowerCase().includes(query)
+            f.properties?.name?.toLowerCase().includes(val)
         ).slice(0, 10);
 
         if (matches.length > 0) {
-            searchResults.innerHTML = matches.map(f => `
-                <div class="search-item" data-name="${f.properties.name}">${f.properties.name}</div>
-            `).join('');
+            searchResults.innerHTML = matches.map(f => `<div class="search-item">${f.properties.name}</div>`).join('');
             searchResults.style.display = 'block';
-
-            // 綁定點擊搜尋結果
-            document.querySelectorAll('.search-item').forEach((item, idx) => {
-                item.onclick = () => {
-                    const feature = matches[idx];
-                    const coords = feature.geometry.coordinates;
-                    const latlng = [coords[1], coords[0]];
-                    
+            
+            // 點擊搜尋結果
+            searchResults.querySelectorAll('.search-item').forEach((div, i) => {
+                div.onclick = () => {
+                    const f = matches[i];
+                    const latlng = L.latLng(f.geometry.coordinates[1], f.geometry.coordinates[0]);
                     window.map.setView(latlng, 18);
                     searchResults.style.display = 'none';
-                    searchBox.value = '';
-
-                    // 重要：搜尋後直接彈出清查面板
-                    if (window.openSurveyPanel) {
-                        window.openSurveyPanel(feature, L.latLng(latlng));
-                    }
+                    if (window.openSurveyPanel) window.openSurveyPanel(f, latlng);
                 };
             });
-        } else {
-            searchResults.style.display = 'none';
         }
     });
-
-    // 3. 圖釘狀態初次檢查
-    setTimeout(() => {
-        const pinnedId = localStorage.getItem('pinnedKmlId');
-        if (pinnedId) document.getElementById('pinButton').style.color = '#ffeb3b';
-    }, 1000);
 });
