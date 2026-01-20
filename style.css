@@ -148,12 +148,17 @@ body {
 #loggedInDashboard {
     text-align: center;
 }
+
 #userEmailDisplay {
-    font-size: 18px;
-    font-weight: 600;
-    color: #2193b0;
-    margin-bottom: 5px;
-    text-align: center;
+    position: relative !important; /* 核心：提供絕對定位的基準點 */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 50px;
+    margin: 15px 0;
+    padding-right: 120px; /* 重要：預留藍框位置的寬度，防止 Email 文字蓋到按鈕 */
+    border-bottom: 1px solid #eee;
+    word-break: break-all;
 }
 
 /* KML 管理區塊內的樣式 */
@@ -1152,39 +1157,28 @@ textarea {
     padding: 12px;
     font-family: inherit;
     resize: none;
-}
-
-/* 確保父層容器有相對定位 */                                 
-#userEmailDisplay {                               
-    position: relative;                           
-    display: flex;                                
-    align-items: center;                          
-    justify-content: center;                      
-    min-height: 50px;                             
-    margin: 10px 0;                               
-    padding-right: 110px; /* 為右側按鈕預留空間，防止文字重疊 */  
-}                                                 
-                                                  
-/* 實體化的開始清查按鈕 */                                  
-.survey-start-trigger {                           
-    position: absolute;                           
-    right: 0;                                     
-    top: 50%;                                     
-    transform: translateY(-50%);                  
-    background-color: #28a745 !important;         
-    color: white;                                 
-    border: none;                                 
-    padding: 8px 12px;                            
-    border-radius: 8px;                           
-    cursor: pointer;                              
-    font-size: 14px;                              
-    font-weight: 600;                             
-    display: flex;                                
-    align-items: center;                          
-    gap: 5px;                                     
-    box-shadow: 0 2px 4px rgba(0,0,0,0.15);       
-    z-index: 5;                                   
-    white-space: nowrap;                          
+}                         
+                                                                      
+/* 實體按鈕樣式：鎖定在藍框位置 */
+.survey-start-trigger {
+    position: absolute !important;
+    right: 5px; /* 貼齊容器右側 */
+    top: 50%;
+    transform: translateY(-50%); /* 垂直居中 */
+    background-color: #28a745 !important;
+    color: white !important;
+    border: none;
+    padding: 6px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    white-space: nowrap; /* 確保文字不換行 */
+    z-index: 10;
 }                                                 
                                                   
 .survey-start-trigger:hover {                     
