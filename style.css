@@ -150,15 +150,13 @@ body {
 }
 
 #userEmailDisplay {
-    position: relative !important; /* 核心：提供絕對定位的基準點 */
-    display: flex;
+    position: relative !important; /* 必須設為相對定位，否則按鈕會亂飛 */
+    display: flex !important;
     align-items: center;
     justify-content: center;
     min-height: 50px;
-    margin: 15px 0;
-    padding-right: 120px; /* 重要：預留藍框位置的寬度，防止 Email 文字蓋到按鈕 */
-    border-bottom: 1px solid #eee;
-    word-break: break-all;
+    margin: 10px 0;
+    padding-right: 120px; /* 這裡預留 120px 空間，防止 Email 文字撞到按鈕 */
 }
 
 /* KML 管理區塊內的樣式 */
@@ -1162,24 +1160,24 @@ textarea {
 /* 實體按鈕樣式：鎖定在藍框位置 */
 .survey-start-trigger {
     position: absolute !important;
-    right: 5px; /* 貼齊容器右側 */
+    right: 10px; /* 靠右對齊，即藍框位置 */
     top: 50%;
     transform: translateY(-50%); /* 垂直居中 */
     background-color: #28a745 !important;
     color: white !important;
     border: none;
-    padding: 6px 12px;
+    padding: 6px 15px;
     border-radius: 8px;
     cursor: pointer;
     font-size: 14px;
     font-weight: bold;
     display: flex;
     align-items: center;
-    gap: 4px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    white-space: nowrap; /* 確保文字不換行 */
-    z-index: 10;
-}                                                 
+    gap: 5px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    z-index: 99; /* 確保它在最上層 */
+    white-space: nowrap;
+}                                               
                                                   
 .survey-start-trigger:hover {                     
     background-color: #218838 !important;         
