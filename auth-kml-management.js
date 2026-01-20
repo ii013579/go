@@ -1,66 +1,58 @@
 ﻿// auth-kml-management.js v2.1
-// 處理 Google 登入與下拉選單同步
-
 document.addEventListener('DOMContentLoaded', () => {
-    const kmlLayerSelect = document.getElementById('kmlLayerSelect');
-    const googleSignInBtn = document.getElementById('googleSignInBtn');
+    const kmlSelect = document.getElementById('kmlLayerSelect');
+    const googleBtn = document.getElementById('googleSignInBtn');
+    const logoutBtn = document.getElementById('logoutBtn');
 
-    // 1. 監聽首頁下拉選單變動
-    if (kmlLayerSelect) {
-        kmlLayerSelect.addEventListener('change', (e) => {
-            if (window.loadKmlLayerFromFirestore) {
-                window.loadKmlLayerFromFirestore(e.target.value);
-            }
+    // 下拉選單：免登入也可觸發
+    if (kmlSelect) {
+        kmlSelect.addEventListener('change', (e) => {
+            if (window.loadKmlFromFirestore) window.loadKmlFromFirestore(e.target.value);
         });
     }
 
-    // 2. Google 登入功能 (彈出式)
-    if (googleSignInBtn) {
-        googleSignInBtn.onclick = () => {
-            const provider = new firebase.auth.GoogleAuthProvider();
-            auth.signInWithPopup(provider).catch(err => console.error("登入錯誤:", err));
+    // 登入
+    if (googleBtn) {
+        googleBtn.onclick = () => auth.signInWithPopup(new firebase.auth.GoogleAuthProvider());
+    }
+
+    // 登出（修復重點）
+    if (logoutBtn) {
+        logoutBtn.onclick = () => {
+            if (confirm("確定要登出管理系統？")) {
+                auth.signOut().then(() => {
+                    window.showMessage("成功", "已登出管理員模式");
+                });
+            }
         };
     }
 
-    // 3. 登入狀態監聽
+    // 監聽權限與同步選單
     auth.onAuthStateChanged(async (user) => {
         const loginForm = document.getElementById('loginForm');
         const dashboard = document.getElementById('loggedInDashboard');
-        const userEmailDisplay = document.getElementById('userEmailDisplay');
-
+        
         if (user) {
             if (loginForm) loginForm.style.display = 'none';
             if (dashboard) dashboard.style.display = 'block';
-            if (userEmailDisplay) userEmailDisplay.textContent = user.email;
-            
-            // 登入後自動更新下拉選單
-            window.syncKmlSelectOptions();
+            document.getElementById('userEmailDisplay').textContent = user.email;
         } else {
             if (loginForm) loginForm.style.display = 'block';
             if (dashboard) dashboard.style.display = 'none';
         }
+        window.updateAllSelects();
     });
 });
 
-/**
- * 從 Firestore 抓取現有 KML 列表並填入選單
- */
-window.syncKmlSelectOptions = async function() {
+window.updateAllSelects = async function() {
     try {
-        const snap = await db.collection('artifacts').doc(appId)
-                             .collection('public').doc('data')
-                             .collection('kmlLayers').get();
+        const snap = await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('kmlLayers').get();
+        let options = '<option value="">-- 請選擇資料庫 --</option>';
+        snap.forEach(doc => options += `<option value="${doc.id}">${doc.data().name}</option>`);
         
-        let html = '<option value="">-- 請選擇資料庫 --</option>';
-        snap.forEach(doc => {
-            html += `<option value="${doc.id}">${doc.data().name || '未命名'}</option>`;
-        });
-
         const s1 = document.getElementById('kmlLayerSelect');
         const s2 = document.getElementById('kmlLayerSelectDashboard');
-        if (s1) s1.innerHTML = html;
-        if (s2) s2.innerHTML = html;
-    } catch (e) {
-        console.error("選單同步失敗:", e);
-    }
+        if (s1) s1.innerHTML = options;
+        if (s2) s2.innerHTML = options;
+    } catch (e) { console.error("選單更新失敗", e); }
 };
