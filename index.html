@@ -11,60 +11,49 @@
 </head>
 <body>
 
-    <header id="title">
-        點位搜尋補助
-        <button id="editButton">編輯</button>
-    </header>
+<header id="title">
+    點位搜尋補助
+    <button id="editButton">編輯</button>
+</header>
 
-    <section id="authSection">
-        <div id="loginForm">
-            <h3>管理員登入</h3>
-            <input type="email" id="loginEmail" placeholder="電子郵件">
-            <input type="password" id="loginPassword" placeholder="密碼">
-            <button id="loginBtn" class="action-buttons">登入</button>
-        </div>
-
-        <div id="loggedInDashboard" style="display:none;">
-            <div id="userEmailDisplay"></div>
-            
-            <div id="kmlControlsDashboard">
-                <div id="uploadKmlSectionDashboard">
-                    <label>上傳 KML</label>
-                    <div id="selectedKmlFileNameDashboard">尚未選擇</div>
-                    <input type="file" id="hiddenKmlFileInput" accept=".kml" style="display:none;">
-                    <button id="uploadKmlSubmitBtnDashboard" class="admin-option-button upload-kml-dashboard-btn">上傳</button>
-                </div>
-
-                <div id="deleteKmlSectionDashboard">
-                    <label>刪除圖層</label>
-                    <select id="kmlLayerSelectDashboard"></select>
-                    <button id="deleteSelectedKmlBtn" class="admin-option-button delete-kml-dashboard-btn">刪除</button>
-                </div>
+<section id="authSection" style="display:none;">
+    <div id="loggedInDashboard">
+        <div id="userEmailDisplay"></div>
+        <div id="kmlControlsDashboard">
+            <div id="uploadKmlSectionDashboard">
+                <label>上傳 KML</label>
+                <div id="selectedKmlFileNameDashboard">尚未選擇</div>
+                <input type="file" id="hiddenKmlFileInput" accept=".kml" style="display:none;">
+                <button id="uploadKmlSubmitBtnDashboard" class="admin-option-button">上傳</button>
             </div>
 
-            <button onclick="handleLogout()" class="action-buttons delete-btn" style="margin-top:10px;">登出</button>
-        </div>
-    </section>
-
-    <section id="controls">
-        <div id="kmlControls">
-            <div style="display:flex; gap:10px; align-items:center;">
-                <select id="kmlLayerSelect">
-                    <option value="">-- 請選擇資料庫 --</option>
-                </select>
-                <button id="pinButton" class="pin-button-icon">
-                    <span class="material-symbols-outlined pin-icon">push_pin</span>
-                </button>
-            </div>
-
-            <div id="searchContainer">
-                <span class="material-symbols-outlined">search</span>
-                <input type="text" id="searchBox" placeholder="搜尋點位名稱...">
-                <div id="searchResults"></div>
+            <div id="deleteKmlSectionDashboard">
+                <label>刪除圖層</label>
+                <select id="kmlLayerSelectDashboard"></select>
+                <button id="deleteSelectedKmlBtn" class="admin-option-button">刪除</button>
             </div>
         </div>
-    </section>
+        <button onclick="handleLogout()" class="action-buttons delete-btn">登出</button>
+    </div>
+</section>
 
+<section id="controls">
+    <div id="kmlControls">
+        <div style="display:flex; gap:10px; align-items:center;">
+            <select id="kmlLayerSelect">
+                <option value="">-- 請選擇資料庫 --</option>
+            </select>
+            <button id="pinButton" class="pin-button-icon">
+                <span class="material-symbols-outlined">push_pin</span>
+            </button>
+        </div>
+        <div id="searchContainer">
+            <span class="material-symbols-outlined">search</span>
+            <input type="text" id="searchBox" placeholder="搜尋地點...">
+            <div id="searchResults"></div>
+        </div>
+    </div>
+</section>
     <main id="map"></main>
 
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>

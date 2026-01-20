@@ -1,156 +1,150 @@
-// kml-worker.js v1.9.6 完整邏輯版
-
+// kml-worker.js v1.9.6 - 處理 KML 檔案上傳與刪除邏輯
 (function() {
-    // 獲取管理面板相關元素
-    const hiddenKmlFileInput = document.getElementById('hiddenKmlFileInput');
-    const selectedKmlFileNameDashboard = document.getElementById('selectedKmlFileNameDashboard');
+    // 獲取與 HTML ID 一致的元件
+    const fileInput = document.getElementById('hiddenKmlFileInput');
+    const fileNameDisplay = document.getElementById('selectedKmlFileNameDashboard');
     const uploadBtn = document.getElementById('uploadKmlSubmitBtnDashboard');
     const deleteBtn = document.getElementById('deleteSelectedKmlBtn');
     const dashboardSelect = document.getElementById('kmlLayerSelectDashboard');
 
     /**
-     * 1. 檔案選取監聽器
-     * 配合 CSS：#selectedKmlFileNameDashboard (具有 padding, border, ellipsis 效果)
+     * 1. 檔案選取監聽：更新顯示檔名區塊
+     * 連結 CSS 中的 #selectedKmlFileNameDashboard 樣式
      */
-    if (selectedKmlFileNameDashboard && hiddenKmlFileInput) {
-        // 點擊顯示框也可觸發檔案選取
-        selectedKmlFileNameDashboard.addEventListener('click', () => {
-            hiddenKmlFileInput.click();
-        });
+    if (fileNameDisplay && fileInput) {
+        // 點擊藍色框框觸發隱藏的檔案選擇器
+        fileNameDisplay.onclick = () => {
+            fileInput.click();
+        };
 
-        hiddenKmlFileInput.addEventListener('change', (e) => {
+        fileInput.onchange = (e) => {
             const file = e.target.files[0];
             if (file) {
-                // 更新顯示框內容，CSS 會自動處理長檔名的省略號 (...)
-                selectedKmlFileNameDashboard.textContent = file.name;
-                selectedKmlFileNameDashboard.style.borderColor = "#4a90e2";
-                selectedKmlFileNameDashboard.style.backgroundColor = "#fff";
+                // 更新顯示文字為檔案名稱
+                fileNameDisplay.textContent = file.name;
+                // 變換邊框顏色以提示已選取檔案
+                fileNameDisplay.style.borderColor = "#2193b0";
+                fileNameDisplay.style.color = "#333";
             } else {
-                selectedKmlFileNameDashboard.textContent = "尚未選擇";
-                selectedKmlFileNameDashboard.style.borderColor = "#dcdcdc";
+                fileNameDisplay.textContent = "尚未選擇";
+                fileNameDisplay.style.borderColor = "#dcdcdc";
             }
-        });
+        };
     }
 
     /**
-     * 2. KML 上傳邏輯
-     * 包含：KML 解析為 GeoJSON、存入 Firestore、自動更新下拉選單
+     * 2. 上傳功能邏輯
+     * 執行：KML 轉 GeoJSON、儲存至 Firestore
      */
     if (uploadBtn) {
-        uploadBtn.addEventListener('click', async () => {
-            const file = hiddenKmlFileInput.files[0];
+        uploadBtn.onclick = async () => {
+            const file = fileInput.files[0];
             if (!file) {
-                window.showMessage('提示', '請先選取一個 KML 檔案。');
+                if (window.showMessageCustom) {
+                    window.showMessageCustom({ title: "提示", message: "請先選擇 KML 檔案" });
+                } else {
+                    alert("請先選擇 KML 檔案");
+                }
                 return;
             }
 
-            // 檢查副檔名
-            if (!file.name.toLowerCase().endsWith('.kml')) {
-                window.showMessage('錯誤', '僅支援 .kml 格式檔案。');
-                return;
-            }
-
+            // 鎖定按鈕防止重複點擊
             uploadBtn.disabled = true;
-            uploadBtn.textContent = '上傳中...';
+            uploadBtn.textContent = "上傳中...";
 
             const reader = new FileReader();
             reader.onload = async (e) => {
                 try {
-                    const kmlContent = e.target.result;
+                    // 解析 KML 為 XML
+                    const kmlText = e.target.result;
                     const parser = new DOMParser();
-                    const kmlDoc = parser.parseFromString(kmlContent, 'text/xml');
+                    const kmlDoc = parser.parseFromString(kmlText, 'text/xml');
                     
-                    // 使用 toGeoJSON 庫轉換 (請確保 index.html 已載入 toggojson.js)
+                    // 呼叫 toGeoJSON 庫進行轉換
                     const geojson = toGeoJSON.kml(kmlDoc);
 
                     if (!geojson || !geojson.features || geojson.features.length === 0) {
-                        throw new Error("KML 內容不包含有效的地理資訊。");
+                        throw new Error("KML 檔案中沒有效的地理特徵點");
                     }
 
-                    // 儲存至 Firestore: artifacts/{appId}/public/data/kmlLayers
+                    // 存入指定路徑：artifacts/{appId}/public/data/kmlLayers
                     await window.db.collection('artifacts').doc(window.appId)
                         .collection('public').doc('data')
                         .collection('kmlLayers').add({
                             name: file.name,
                             geojson: JSON.stringify(geojson),
-                            uploadTime: firebase.firestore.FieldValue.serverTimestamp(),
-                            fileSize: file.size
+                            uploadTime: firebase.firestore.FieldValue.serverTimestamp()
                         });
 
-                    window.showMessage('成功', `圖層「${file.name}」上傳成功！`);
-                    
-                    // 重置 UI
-                    hiddenKmlFileInput.value = "";
-                    selectedKmlFileNameDashboard.textContent = "尚未選擇";
-                    selectedKmlFileNameDashboard.style.borderColor = "#dcdcdc";
+                    if (window.showMessageCustom) {
+                        window.showMessageCustom({ title: "成功", message: `圖層「${file.name}」已同步至雲端` });
+                    }
 
-                    // 通知全域更新下拉選單 (auth-kml-management.js 中的函數)
+                    // 重置 UI
+                    fileInput.value = "";
+                    fileNameDisplay.textContent = "尚未選擇";
+                    fileNameDisplay.style.borderColor = "#dcdcdc";
+
+                    // 同步更新主畫面與後台的下拉選單
                     if (window.updateKmlLayerSelects) {
                         await window.updateKmlLayerSelects();
                     }
 
-                } catch (error) {
-                    console.error("KML 上傳錯誤:", error);
-                    window.showMessage('失敗', '解析 KML 失敗，請確認檔案內容正確。');
+                } catch (err) {
+                    console.error("上傳失敗:", err);
+                    alert("上傳失敗: " + err.message);
                 } finally {
                     uploadBtn.disabled = false;
-                    uploadBtn.textContent = '上傳圖層';
+                    uploadBtn.textContent = "上傳";
                 }
-            };
-            
-            reader.onerror = () => {
-                window.showMessage('錯誤', '讀取檔案失敗。');
-                uploadBtn.disabled = false;
             };
 
             reader.readAsText(file);
-        });
+        };
     }
 
     /**
-     * 3. 圖層刪除邏輯
+     * 3. 刪除圖層邏輯
      */
     if (deleteBtn) {
-        deleteBtn.addEventListener('click', async () => {
-            const kmlId = dashboardSelect.value;
-            if (!kmlId) {
-                window.showMessage('提示', '請先從選單中選擇要刪除的圖層。');
+        deleteBtn.onclick = async () => {
+            const selectedId = dashboardSelect.value;
+            if (!selectedId) {
+                alert("請從選單中選擇要刪除的圖層");
                 return;
             }
 
-            const confirmDelete = confirm("確定要永久刪除此圖層嗎？這將會導致地圖點位消失。");
-            if (!confirmDelete) return;
+            const confirmMsg = `確定要刪除此圖層嗎？\n這將導致地圖點位無法顯示。`;
+            if (!confirm(confirmMsg)) return;
 
             deleteBtn.disabled = true;
-            deleteBtn.textContent = '刪除中...';
+            deleteBtn.textContent = "刪除中...";
 
             try {
-                // 從 Firestore 刪除
+                // 從 Firestore 移除檔案
                 await window.db.collection('artifacts').doc(window.appId)
                     .collection('public').doc('data')
-                    .collection('kmlLayers').doc(kmlId).delete();
+                    .collection('kmlLayers').doc(selectedId).delete();
 
-                window.showMessage('通知', '圖層已成功移除。');
+                // 若當前地圖正顯示此圖層，則清空地圖
+                if (window.currentKmlLayerId === selectedId && window.clearAllKmlLayers) {
+                    window.clearAllKmlLayers();
+                }
 
-                // 更新 UI 下拉選單
+                alert("圖層已成功刪除");
+
+                // 更新選單清單
                 if (window.updateKmlLayerSelects) {
                     await window.updateKmlLayerSelects();
                 }
-                
-                // 如果目前地圖展示的是這個圖層，則清空地圖
-                if (window.currentKmlLayerId === kmlId && window.addGeoJsonLayers) {
-                    window.addGeoJsonLayers([]);
-                    window.allKmlFeatures = [];
-                    window.currentKmlLayerId = null;
-                }
 
-            } catch (error) {
-                console.error("刪除圖層錯誤:", error);
-                window.showMessage('錯誤', '刪除失敗，請檢查權限。');
+            } catch (err) {
+                console.error("刪除失敗:", err);
+                alert("刪除失敗，請檢查權限");
             } finally {
                 deleteBtn.disabled = false;
-                deleteBtn.textContent = '刪除選擇圖層';
+                deleteBtn.textContent = "刪除";
             }
-        });
+        };
     }
 })();

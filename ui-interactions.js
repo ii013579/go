@@ -1,5 +1,4 @@
-// ui-interactions.js v1.9.6 完整邏輯版
-
+// ui-interactions.js v1.9.6 - 處理 UI 面板切換、搜尋邏輯與圖釘功能
 document.addEventListener('DOMContentLoaded', () => {
     // 獲取 UI 元素
     const editBtn = document.getElementById('editButton');
@@ -8,91 +7,102 @@ document.addEventListener('DOMContentLoaded', () => {
     const searchBox = document.getElementById('searchBox');
     const searchRes = document.getElementById('searchResults');
     const searchContainer = document.getElementById('searchContainer');
+    const pinBtn = document.getElementById('pinButton');
 
     /**
-     * 1. 編輯面板切換邏輯
-     * 配合 CSS：#authSection 與 #controls 預設使用 flex 佈局
+     * 1. 編輯面板切換 (Flex 佈局對齊)
+     * 確保切換時符合 style.css 的 #authSection display: flex 定義
      */
     if (editBtn && authSec && ctrlSec) {
-        editBtn.addEventListener('click', () => {
-            // 檢查目前是否為隱藏狀態（對應 CSS 預設 display: none）
+        editBtn.onclick = () => {
             const isAuthHidden = (window.getComputedStyle(authSec).display === 'none');
-
             if (isAuthHidden) {
-                // 開啟管理面板
-                authSec.style.display = 'flex';   // 必須為 flex 才能讓內部按鈕正確排列
+                authSec.style.display = 'flex'; // 啟動管理面板
                 ctrlSec.style.display = 'none';
                 editBtn.textContent = '返回';
-                editBtn.style.backgroundColor = '#ffc107'; // 變換顏色提示切換
+                editBtn.style.backgroundColor = '#ffc107';
             } else {
-                // 返回主控制面板
                 authSec.style.display = 'none';
-                ctrlSec.style.display = 'flex';
+                ctrlSec.style.display = 'flex'; // 回到主控制面板
                 editBtn.textContent = '編輯';
-                editBtn.style.backgroundColor = '#f0f0f0';
+                editBtn.style.backgroundColor = '';
             }
-        });
+        };
     }
 
     /**
-     * 2. 搜尋功能與結果排版
-     * 配合 CSS：.result-item, .search-active, .columns-3
+     * 2. 圖釘 (Pin) 功能實作
+     * 對應 CSS .pin-button-icon.clicked
+     */
+    if (pinBtn) {
+        pinBtn.onclick = () => {
+            // 切換紅色背景樣式
+            pinBtn.classList.toggle('clicked');
+            
+            // 實作釘選邏輯：當釘選時，搜尋框內容與地圖標籤高亮不會因為點擊地圖而自動消失
+            window.isSearchPinned = pinBtn.classList.contains('clicked');
+            console.log("圖釘狀態:", window.isSearchPinned ? "已釘選" : "未釘選");
+        };
+    }
+
+    /**
+     * 3. 搜尋功能與結果三欄排版
+     * 整合 map-logic.js 的標籤高亮與導航按鈕觸發
      */
     if (searchBox && searchRes && searchContainer) {
         searchBox.addEventListener('input', (e) => {
             const val = e.target.value.trim().toLowerCase();
 
-            // 若輸入為空，隱藏結果視窗
             if (!val) {
                 searchRes.style.display = 'none';
                 searchContainer.classList.remove('search-active');
                 return;
             }
 
-            // 從全域變數 window.allKmlFeatures 過濾資料
+            // 從全域變數 window.allKmlFeatures 過濾
             const matches = (window.allKmlFeatures || []).filter(f => 
                 f.properties && f.properties.name && f.properties.name.toLowerCase().includes(val)
-            ).slice(0, 15); // 最多顯示 15 筆
+            ).slice(0, 15);
 
             if (matches.length > 0) {
-                // 顯示結果並套用 CSS 激活樣式
                 searchContainer.classList.add('search-active');
-                searchRes.style.display = 'grid'; // 確保使用 Grid 佈局
+                searchRes.style.display = 'grid'; // 強制使用 Grid 佈局
 
-                // 根據關鍵字長度動態調整欄數（對應 CSS .columns-2 / .columns-3）
-                if (val.length > 4) {
-                    searchRes.classList.remove('columns-3');
-                    searchRes.classList.add('columns-2');
-                } else {
-                    searchRes.classList.remove('columns-2');
-                    searchRes.classList.add('columns-3');
-                }
-
-                // 產生結果 HTML
+                // 生成結果項目 (.result-item)
                 searchRes.innerHTML = matches.map(f => `
                     <div class="result-item" title="${f.properties.name}">
                         ${f.properties.name}
                     </div>
                 `).join('');
 
-                // 綁定點擊搜尋結果事件
+                // 點擊搜尋結果聯動地圖
                 searchRes.querySelectorAll('.result-item').forEach((item, index) => {
                     item.onclick = () => {
-                        const targetFeature = matches[index];
-                        const coords = targetFeature.geometry.coordinates;
-                        const latlng = L.latLng(coords[1], coords[0]);
+                        const feature = matches[index];
+                        const [lon, lat] = feature.geometry.coordinates;
+                        const latlng = L.latLng(lat, lon);
+                        const name = feature.properties.name;
 
-                        // 1. 移動地圖
+                        // 1. 移動視角並縮放
                         window.map.setView(latlng, 18);
 
-                        // 2. 關閉搜尋視窗
-                        searchRes.style.display = 'none';
-                        searchContainer.classList.remove('search-active');
-                        searchBox.value = targetFeature.properties.name;
+                        // 2. 觸發 v1.9.6 標籤高亮 (使用 map-logic.js 的 ID 邏輯)
+                        const labelId = `label-${lat}-${lon}`.replace(/\./g, '_');
+                        document.querySelectorAll('.marker-label span.label-active').forEach(el => {
+                            el.classList.remove('label-active');
+                        });
+                        const targetLabel = document.getElementById(labelId);
+                        if (targetLabel) targetLabel.classList.add('label-active');
 
-                        // 3. 觸發地圖上的 Marker 點擊事件（以啟動高亮與清查面板）
-                        if (window.focusOnFeatureByName) {
-                            window.focusOnFeatureByName(targetFeature.properties.name);
+                        // 3. 自動開啟導航按鈕 (offroad 圖示)
+                        if (window.createNavButton) {
+                            window.createNavButton(latlng, name);
+                        }
+
+                        // 4. 根據圖釘狀態決定是否隱藏搜尋結果
+                        if (!window.isSearchPinned) {
+                            searchRes.style.display = 'none';
+                            searchContainer.classList.remove('search-active');
                         }
                     };
                 });
@@ -101,29 +111,24 @@ document.addEventListener('DOMContentLoaded', () => {
                 searchContainer.classList.remove('search-active');
             }
         });
-
-        // 點擊地圖其他地方時關閉搜尋結果
-        document.addEventListener('click', (e) => {
-            if (!searchContainer.contains(e.target)) {
-                searchRes.style.display = 'none';
-                searchContainer.classList.remove('search-active');
-            }
-        });
     }
-});
 
-/**
- * 3. 訊息提示視窗工具 (對應 CSS .message-box-overlay)
- */
-window.showMessage = function(title, message) {
-    const overlay = document.createElement('div');
-    overlay.className = 'message-box-overlay visible';
-    overlay.innerHTML = `
-        <div class="message-box-content">
-            <h3>${title}</h3>
-            <p>${message}</p>
-            <button onclick="this.parentElement.parentElement.remove()">確定</button>
-        </div>
-    `;
-    document.body.appendChild(overlay);
-};
+    /**
+     * 4. 點擊地圖外部處理
+     * 修改 map-logic.js 的點擊邏輯，加入圖釘判斷
+     */
+    window.map?.on('click', () => {
+        if (window.isSearchPinned) return; // 若已釘選，則不清除 UI
+        
+        if (searchRes) {
+            searchRes.style.display = 'none';
+            searchContainer.classList.remove('search-active');
+        }
+        if (searchBox) searchBox.value = '';
+        
+        document.querySelectorAll('.marker-label span.label-active').forEach(el => {
+            el.classList.remove('label-active');
+        });
+        window.navButtons?.clearLayers(); // 清除導航按鈕
+    });
+});
