@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8" />
@@ -134,25 +134,24 @@
     </div>
   </div>
 
-<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+  <!-- Firebase CDN 載入 -->
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-storage.js"></script>
 
+  <!-- Leaflet CDN 載入 -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <!-- MarkerCluster 載入 -->
   <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
-  <script src="https://unpkg.com/togeojson@0.16.0/togeojson.js"></script> 
-
+  <!-- 其他函式庫 -->
+  <script src="https://unpkg.com/togeojson"></script> 
+  <!-- 自定義 JS 檔案載入 -->
+  <!-- 順序很重要，請確保依賴的檔案先載入 -->
   <script src="firebase-init.js"></script>
-
   <script src="map-logic.js"></script>
-
-  <script src="survey-logic.js"></script>
-
   <script src="auth-kml-management.js"></script>
-
-  <script src="kml-worker.js"></script>
-
   <script src="ui-interactions.js"></script>
+  <script src="survey-logic.js"></script>
 </body>
 </html>
