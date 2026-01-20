@@ -1207,3 +1207,37 @@ textarea {
 .survey-trigger-icon {
     z-index: 1000 !important;
 }  
+
+/* 父容器設定 */
+.user-info-bar {
+    position: relative !important;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 55px;
+    width: 100%;
+}
+
+/* 確保 H3 文字居中且不被按鈕蓋住 */
+#userEmailDisplay {
+    margin: 0 !important;
+    padding-right: 120px; /* 為右側按鈕留空間 */
+    font-size: 1.17em;
+}
+
+/* 按鈕樣式：與上傳按鈕一致且位置固定 */
+.survey-btn {
+    position: absolute !important;
+    right: 10px; /* 精確對齊右側藍框 */
+    top: 50%;
+    transform: translateY(-50%);
+    background-color: #28a745 !important; /* 綠色 */
+    width: auto !important;
+    padding: 0 15px !important;
+    height: 38px !important;
+    font-size: 14px !important;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    z-index: 100;
+}
