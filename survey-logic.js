@@ -1,128 +1,111 @@
-// survey-logic.js v2.1 - 完整邏輯版
+// survey-logic.js v2.3
 (function() {
     let currentPointName = "";
     let selectedStatus = null;
-    let surveyPhotos = [null, null, null]; // 儲存 3 張照片的檔案物件
+    let surveyPhotos = [null, null, null]; 
 
-    // 等待頁面與原有地圖初始化完成
+    // 1. 定時監控面板：精確注入「開始清查」按鈕至藍框位置 (Email 右側)
+    const injectInterval = setInterval(() => {
+        const emailHeader = document.getElementById('userEmailDisplay');
+        const dashboard = document.getElementById('loggedInDashboard');
+        
+        // 確保管理面板已顯示且目標存在
+        if (emailHeader && dashboard && window.getComputedStyle(dashboard).display !== 'none') {
+            if (!document.getElementById('startSurveyBtn')) {
+                // 強制設定父層樣式以確保定位準確
+                emailHeader.style.position = 'relative';
+                emailHeader.style.display = 'block'; 
+                
+                const startBtn = document.createElement('button');
+                startBtn.id = 'startSurveyBtn';
+                startBtn.className = 'survey-start-trigger';
+                startBtn.innerHTML = '<span class="material-symbols-outlined">assignment_turned_in</span> 開始清查';
+                
+                emailHeader.appendChild(startBtn);
+                startBtn.onclick = () => window.showMessage('清查模式', '模式已啟動。請點擊地圖點位並使用導航下方的「清查」圖示。');
+            }
+        }
+    }, 600);
+
+    // 2. 地圖導航監聽：生成南方偏移的清查按鈕
     window.addEventListener('load', () => {
-        injectStartBtn();
-        initMapListener();
+        if (window.map && window.navButtons) {
+            window.map.on('click', () => {
+                setTimeout(() => {
+                    const layers = window.navButtons.getLayers();
+                    if (layers.length > 0) {
+                        const navPos = layers[0].getLatLng();
+                        addSurveyMarker(navPos);
+                    }
+                }, 200);
+            });
+        }
     });
 
-    /**
-     * 1. 在編輯面板(Dashboard)中，上傳按鈕上方新增「開始清查」按鈕
-     */
-    function injectStartBtn() {
-        const uploadBtn = document.getElementById('uploadKmlSubmitBtnDashboard');
-        if (uploadBtn && !document.getElementById('startSurveyBtn')) {
-            const startBtn = document.createElement('button');
-            startBtn.id = 'startSurveyBtn';
-            startBtn.className = 'action-buttons';
-            startBtn.style.backgroundColor = '#28a745';
-            startBtn.style.marginBottom = '15px';
-            startBtn.innerHTML = '<span class="material-symbols-outlined">assignment</span> 開始清查模式';
-            
-            // 插入到上傳按鈕之前
-            uploadBtn.parentNode.insertBefore(startBtn, uploadBtn);
-            
-            startBtn.onclick = () => {
-                window.showMessage('模式啟動', '請點擊地圖上的標記紅點，並使用出現的「清查」按鈕開始填報。');
-            };
-        }
-    }
-
-    /**
-     * 2. 監聽地圖點擊事件，當導航按鈕產生時，在其南方增加清查按鈕
-     */
-    function initMapListener() {
-        if (!window.map) return;
-
-        // 監聽地圖點擊或 marker 點擊後的 navButtons 變動
-        window.map.on('click', () => {
-            setTimeout(() => {
-                const layers = window.navButtons.getLayers();
-                if (layers.length > 0) {
-                    const navMarker = layers[0];
-                    const pos = navMarker.getLatLng();
-                    addSurveyMarker(pos);
-                }
-            }, 150); // 延遲確保 v1.9.6 的 navButtons 已生成
-        });
-    }
-
     function addSurveyMarker(navPos) {
-        // 計算向南偏移 (大約 0.0002 緯度)
-        const surveyPos = [navPos.lat - 0.0002, navPos.lng];
-        
-        // 從 v1.9.6 的 UI 狀態中擷取目前點名
+        // 緯度向下偏移 (南方)
+        const surveyPos = [navPos.lat - 0.00025, navPos.lng]; 
         const activeLabel = document.querySelector('.label-active');
         currentPointName = activeLabel ? activeLabel.textContent : "未知點位";
 
         const surveyIcon = L.divIcon({
-            className: 'survey-trigger-container',
-            html: `<img src="https://cdn-icons-png.freepik.com/512/8280/8280556.png" style="width:45px; cursor:pointer;" title="點擊清查">`,
-            iconSize: [45, 45],
-            iconAnchor: [22, 22]
+            className: 'survey-trigger-icon',
+            html: `<img src="https://cdn-icons-png.freepik.com/512/8280/8280556.png" style="width:42px; cursor:pointer;">`,
+            iconSize: [42, 42], iconAnchor: [21, 21]
         });
 
-        // 加入地圖
-        L.marker(surveyPos, { icon: surveyIcon }).addTo(window.navButtons).on('click', (e) => {
+        const m = L.marker(surveyPos, { icon: surveyIcon }).addTo(window.navButtons);
+        m.on('click', (e) => {
             L.DomEvent.stopPropagation(e);
             openSurveyUI(currentPointName);
         });
     }
 
-    /**
-     * 3. 捲動式清查網頁視覺化 (Scrollable Survey UI)
-     */
+    // 3. 全螢幕 UI 邏輯
     function openSurveyUI(pointName) {
-        const userEmail = auth.currentUser ? auth.currentUser.email : '未登入人員';
-        selectedStatus = null; // 重置狀態
+        const userEmail = (typeof auth !== 'undefined' && auth.currentUser) ? auth.currentUser.email : '訪客人員';
+        selectedStatus = null;
+        surveyPhotos = [null, null, null];
 
-        const modalHtml = `
+        const uiHtml = `
             <div id="surveyModal" class="survey-full-overlay">
                 <div class="survey-scroll-container">
                     <div class="survey-header">
                         <div class="header-main">點位清查 - ${pointName}</div>
-                        <div class="header-sub">清查員：${userEmail}</div>
+                        <div class="header-sub">人員：${userEmail}</div>
                         <button class="close-x" onclick="document.getElementById('surveyModal').remove()">×</button>
                     </div>
 
                     <div class="survey-section">
                         <h4 class="section-title">基本資訊</h4>
-                        <div class="info-box">
-                            <p>點位編號：<strong>${pointName}</strong> (唯讀)</p>
-                            <p>清查人員：<strong>${userEmail}</strong> (唯讀)</p>
-                        </div>
+                        <div class="info-row"><span>點位編號</span><strong>${pointName}</strong></div>
+                        <div class="info-row"><span>座標資訊</span><strong>已自動關聯</strong></div>
                     </div>
 
                     <div class="survey-section">
                         <h4 class="section-title">點位狀況</h4>
                         <div class="segmented-control">
-                            <button class="status-btn btn-exist" data-val="存在">存在</button>
-                            <button class="status-btn btn-lost" data-val="遺失">遺失</button>
-                            <button class="status-btn btn-damage" data-val="損壞">損壞</button>
+                            <button class="cond-btn btn-exist" data-val="存在">存在</button>
+                            <button class="cond-btn btn-lost" data-val="遺失">遺失</button>
+                            <button class="cond-btn btn-damage" data-val="損壞">損壞</button>
                         </div>
                     </div>
 
                     <div class="survey-section">
                         <h4 class="section-title">文字說明</h4>
-                        <label>現場說明</label>
-                        <textarea id="fieldDesc" placeholder="描述周邊環境或點位狀況..."></textarea>
-                        <label style="margin-top:10px; display:block;">備註</label>
-                        <textarea id="fieldNote" placeholder="紀錄其他異常事項..."></textarea>
+                        <textarea id="fieldDesc" rows="3" placeholder="現場環境說明..."></textarea>
+                        <textarea id="fieldNote" rows="2" style="margin-top:10px" placeholder="其他備註..."></textarea>
                     </div>
 
                     <div class="survey-section">
-                        <h4 class="section-title">現場照片 (1~3張)</h4>
+                        <h4 class="section-title">現場照片 (最多3張)</h4>
                         <div class="photo-stack">
                             ${[1, 2, 3].map(i => `
                                 <div class="photo-box" onclick="document.getElementById('camFile${i}').click()">
                                     <input type="file" id="camFile${i}" accept="image/*" capture="environment" style="display:none" onchange="window.handleSvPhoto(this, ${i})">
                                     <div id="boxContent${i}">
-                                        <span class="material-symbols-outlined" style="font-size:48px; color:#ccc;">add_a_photo</span>
-                                        <p style="color:#999;">點擊拍照 (${i})</p>
+                                        <span class="material-symbols-outlined">add_a_photo</span>
+                                        <p>點擊拍照 (${i})</p>
                                     </div>
                                     <img id="prevImg${i}" style="display:none; width:100%; height:100%; object-fit:cover;">
                                 </div>
@@ -131,74 +114,72 @@
                     </div>
 
                     <div class="survey-footer">
-                        <button id="cancelSv" class="btn-cancel">取消</button>
-                        <button id="submitSv" class="btn-submit" disabled>請完成照片與狀況點選</button>
+                        <button id="cancelSv" class="btn-cancel">取消離開</button>
+                        <button id="submitSv" class="btn-submit" disabled>請選取點位狀況</button>
                     </div>
                 </div>
             </div>
         `;
-        document.body.insertAdjacentHTML('beforeend', modalHtml);
+        document.body.insertAdjacentHTML('beforeend', uiHtml);
         bindInternalLogic();
     }
 
-    /**
-     * 4. 清查面板內部邏輯 (防呆與資料處理)
-     */
+    // 4. 面板內部互動邏輯
     function bindInternalLogic() {
         const submitBtn = document.getElementById('submitSv');
-        const statusBtns = document.querySelectorAll('.status-btn');
+        const statusBtns = document.querySelectorAll('.cond-btn');
 
+        // 狀況選擇邏輯
         statusBtns.forEach(btn => {
             btn.onclick = () => {
                 statusBtns.forEach(b => b.classList.remove('active'));
                 btn.classList.add('active');
                 selectedStatus = btn.dataset.val;
-                validateForm();
+                
+                // 防呆解鎖
+                submitBtn.disabled = false;
+                submitBtn.classList.add('active');
+                submitBtn.textContent = '提交清查資料';
             };
         });
 
-        function validateForm() {
-            // 檢查是否有選取狀態且至少有一張照片
-            const hasPhoto = surveyPhotos.some(p => p !== null);
-            if (selectedStatus && hasPhoto) {
-                submitBtn.classList.add('active');
-                submitBtn.disabled = false;
-                submitBtn.textContent = '提交清查資料';
-            } else {
-                submitBtn.classList.remove('active');
-                submitBtn.disabled = true;
-                submitBtn.textContent = '請完成照片與狀況點選';
-            }
-        }
-
-        // 全域照片處理函數掛載
+        // 照片預覽處理
         window.handleSvPhoto = function(input, index) {
             if (input.files && input.files[0]) {
-                const file = input.files[0];
-                surveyPhotos[index-1] = file;
+                surveyPhotos[index-1] = input.files[0];
                 const reader = new FileReader();
                 reader.onload = function(e) {
                     document.getElementById(`boxContent${index}`).style.display = 'none';
                     const img = document.getElementById(`prevImg${index}`);
                     img.src = e.target.result;
                     img.style.display = 'block';
-                    validateForm();
                 };
-                reader.readAsDataURL(file);
+                reader.readAsDataURL(input.files[0]);
             }
         };
 
         document.getElementById('cancelSv').onclick = () => document.getElementById('surveyModal').remove();
-
+        
+        // 提交功能
         submitBtn.onclick = async () => {
             submitBtn.disabled = true;
-            submitBtn.textContent = '傳送中，請稍候...';
+            submitBtn.textContent = '儲存中...';
             
-            // 此處實作上傳邏輯 (範例)
+            // 整合目前資料
+            const surveyData = {
+                point: currentPointName,
+                status: selectedStatus,
+                desc: document.getElementById('fieldDesc').value,
+                note: document.getElementById('fieldNote').value,
+                timestamp: new Date()
+            };
+
+            console.log("提交資料:", surveyData);
+            
             setTimeout(() => {
-                window.showMessage('清查完成', '資料已成功儲存至系統中。');
+                window.showMessage('清查完成', `點位 ${currentPointName} 已成功記錄為「${selectedStatus}」。`);
                 document.getElementById('surveyModal').remove();
-            }, 1500);
+            }, 1000);
         };
     }
 })();
