@@ -50,14 +50,17 @@
     </div>
 
     <div id="loggedInDashboard" style="display: none;">
-      <h3 id="userEmailDisplay" style="position: relative; display: flex; align-items: center; justify-content: center; min-height: 50px;">
-          <span id="emailContent"></span>
-          
-          <button id="startSurveyBtn" class="survey-start-trigger">
-              <span class="material-symbols-outlined">assignment_turned_in</span> 開始清查
-          </button>
-      </h3>        
-      <div id="kmlControlsDashboard">
+        <div style="position: relative; text-align: center;">
+            <h3 id="userEmailDisplay" style="margin: 15px 0;">
+                <span id="displayEmailText"></span>
+            </h3>
+            
+            <button id="startSurveyBtn" class="survey-start-trigger">
+                <span class="material-symbols-outlined">assignment_turned_in</span> 開始清查
+            </button>
+        </div>
+    
+          <div id="kmlControlsDashboard">
           <div id="uploadKmlSectionDashboard">
               <label for="hiddenKmlFileInput">上傳 KML:</label>
               <!-- hiddenKmlFileInput 僅用於程式碼邏輯，不直接顯示 -->
