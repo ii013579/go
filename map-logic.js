@@ -1,159 +1,139 @@
-﻿// map-logic.js v1.9.6 完整邏輯版
+﻿// map-logic.js v1.9.6 完整提取版
 
-// 全域變數初始化
 let map;
 let markers = L.featureGroup();
+let navButtons = L.featureGroup();
 let geoJsonLayers = L.featureGroup();
 window.allKmlFeatures = [];
-window.currentKmlLayerId = null;
-window.isLoadingKml = false;
 
 document.addEventListener('DOMContentLoaded', () => {
-    // 1. 初始化地圖
+    // 初始化地圖與底圖
     map = L.map('map', {
         attributionControl: true,
         zoomControl: false,
         maxZoom: 25,
         minZoom: 5
     }).setView([23.6, 120.9], 8);
-    window.map = map;
 
-    // 預設底圖 (Google 街道圖)
     L.tileLayer('https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {
         attribution: 'Google Maps',
         maxZoom: 25,
         maxNativeZoom: 20
     }).addTo(map);
 
-    // 將圖層容器加入地圖
     geoJsonLayers.addTo(map);
     markers.addTo(map);
+    navButtons.addTo(map);
+
+    // 設定 z-index 確保標籤與導航按鈕在最上層
+    map.getPane('markerPane').style.zIndex = 600;
 });
 
-/**
- * 核心功能：將 GeoJSON 特徵點展現在地圖上
- * @param {Array} features - GeoJSON features 陣列
- */
-window.addGeoJsonLayers = function(features) {
-    // 清除舊有圖層
+// 核心函數：添加 GeoJSON 圖層 (完全依照 v1.9.6 邏輯)
+window.addGeoJsonLayers = function(geojsonFeatures) {
+    if (!map) return;
     geoJsonLayers.clearLayers();
     markers.clearLayers();
+    navButtons.clearLayers();
 
-    if (!features || features.length === 0) return;
+    geojsonFeatures.forEach(f => {
+        if (f.geometry && f.geometry.type === 'Point' && f.geometry.coordinates) {
+            const [lon, lat] = f.geometry.coordinates;
+            const latlng = L.latLng(lat, lon);
+            const name = f.properties ? (f.properties.name || '未命名') : '未命名';
+            
+            // v1.9.6 專屬的 ID 產生邏輯，用於連結搜尋高亮
+            const labelId = `label-${lat}-${lon}`.replace(/\./g, '_');
 
-    L.geoJSON(features, {
-        pointToLayer: (feature, latlng) => {
-            // 建立自定義紅點圖標 (對應 CSS .custom-dot-icon)
+            // 1. 紅點 Icon (16x16)
             const dotIcon = L.divIcon({
                 className: 'custom-dot-icon',
-                iconSize: [5, 5],
-                iconAnchor: [5, 5]
+                iconSize: [16, 16],
+                iconAnchor: [8, 8]
             });
 
-            const marker = L.marker(latlng, { icon: dotIcon });
+            const dot = L.marker(latlng, { icon: dotIcon, interactive: true });
 
-            // 建立文字標籤 (對應 CSS .marker-label span)
-            const name = feature.properties.name || "未命名";
-            marker.bindTooltip(`<span>${name}</span>`, {
-                permanent: true,
-                direction: 'right',
-                className: 'marker-label',
-                offset: [10, 0]
+            // 2. 文字標籤 (帶有動態 ID)
+            const label = L.marker(latlng, {
+                icon: L.divIcon({
+                    className: 'marker-label',
+                    html: `<span id="${labelId}">${name}</span>`,
+                    iconSize: [null, null],
+                    iconAnchor: [0, 0]
+                }),
+                interactive: false,
+                zIndexOffset: 1000
             });
 
-            // 點擊事件邏輯
-            marker.on('click', (e) => {
-                // 1. 處理 CSS 高亮 (對應 CSS .label-active)
-                document.querySelectorAll('.marker-label span').forEach(el => {
+            dot.on('click', (e) => {
+                L.DomEvent.stopPropagation(e);
+                // 取消舊的高亮
+                document.querySelectorAll('.marker-label span.label-active').forEach(el => {
                     el.classList.remove('label-active');
                 });
-                const tooltip = marker.getTooltip().getElement();
-                if (tooltip) {
-                    tooltip.querySelector('span').classList.add('label-active');
+                // 激活當前標籤
+                const target = document.getElementById(labelId);
+                if (target) target.classList.add('label-active');
+                
+                // 創建導航按鈕
+                if (typeof window.createNavButton === 'function') {
+                    window.createNavButton(latlng, name);
                 }
-
-                // 2. 觸發清查功能 (呼叫 survey-logic.js 中的函數)
-                if (window.openSurveyPanel) {
-                    window.openSurveyPanel(feature, latlng);
-                }
-
-                // 3. 視圖自動對焦
-                map.setView(latlng, Math.max(map.getZoom(), 16));
-                L.DomEvent.stopPropagation(e);
             });
-
-            return marker;
+            
+            markers.addLayer(dot);
+            markers.addLayer(label);
         }
-    }).addTo(geoJsonLayers);
-
-    // 自動縮放至所有點的範圍
-    const bounds = geoJsonLayers.getBounds();
-    if (bounds.isValid()) {
-        map.fitBounds(bounds, { padding: [50, 50] });
-    }
+    });
+    window.allKmlFeatures = geojsonFeatures;
 };
 
-/**
- * 從 Firestore 載入指定的 KML 圖層資料
- * @param {string} kmlId - Firestore 中的 document ID
- */
+// v1.9.6 特有的導航按鈕功能 (包含 offroad 圖示)
+window.createNavButton = function(latlng, name) {
+    if (!map) return;
+    navButtons.clearLayers();
+
+    const googleMapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${latlng.lat},${latlng.lng}`;
+    const buttonHtml = `
+        <div class="nav-button-content">
+            <img src="https://i0.wp.com/canadasafetycouncil.org/wp-content/uploads/2018/08/offroad.png" alt="導航" />
+        </div>
+    `;
+    const buttonIcon = L.divIcon({
+        className: 'nav-button-icon',
+        html: buttonHtml,
+        iconSize: [50, 50],
+        iconAnchor: [25, 25]
+    });
+
+    const navMarker = L.marker(latlng, {
+        icon: buttonIcon,
+        zIndexOffset: 2000,
+        interactive: true
+    }).addTo(navButtons);
+
+    navMarker.on('click', function(e) {
+        L.DomEvent.stopPropagation(e);
+        window.open(googleMapsUrl, '_blank');
+    });
+
+    map.panTo(latlng, { duration: 0.5 });
+};
+
+// 載入與鎖定邏輯
 window.loadKmlLayerFromFirestore = async function(kmlId) {
-    if (!kmlId || window.isLoadingKml) return;
-    
+    if (window.isLoadingKml) return;
     window.isLoadingKml = true;
-    console.log(`正在載入圖層: ${kmlId}`);
-
     try {
-        const docRef = window.db.collection('artifacts').doc(window.appId)
-            .collection('public').doc('data')
-            .collection('kmlLayers').doc(kmlId);
-
-        const doc = await docRef.get();
-
-        if (!doc.exists) {
-            window.showMessage('錯誤', '找不到該圖層資料。');
-            window.isLoadingKml = false;
-            return;
+        const doc = await db.collection('artifacts').doc(appId).collection('public')
+                            .doc('data').collection('kmlLayers').doc(kmlId).get();
+        if (doc.exists) {
+            let geojson = doc.data().geojson;
+            if (typeof geojson === 'string') geojson = JSON.parse(geojson);
+            window.addGeoJsonLayers(geojson.features || []);
         }
-
-        const kmlData = doc.data();
-        let geojson = kmlData.geojson;
-        
-        // 若為字串則解析
-        if (typeof geojson === 'string') {
-            geojson = JSON.parse(geojson);
-        }
-
-        // 過濾無效資料
-        const validFeatures = (geojson.features || []).filter(f => 
-            f.geometry && f.geometry.coordinates && f.properties
-        );
-
-        window.allKmlFeatures = validFeatures;
-        window.currentKmlLayerId = kmlId;
-
-        // 執行展點
-        window.addGeoJsonLayers(validFeatures);
-
-    } catch (error) {
-        console.error("載入 KML 失敗:", error);
-        window.showMessage('錯誤', '載入圖層時發生異常。');
     } finally {
         window.isLoadingKml = false;
     }
-};
-
-/**
- * 全域搜尋定位功能
- * @param {string} targetName - 要尋找的名稱
- */
-window.focusOnFeatureByName = function(targetName) {
-    geoJsonLayers.eachLayer(layer => {
-        layer.eachLayer(marker => {
-            if (marker.getTooltip && marker.getTooltip().getContent().includes(targetName)) {
-                marker.fire('click'); // 模擬點擊，觸發高亮與清查面板
-                map.setView(marker.getLatLng(), 18);
-            }
-        });
-    });
 };
