@@ -1157,27 +1157,27 @@ textarea {
     resize: none;
 }                         
                                                                       
-/* 實體按鈕定位：鎖定在藍框位置 */
+/* 讓按鈕固定在右邊藍框處 */
 .survey-start-trigger {
     position: absolute !important;
-    right: 5px; /* 靠齊容器右側 */
+    right: 5px; /* 貼齊右邊緣 */
     top: 50%;
-    transform: translateY(-50%); /* 垂直居中 */
-    background-color: #28a745 !important;
+    transform: translateY(-50%); /* 垂直置中 */
+    background-color: #28a745 !important; /* 綠色 */
     color: white !important;
     border: none;
     padding: 6px 12px;
-    border-radius: 8px;
+    border-radius: 6px;
     cursor: pointer;
     font-size: 14px;
     font-weight: bold;
     display: flex;
     align-items: center;
     gap: 4px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-    z-index: 1000; /* 確保不被其他元素遮擋 */
     white-space: nowrap;
-}                                               
+    z-index: 99;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}                                              
                                                   
 .survey-start-trigger:hover {                     
     background-color: #218838 !important;         
