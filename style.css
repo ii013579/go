@@ -1153,3 +1153,44 @@ textarea {
     font-family: inherit;
     resize: none;
 }
+
+/* 確保父層容器有相對定位 */                                 
+#userEmailDisplay {                               
+    position: relative;                           
+    display: flex;                                
+    align-items: center;                          
+    justify-content: center;                      
+    min-height: 50px;                             
+    margin: 10px 0;                               
+    padding-right: 110px; /* 為右側按鈕預留空間，防止文字重疊 */  
+}                                                 
+                                                  
+/* 實體化的開始清查按鈕 */                                  
+.survey-start-trigger {                           
+    position: absolute;                           
+    right: 0;                                     
+    top: 50%;                                     
+    transform: translateY(-50%);                  
+    background-color: #28a745 !important;         
+    color: white;                                 
+    border: none;                                 
+    padding: 8px 12px;                            
+    border-radius: 8px;                           
+    cursor: pointer;                              
+    font-size: 14px;                              
+    font-weight: 600;                             
+    display: flex;                                
+    align-items: center;                          
+    gap: 5px;                                     
+    box-shadow: 0 2px 4px rgba(0,0,0,0.15);       
+    z-index: 5;                                   
+    white-space: nowrap;                          
+}                                                 
+                                                  
+.survey-start-trigger:hover {                     
+    background-color: #218838 !important;         
+}                                                 
+                                                  
+.survey-start-trigger .material-symbols-outlined {
+    font-size: 18px;                              
+}                                                 
