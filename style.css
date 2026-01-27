@@ -1,5 +1,5 @@
 /* ===================================================== 
-   1. 變數與基礎設定
+   1. 全局與基本佈局 (保留原本 Inter 字體與 Flex 設定)
    ===================================================== */
 :root {
     --primary-gradient: linear-gradient(135deg, #6dd5ed, #2193b0);
@@ -8,77 +8,56 @@
     --danger-color: #dc3545;
     --success-color: #28a745;
     --bg-color: #f0f2f5;
-    --card-bg: #ffffff;
-    --border-radius: 8px;
-    --shadow-sm: 0 2px 4px rgba(0,0,0,0.15);
     --shadow-md: 0 4px 12px rgba(0,0,0,0.1);
-    /* Z-index 階層表 */
-    --z-map: 1;
-    --z-controls: 1000;
-    --z-auth: 1001;
-    --z-search-results: 2000;
-    --z-modal: 3000;
+    --border-radius: 8px;
 }
 
 html, body {
     margin: 0; padding: 0; height: 100%;
-    font-family: 'Inter', -apple-system, sans-serif;
-    color: #333; background-color: var(--bg-color);
+    font-family: 'Inter', sans-serif; color: #333;
+}
+body {
+    display: flex; flex-direction: column; height: 100vh;
+    background-color: var(--bg-color); overflow: hidden;
 }
 
-body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
-
 /* ===================================================== 
-   2. 頂部標題與編輯按鈕
+   2. 標題與認證面板
    ===================================================== */
 #title {
     text-align: center; padding: 12px; font-size: 24px; font-weight: 700;
     background: var(--primary-gradient); color: white;
-    box-shadow: var(--shadow-sm);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
     border-bottom-left-radius: 12px; border-bottom-right-radius: 12px;
-    position: relative; z-index: var(--z-auth);
+    position: relative; z-index: 1001;
 }
 
 #editButton {
     position: absolute; top: 50%; right: 15px; transform: translateY(-50%);
     background-color: #f0f0f0; color: #333; padding: 8px 15px;
     border: none; border-radius: var(--border-radius);
-    font-weight: 600; cursor: pointer; transition: all 0.2s;
+    font-size: 16px; font-weight: 600; cursor: pointer;
+    transition: all 0.2s; box-shadow: 0 2px 4px rgba(0,0,0,0.2);
 }
-#editButton:hover { background-color: #e0e0e0; transform: translateY(-50%) scale(1.03); }
+
+#authSection {
+    background: #fff; padding: 15px; box-shadow: var(--shadow-md);
+    display: none; flex-direction: column; gap: 15px;
+    position: relative; z-index: 1001; border-bottom: 1px solid #eee;
+}
 
 /* ===================================================== 
-   3. 表單、輸入框與通用按鈕 (整合)
+   3. 搜尋與控制項 (整合原本搜尋結果樣式)
    ===================================================== */
-#kmlInput, #searchBox, #kmlLayerSelect, #kmlLayerSelectDashboard, 
-#registrationCodeInput, #nicknameInput, #authSection input {
-    padding: 10px 12px; font-size: 15px; border-radius: var(--border-radius);
-    border: 1px solid #dcdcdc; transition: all 0.3s;
-    width: 100%; box-sizing: border-box;
+#controls {
+    padding: 15px; background: #fff; box-shadow: var(--shadow-md);
+    display: flex; flex-direction: column; gap: 10px; z-index: 1000;
 }
 
-.action-buttons, .admin-option-button {
-    color: white; border: none; padding: 10px 20px; border-radius: var(--border-radius);
-    cursor: pointer; font-size: 15px; font-weight: 600; transition: all 0.2s;
-    width: 100%; text-align: center;
-}
-.action-buttons:hover { transform: translateY(-1px); filter: brightness(1.1); }
-.action-buttons:disabled { background-color: #ccc !important; cursor: not-allowed; transform: none; }
-
-/* 特定按鈕顏色 */
-.google-btn { background-color: #4285F4; display: flex; align-items: center; justify-content: center; gap: 10px; }
-.upload-btn, .upload-kml-dashboard-btn { background-color: var(--accent-color); }
-.delete-btn, .delete-user-btn { background-color: var(--danger-color); }
-.inspection-on { background-color: #9ecff3; }
-.inspection-off { background-color: #e6b7d6; }
-
-/* ===================================================== 
-   4. 搜尋系統
-   ===================================================== */
 #searchContainer {
-    display: flex; align-items: center; gap: 8px; background: white;
-    padding: 0 12px; border: 1px solid #dcdcdc; border-radius: var(--border-radius);
-    z-index: var(--z-controls); transition: border-radius 0.2s;
+    display: flex; align-items: center; gap: 8px; padding: 0 12px;
+    background: #fff; border: 1px solid #dcdcdc; border-radius: var(--border-radius);
+    transition: all 0.2s;
 }
 #searchContainer.search-active { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
 
@@ -87,25 +66,36 @@ body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
     background: rgba(255, 255, 255, 0.98); overflow-y: auto;
     border: 1px solid #ddd; border-top: none;
     border-bottom-left-radius: var(--border-radius); border-bottom-right-radius: var(--border-radius);
-    box-shadow: var(--shadow-md); z-index: var(--z-search-results);
-    display: none; padding: 10px; gap: 8px; box-sizing: border-box;
+    box-shadow: 0 6px 16px rgba(0,0,0,0.18);
+    display: none; padding: 10px; z-index: 2000; box-sizing: border-box;
 }
-#searchResults.columns-3 { display: grid; grid-template-columns: repeat(3, 1fr); }
-#searchResults.columns-2 { display: grid; grid-template-columns: repeat(2, 1fr); }
+#searchResults.columns-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+#searchResults.columns-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
 
 .result-item {
     padding: 10px 12px; border: 1px solid #e0e0e0; border-radius: 6px;
-    background: #fdfdfd; cursor: pointer; text-align: center; font-weight: 500;
+    background: #fdfdfd; cursor: pointer; text-align: center;
     white-space: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch;
 }
-.result-item:hover { background-color: #e6f0ff; transform: translateY(-2px); }
 
 /* ===================================================== 
-   5. 地圖組件與標記
+   4. 清查按鈕 (修復切換失效)
    ===================================================== */
-#map { flex-grow: 1; margin: 15px; border-radius: 12px; box-shadow: var(--shadow-md); z-index: var(--z-map); }
+#inspectionToggleBtn {
+    width: 120px; flex-shrink: 0; font-weight: 600;
+    transition: all 0.3s; border: none; padding: 8px;
+    border-radius: var(--border-radius); cursor: pointer;
+}
 
-/* 用戶位置脈衝點 */
+/* 提升權重解決無法變色的問題 */
+#inspectionToggleBtn.inspection-off { background-color: #e6b7d6; color: #333; }
+#inspectionToggleBtn.inspection-on { background-color: #9ecff3; color: #004085; }
+
+/* ===================================================== 
+   5. 地圖組件與動畫 (保留脈衝點與標籤樣式)
+   ===================================================== */
+#map { flex-grow: 1; margin: 15px; border-radius: 12px; box-shadow: var(--shadow-md); z-index: 1; }
+
 .user-location-dot {
     background-color: #1a73e8; border: 2px solid white; border-radius: 50%;
     width: 16px; height: 16px; box-shadow: 0 0 0 3px rgba(26, 115, 232, 0.4);
@@ -117,55 +107,41 @@ body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
     100% { box-shadow: 0 0 0 0 rgba(26, 115, 232, 0); }
 }
 
-/* 地圖文字標籤 */
 .marker-label span {
     font-size: 13px; font-weight: bold; color: #333; white-space: nowrap;
     text-shadow: -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff, 1px 1px 0 #fff;
     pointer-events: none;
 }
 .marker-label span.label-active {
-    color: var(--accent-color); font-size: 18px; background: white;
-    padding: 3px 6px; border-radius: 6px; box-shadow: var(--shadow-sm);
-    transform: translateX(20px);
+    color: #007bff; font-size: 18px; background: white;
+    padding: 3px 6px; border-radius: 6px; box-shadow: 0 0 3px rgba(0,0,0,0.2);
+    transform: translateX(20px); z-index: 9999;
 }
 
 /* ===================================================== 
-   6. 用戶列表與 Modal
+   6. 通用 UI 組件 (彈窗、列表、按鈕)
    ===================================================== */
-.user-list-header, .user-card {
-    display: grid; grid-template-columns: 2fr 1.5fr 1.5fr 2fr;
-    align-items: center; padding: 10px 12px; gap: 8px;
-}
-.user-list-header { background: #f0f0f0; border-bottom: 2px solid #ccc; font-weight: bold; }
-.user-card { background: #fdfdfd; border-bottom: 1px solid #e0e0e0; }
-
 .message-box-overlay {
     position: fixed; inset: 0; background: rgba(0, 0, 0, 0.5);
     display: flex; justify-content: center; align-items: center;
-    z-index: var(--z-modal); opacity: 0; visibility: hidden; transition: 0.3s;
+    z-index: 2000; opacity: 0; visibility: hidden; transition: 0.3s;
 }
 .message-box-overlay.visible { opacity: 1; visibility: visible; }
 .message-box-content {
-    background: #fff; padding: 30px; border-radius: 12px; width: 90%; max-width: 400px;
-    transform: translateY(-20px); transition: 0.3s; text-align: center;
+    background: #fff; padding: 30px; border-radius: 12px;
+    width: 90%; max-width: 400px; transform: translateY(-20px); transition: 0.3s;
 }
 .message-box-overlay.visible .message-box-content { transform: translateY(0); }
 
-/* ===================================================== 
-   7. 響應式優化 (Mobile)
-   ===================================================== */
+.action-buttons {
+    background-color: #28a745; color: white; border: none; padding: 10px;
+    border-radius: var(--border-radius); font-weight: 600; cursor: pointer; width: 100%;
+}
+.upload-btn { background-color: #007bff; }
+.delete-btn { background-color: #dc3545; }
+
+/* 響應式優化 */
 @media (max-width: 768px) {
-    /* 針對手機關閉複雜特效以提升效能 */
-    .user-card, .action-buttons, .message-box-content {
-        box-shadow: none !important;
-        border-radius: 4px !important;
-    }
-    
-    #title { font-size: 20px; }
-    
-    /* 確保 Leaflet 控制項不擋住 UI */
+    .user-card, .action-buttons, .message-box-content { box-shadow: none !important; border-radius: 4px !important; }
     .leaflet-control-container { z-index: 500 !important; }
-    
-    /* 列表在手機上可能需要橫向捲動或縮小文字 */
-    .user-list-header, .user-card { font-size: 12px; grid-template-columns: 1.5fr 1fr 1fr 1.5fr; }
 }

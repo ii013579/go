@@ -1,59 +1,66 @@
-// inspection.js v2.0
-// 專責：清查模式 UI 與彈窗（功能待擴充）
-
 window.isInspectionMode = false;
+window.inspectionStatusMap = {};
 
-/* ===== 清查模式切換 ===== */
+/* ===== 切換功能 (修復邏輯) ===== */
 function toggleInspectionMode() {
-  const btn = document.getElementById('inspectionToggleBtn');
+    const btn = document.getElementById('inspectionToggleBtn');
+    if (!btn) return;
 
-  window.isInspectionMode = !window.isInspectionMode;
+    window.isInspectionMode = !window.isInspectionMode;
+    const isOn = window.isInspectionMode;
 
-  if (window.isInspectionMode) {
-    btn.textContent = '關閉清查';
-    btn.classList.remove('inspection-off');
-    btn.classList.add('inspection-on');
-  } else {
-    btn.textContent = '開啟清查';
-    btn.classList.remove('inspection-on');
-    btn.classList.add('inspection-off');
-  }
+    // 1. 更新文字
+    btn.textContent = isOn ? '關閉清查' : '開啟清查';
 
-  // ⚠️ v2.0：這裡不做任何 map 操作
+    // 2. 切換 Class (使用 replace 確保不會重複)
+    if (isOn) {
+        btn.classList.remove('inspection-off');
+        btn.classList.add('inspection-on');
+    } else {
+        btn.classList.remove('inspection-on');
+        btn.classList.add('inspection-off');
+    }
+    
+    console.log("清查模式已切換至:", isOn);
 }
 
-/* ===== 對外提供：開啟清查視窗 ===== */
+/* ===== 視窗控制 ===== */
 window.openInspectionModal = function (featureId, labelText) {
-  const modal = document.getElementById('inspectionModalOverlay');
-  const title = document.getElementById('inspectionModalTitle');
-
-  title.textContent = `點號：${labelText || featureId || ''}`;
-  modal.classList.add('visible');
+    const modal = document.getElementById('inspectionModalOverlay');
+    const title = document.getElementById('inspectionModalTitle');
+    if (modal && title) {
+        window.currentInspectionFeatureId = featureId;
+        title.textContent = `點號：${labelText || featureId || ''}`;
+        modal.classList.add('visible');
+    }
 };
 
-/* ===== 關閉視窗 ===== */
 function closeInspectionModal() {
-  document
-    .getElementById('inspectionModalOverlay')
-    .classList.remove('visible');
+    const modal = document.getElementById('inspectionModalOverlay');
+    if (modal) modal.classList.remove('visible');
 }
 
-/* ===== 綁定事件 ===== */
+/* ===== 事件初始化 ===== */
 document.addEventListener('DOMContentLoaded', () => {
-  const toggleBtn = document.getElementById('inspectionToggleBtn');
-  if (toggleBtn) {
-    toggleBtn.addEventListener('click', toggleInspectionMode);
-  }
+    // 綁定切換按鈕
+    const toggleBtn = document.getElementById('inspectionToggleBtn');
+    if (toggleBtn) {
+        // 確保初始 Class 存在
+        if (!toggleBtn.classList.contains('inspection-on')) {
+            toggleBtn.classList.add('inspection-off');
+        }
+        toggleBtn.addEventListener('click', toggleInspectionMode);
+    }
 
-  document
-    .getElementById('inspectionCancelBtn')
-    ?.addEventListener('click', closeInspectionModal);
-
-  document
-    .getElementById('inspectionSubmitBtn')
-    ?.addEventListener('click', () => {
-      // v2.0 先只關窗
-      closeInspectionModal();
-    });
+    // 綁定提交按鈕
+    const submitBtn = document.getElementById('inspectionSubmitBtn');
+    if (submitBtn) {
+        submitBtn.addEventListener('click', () => {
+            const featureId = window.currentInspectionFeatureId;
+            if (!featureId) return;
+            window.inspectionStatusMap[featureId] = true;
+            if (window.markFeatureInspectionDone) window.markFeatureInspectionDone(featureId);
+            closeInspectionModal();
+        });
+    }
 });
-
