@@ -208,6 +208,12 @@ body {
     flex-shrink: 0;
 }
 
+/* 清查按鈕寬度 */
+#inspectionToggleBtn {
+    width: 120px;
+    flex-shrink: 0;
+}
+
 /* 註冊碼顯示區域的彈性佈局 */
 .registration-code-display-group {
     display: flex;
@@ -929,11 +935,6 @@ body {
 /* =====================================================
    v2.0 清查模式 UI */
    ===================================================== */
-/* 清查按鈕寬度 */
-#inspectionToggleBtn {
-    width: 80px;
-    flex-shrink: 0;
-}
 
 /* 清查切換按鈕 */
 .inspection-off {
@@ -959,4 +960,3 @@ body {
 }
 
 /* ===================================================== */
-
