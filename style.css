@@ -931,7 +931,7 @@ body {
    ===================================================== */
 /* 清查按鈕寬度 */
 #inspectionToggleBtn {
-    width: 120px;
+    width: 90px;
     flex-shrink: 0;
 }
 
