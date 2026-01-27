@@ -202,8 +202,8 @@ body {
     box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.1);
 }
 
-/* 上傳和刪除按鈕寬度 */
-#uploadKmlSubmitBtnDashboard, #deleteSelectedKmlBtn {
+/* 上傳和刪除和清查按鈕寬度 */
+#uploadKmlSubmitBtnDashboard, #deleteSelectedKmlBtn, #inspectionToggleBtn{
     width: 80px;
     flex-shrink: 0;
 }
