@@ -52,24 +52,8 @@ body {
   box-shadow: 0 4px 8px rgba(0,0,0,0.25);
 }
 
-/* 圖釘按鈕樣式  */
-.pin-button-icon {
-  width: 90px;
-  height: 40px;
-  padding: 0;
-  border: none;
-  border-radius: 8px;
-  background-color: #ffffff; 
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  cursor: pointer;
-  transition: background-color 0.3s, transform 0.2s, box-shadow 0.2s;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-  box-sizing: border-box;
-}
-
-/* 圖釘按鈕：固定大小、靠中、狀態切換 */
+/* 圖釘按鈕樣式（統一） */
+.pin-button-icon,
 #pinButton.pin-button-icon {
   width: 30px;
   height: 40px;
@@ -83,8 +67,8 @@ body {
   cursor: pointer;
   transition: background-color 0.3s, transform 0.2s, box-shadow 0.2s;
   box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-  flex-shrink: 0; /* 避免被 flex 容器壓縮 */
   box-sizing: border-box;
+  flex-shrink: 0; /* 避免被 flex 容器壓縮 */
 }
 
 /* 圖示樣式（固定大小、黑色） */
@@ -109,7 +93,8 @@ body {
 }
 
 /* hover 效果 */
-#pinButton:hover:not(:disabled) {
+#pinButton:hover:not(:disabled),
+.pin-button-icon:hover:not(:disabled) {
   transform: scale(1.03);
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.25);
 }
@@ -141,85 +126,84 @@ body {
   box-sizing: border-box;
 }
 #loginForm, #loggedInDashboard {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 #loggedInDashboard {
-    text-align: center;
+  text-align: center;
 }
 #userEmailDisplay {
-    font-size: 18px;
-    font-weight: 600;
-    color: #2193b0;
-    margin-bottom: 5px;
-    text-align: center;
+  font-size: 18px;
+  font-weight: 600;
+  color: #2193b0;
+  margin-bottom: 5px;
+  text-align: center;
 }
 
 /* KML 管理區塊內的樣式 */
 #kmlControlsDashboard, #registrationSettingsSection, #userManagementSection {
-    border-top: 1px solid #eee;
-    padding-top: 10px;
-    margin-top: 10px;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
+  border-top: 1px solid #eee;
+  padding-top: 10px;
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 /* 上傳和刪除按鈕佈局 */
 #uploadKmlSectionDashboard, #deleteKmlSectionDashboard {
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-    gap: 8px;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
 }
 #uploadKmlSectionDashboard label, #deleteKmlSectionDashboard label {
-    font-size: 14px;
-    font-weight: 500;
-    white-space: nowrap;
-    flex-shrink: 0;
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 #selectedKmlFileNameDashboard {
-    flex-grow: 1;
-    font-size: 14px;
-    color: #555;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    border: 1px solid #dcdcdc;
-    padding: 8px 10px;
-    border-radius: 6px;
-    background-color: #f9f9f9;
-    transition: border-color 0.3s, box-shadow 0.3s;
-    box-sizing: border-box;
-    height: 36px;
-    display: flex;
-    align-items: center;
-    cursor: pointer;
+  flex-grow: 1;
+  font-size: 14px;
+  color: #555;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border: 1px solid #dcdcdc;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background-color: #f9f9f9;
+  transition: border-color 0.3s, box-shadow 0.3s;
+  box-sizing: border-box;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
 }
 #selectedKmlFileNameDashboard:hover {
-    border-color: #4a90e2;
-    box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.1);
+  border-color: #4a90e2;
+  box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.1);
 }
 
 /* 上傳和刪除按鈕寬度 */
 #uploadKmlSubmitBtnDashboard, #deleteSelectedKmlBtn {
-    width: 80px;
-    flex-shrink: 0;
+  width: 80px;
+  flex-shrink: 0;
 }
 
 /* =====清查功能====== */
 /* 清查按鈕寬度 */
 #inspectionToggleBtn {
-    width: 100px;
-    flex-shrink: 0;
+  width: 100px;
+  flex-shrink: 0;
 }
 
 /* 清查切換按鈕 */
 .inspection-off {
   background-color: #e6b7d6; /* 粉紫 */
 }
-
 .inspection-on {
   background-color: #9ecff3; /* 粉藍 */
 }
@@ -240,41 +224,41 @@ body {
 
 /* 註冊碼顯示區域的彈性佈局 */
 .registration-code-display-group {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    flex-wrap: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: nowrap;
 }
 .registration-code-display-group button {
-    flex-shrink: 0;
-    width: auto;
+  flex-shrink: 0;
+  width: auto;
 }
 .registration-code-content-wrapper {
-    display: flex;
-    flex-grow: 1;
-    align-items: center;
-    gap: 5px;
-    background-color: #e6f0ff;
-    padding: 8px;
-    border-radius: 5px;
-    overflow: hidden;
+  display: flex;
+  flex-grow: 1;
+  align-items: center;
+  gap: 5px;
+  background-color: #e6f0ff;
+  padding: 8px;
+  border-radius: 5px;
+  overflow: hidden;
 }
 #registrationCodeDisplay {
-    word-break: break-all;
-    text-align: center;
-    flex-grow: 1;
-    user-select: text;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+  word-break: break-all;
+  text-align: center;
+  flex-grow: 1;
+  user-select: text;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 #registrationCodeCountdown {
-    font-weight: bold;
-    color: #007bff;
-    white-space: nowrap;
-    min-width: 80px;
-    text-align: right;
-    flex-shrink: 0;
+  font-weight: bold;
+  color: #007bff;
+  white-space: nowrap;
+  min-width: 80px;
+  text-align: right;
+  flex-shrink: 0;
 }
 
 /* 控制面板樣式 (預設顯示) */
@@ -329,9 +313,9 @@ body {
 
 /* 當搜尋結果顯示時，調整搜尋容器的底部圓角和邊框 */
 #searchContainer.search-active {
-    border-bottom-left-radius: 0;
-    border-bottom-right-radius: 0;
-    border-bottom-color: transparent; /* 讓底部邊框透明，與搜尋結果框連接 */
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+  border-bottom-color: transparent; /* 讓底部邊框透明，與搜尋結果框連接 */
 }
 
 /* Material Symbols 圖標樣式 */
@@ -376,15 +360,14 @@ body {
   box-shadow: 0 6px 16px rgba(0,0,0,0.18);
   font-size: 15px;
   display: none; /* 預設隱藏 */
-  position: absolute;
-  z-index: 2000; !important;
-  grid-template-columns: repeat(3, 1fr); /* 固定為三欄 */
+  z-index: 2000 !important;
   gap: 8px; /* 項目間距 */
   padding: 10px;
   box-sizing: border-box;
 }
 
-.result-item { 
+/* 搜尋結果項目 */
+.result-item {
   padding: 10px 12px;
   border: 1px solid #e0e0e0;
   border-radius: 8px;
@@ -395,39 +378,33 @@ body {
   font-weight: 500;
 
   white-space: nowrap;         /* 不換行 */
-  overflow-x: auto;            /* ✅ 橫向可捲動 */
-  overflow-y: hidden;          /* ✅ 不讓它上下溢出 */
-  text-overflow: unset;        /* ✅ 移除 ... 處理 */
-  -webkit-overflow-scrolling: touch;  /* ✅ 手機滑動更順 */
+  overflow-x: auto;            /* 橫向可捲動 */
+  overflow-y: hidden;          /* 不讓它上下溢出 */
+  text-overflow: unset;        /* 移除 ... 處理 */
+  -webkit-overflow-scrolling: touch;  /* 手機滑動更順 */
 
   transition: background-color 0.2s, transform 0.2s;
 }
-
-/* 預設：3 欄 */
-#searchResults.columns-3 {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
-}
-
-/* 若名稱過長時：切成 2 欄 */
-#searchResults.columns-2 {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 8px;
-}
-
 .result-item:hover {
   background-color: #e6f0ff;
   transform: translateY(-2px);
 }
-
 .result-item::-webkit-scrollbar {
   height: 4px;
 }
 .result-item::-webkit-scrollbar-thumb {
   background: #ccc;
   border-radius: 2px;
+}
+
+/* 結構化欄位：3 欄或 2 欄 */
+#searchResults.columns-3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+}
+#searchResults.columns-2 {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
 }
 
 /* 地圖容器樣式 */
@@ -442,14 +419,13 @@ body {
 /* Leaflet 控制項容器樣式 */
 /* 這裡的 top 和 left 需要根據實際佈局和避免重疊來調整 */
 .leaflet-control-container .leaflet-top.leaflet-left {
-    display: flex;
-    flex-direction: column; /* 將縮放和定位按鈕堆疊 */
-    align-items: flex-start;
-    gap: 8px; /* 按鈕間距 */
-    /* 調整位置，確保不與搜尋結果重疊 */
-    left: 15px; /* 預設的左邊距 */
-    top: 15px; /* 預設的上邊距 */
-    z-index: 900 !important; /* 確保在搜尋結果之下，避免遮擋 */
+  display: flex;
+  flex-direction: column; /* 將縮放和定位按鈕堆疊 */
+  align-items: flex-start;
+  gap: 8px; /* 按鈕間距 */
+  left: 15px; /* 預設的左邊距 */
+  top: 15px; /* 預設的上邊距 */
+  z-index: 900 !important; /* 確保在搜尋結果之下，避免遮擋 */
 }
 
 /* 地標文字標籤樣式 */
@@ -457,7 +433,6 @@ body {
   display: inline-block;
   transform: translate(10px, -6px);
   font-size: 13px;
-  font-weight: 500;
   font-weight: bold;
   color: #333;
   white-space: nowrap;
@@ -512,98 +487,98 @@ body {
 
 /* 自定義圓點圖標樣式 */
 .custom-dot-icon {
-    background-color: #e74c3c; /* 紅點 */
-    border: 2px solid white;
-    border-radius: 50%;
-    width: 5px;
-    height: 5px;
-    pointer-events: auto;
-    display: block;
-    margin-left: -5px;
-    margin-top: -5px;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+  background-color: #e74c3c; /* 紅點 */
+  border: 2px solid white;
+  border-radius: 50%;
+  width: 5px;
+  height: 5px;
+  pointer-events: auto;
+  display: block;
+  margin-left: -5px;
+  margin-top: -5px;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.2);
 }
 
 /* 訊息框和註冊模態框樣式 */
 .message-box-overlay, .registration-modal-overlay, .confirmation-modal-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(0, 0, 0, 0.5);
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    z-index: 2000;
-    opacity: 0;
-    visibility: hidden;
-    transition: opacity 0.3s ease, visibility 0.3s ease;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 2000;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.3s ease, visibility 0.3s ease;
 }
 .message-box-overlay.visible, .registration-modal-overlay.visible, .confirmation-modal-overlay.visible {
-    opacity: 1;
-    visibility: visible;
+  opacity: 1;
+  visibility: visible;
 }
 .message-box-content, .registration-modal-content, .confirmation-modal-content {
-    background: #fff;
-    padding: 30px;
-    border-radius: 12px;
-    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
-    text-align: center;
-    max-width: 400px;
-    width: 90%;
-    transform: translateY(-20px);
-    transition: transform 0.3s ease;
+  background: #fff;
+  padding: 30px;
+  border-radius: 12px;
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+  text-align: center;
+  max-width: 400px;
+  width: 90%;
+  transform: translateY(-20px);
+  transition: transform 0.3s ease;
 }
 .message-box-overlay.visible .message-box-content,
 .registration-modal-overlay.visible .registration-modal-content,
 .confirmation-modal-overlay.visible .confirmation-modal-content {
-    transform: translateY(0);
+  transform: translateY(0);
 }
 .message-box-content h3, .registration-modal-content h3, .confirmation-modal-content h3 {
-    margin-top: 0;
-    color: #333;
-    font-size: 22px;
-    margin-bottom: 15px;
+  margin-top: 0;
+  color: #333;
+  font-size: 22px;
+  margin-bottom: 15px;
 }
 .message-box-content p, .registration-modal-content p, .confirmation-modal-content p {
-    color: #555;
-    font-size: 16px;
-    line-height: 1.6;
-    margin-bottom: 25px;
+  color: #555;
+  font-size: 16px;
+  line-height: 1.6;
+  margin-bottom: 25px;
 }
 .message-box-content button, .registration-modal-content button, .confirmation-modal-content button {
-    background-color: #4a90e2;
-    color: white;
-    border: none;
-    padding: 12px 25px;
-    border-radius: 8px;
-    cursor: pointer;
-    font-size: 16px;
-    font-weight: 600;
-    transition: background-color 0.2s, transform 0.2s;
+  background-color: #4a90e2;
+  color: white;
+  border: none;
+  padding: 12px 25px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 600;
+  transition: background-color 0.2s, transform 0.2s;
 }
 .message-box-content button:hover, .registration-modal-content button:hover, .confirmation-modal-content button:hover {
-    background-color: #357ABD;
-    transform: translateY(-1px);
+  background-color: #357ABD;
+  transform: translateY(-1px);
 }
 .registration-modal-content input[type="text"] {
-    padding: 10px 12px;
-    font-size: 15px;
-    border-radius: 8px;
-    border: 1px solid #dcdcdc;
-    width: calc(100% - 24px);
-    box-sizing: border-box;
-    margin-bottom: 15px;
+  padding: 10px 12px;
+  font-size: 15px;
+  border-radius: 8px;
+  border: 1px solid #dcdcdc;
+  width: calc(100% - 24px);
+  box-sizing: border-box;
+  margin-bottom: 15px;
 }
 .registration-modal-content .button-group, .confirmation-modal-content .button-group {
-    display: flex;
-    justify-content: center;
-    gap: 15px;
+  display: flex;
+  justify-content: center;
+  gap: 15px;
 }
 .confirmation-modal-content .action-buttons {
-    flex: 1;
-    max-width: 120px;
+  flex: 1;
+  max-width: 120px;
 }
 
 /* 通用操作按鈕樣式 */
@@ -624,10 +599,10 @@ body {
   transform: translateY(-1px);
 }
 .action-buttons:disabled, .admin-option-button:disabled {
-    background-color: #cccccc;
-    cursor: not-allowed;
-    transform: none;
-    box-shadow: none;
+  background-color: #cccccc;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
 }
 
 /* 各類特定按鈕樣式 */
@@ -651,258 +626,233 @@ body {
 
 /* 管理員選項按鈕 (Dashboard 內部按鈕) */
 .admin-option-button.upload-kml-dashboard-btn {
-    background-color: #007bff;
+  background-color: #007bff;
 }
 .admin-option-button.delete-kml-dashboard-btn {
-    background-color: #dc3545;
+  background-color: #dc3545;
 }
 .admin-option-button.add-user-dashboard-btn {
-    background-color: #17a2b8;
+  background-color: #17a2b8;
 }
 .admin-option-button.add-user-dashboard-btn:hover {
-    background-color: #138496;
+  background-color: #138496;
 }
 
 /* 新增用戶區塊樣式 */
 #addUserSection {
-    border-top: 1px solid #eee;
-    padding-top: 15px;
-    margin-top: 15px;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
+  border-top: 1px solid #eee;
+  padding-top: 15px;
+  margin-top: 15px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 #addUserSection h4 {
-    margin-top: 0;
-    margin-bottom: 5px;
-    font-size: 18px;
-    color: #555;
+  margin-top: 0;
+  margin-bottom: 5px;
+  font-size: 18px;
+  color: #555;
 }
 
 /* 自定義定位按鈕樣式 */
 .leaflet-control-locate-me {
-	  position: relative;
-	  z-index: 500; !important;
-    background-color: #fff;
-    border-radius: 4px;
-    box-shadow: 0 1px 5px rgba(0,0,0,0.65);
-    padding: 0;
-    cursor: pointer;
-    text-align: center;
-    line-height: 28px;
-    width: 30px;
-    height: 30px;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    transition: background-color 0.2s, box-shadow 0.2s;
+  position: relative;
+  z-index: 500 !important;
+  background-color: #fff;
+  border-radius: 4px;
+  box-shadow: 0 1px 5px rgba(0,0,0,0.65);
+  padding: 0;
+  cursor: pointer;
+  text-align: center;
+  line-height: 28px;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  transition: background-color 0.2s, box-shadow 0.2s;
 }
 .leaflet-control-locate-me:hover {
-    background-color: #f4f4f4;
-    box-shadow: 0 1px 5px rgba(0,0,0,0.8);
+  background-color: #f4f4f4;
+  box-shadow: 0 1px 5px rgba(0,0,0,0.8);
 }
 .leaflet-control-locate-me a {
-    display: block;
-    width: 100%;
-    height: 100%;
-    text-decoration: none;
-    color: #333;
-    font-size: 20px;
+  display: block;
+  width: 100%;
+  height: 100%;
+  text-decoration: none;
+  color: #333;
+  font-size: 20px;
 }
 
+/* Layers control */
 .leaflet-control-layers {
-	  position: relative;
-	  z-index: 1200;
-    width: 30px;
-    height: 30px;
-    background-color: #fff;
-    border-radius: 4px;
-    box-shadow: 0 1px 5px rgba(0,0,0,0.65);
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    cursor: pointer;
+  position: relative;
+  z-index: 1200;
+  width: 30px;
+  height: 30px;
+  background-color: #fff;
+  border-radius: 4px;
+  box-shadow: 0 1px 5px rgba(0,0,0,0.65);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  cursor: pointer;
 }
-
 .leaflet-control-layers-expanded {
-    width: auto !important;
-    height: auto !important;
+  width: auto !important;
+  height: auto !important;
 }
 
 /* 用戶位置點樣式 (脈衝動畫) */
 .user-location-dot {
-    background-color: #1a73e8;
-    border: 2px solid white;
-    border-radius: 50%;
-    width: 16px;
-    height: 16px;
-    box-shadow: 0 0 0 3px rgba(26, 115, 232, 0.4);
-    animation: pulse 1.5s infinite ease-out;
-    will-change: box-shadow;
+  background-color: #1a73e8;
+  border: 2px solid white;
+  border-radius: 50%;
+  width: 16px;
+  height: 16px;
+  box-shadow: 0 0 0 3px rgba(26, 115, 232, 0.4);
+  animation: pulse 1.5s infinite ease-out;
+  will-change: box-shadow;
 }
-
 @keyframes pulse {
-    0% {
-        box-shadow: 0 0 0 0 rgba(26, 115, 232, 0.4);
-    }
-    70% {
-        box-shadow: 0 0 0 10px rgba(26, 115, 232, 0);
-    }
-    100% {
-        box-shadow: 0 0 0 0 rgba(26, 115, 232, 0);
-    }
+  0% {
+    box-shadow: 0 0 0 0 rgba(26, 115, 232, 0.4);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgba(26, 115, 232, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(26, 115, 232, 0);
+  }
 }
 
-/* 列表容器 */
+/* 列表容器與使用者列表 */
 #userList {
-    font-size: 14px;
+  font-size: 14px;
 }
-
-/* 使用者列表標題列 */
 .user-list-header {
-    display: grid;
-    grid-template-columns: 2fr 1.5fr 1.5fr 2fr;
-    align-items: center;
-    padding: 10px 12px;
-    border-bottom: 2px solid #ccc;
-    background-color: #f0f0f0;
-    font-weight: bold;
-    font-size: 15px;
+  display: grid;
+  grid-template-columns: 2fr 1.5fr 1.5fr 2fr;
+  align-items: center;
+  padding: 10px 12px;
+  border-bottom: 2px solid #ccc;
+  background-color: #f0f0f0;
+  font-weight: bold;
+  font-size: 15px;
 }
-
-/*設定寬度*/
 .header-item {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    padding: 0 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 0 6px;
 }
-
-/* 每一筆使用者資料 */
 .user-card {
-    display: grid;
-    grid-template-columns: 2fr 1.5fr 1.5fr 2fr;
-    align-items: center;
-    padding: 10px 12px;
-    border-bottom: 1px solid #e0e0e0;
-    background-color: #fdfdfd;
-    font-size: 14px;
+  display: grid;
+  grid-template-columns: 2fr 1.5fr 1.5fr 2fr;
+  align-items: center;
+  padding: 10px 12px;
+  border-bottom: 1px solid #e0e0e0;
+  background-color: #fdfdfd;
+  font-size: 14px;
 }
-
-/* Email 與暱稱欄位 */
-.user-email,
-.user-nickname {
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+.user-email, .user-nickname {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-
-/* 角色欄位（select + label） */
 .user-role-controls {
-    display: flex;
-    align-items: center;
-    gap: 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 .user-role-select {
-    padding: 6px 8px;
-    border-radius: 6px;
-    border: 1px solid #dcdcdc;
-    font-size: 14px;
-    flex: 1;
-    min-width: 80px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid #dcdcdc;
+  font-size: 14px;
+  flex: 1;
+  min-width: 80px;
 }
-
-/* 操作按鈕區塊 */
 .user-actions {
-    display: flex;
-    gap: 8px;
-    justify-content: flex-end;
-    flex-wrap: nowrap;
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  flex-wrap: nowrap;
 }
-
-/* 變更與刪除按鈕：統一寬度 */
 .user-actions .change-role-btn,
 .user-actions .delete-user-btn {
-    width: 40px;
-    flex-shrink: 0;
-    padding: 6px 10px;
-    font-size: 14px;
-    border: none;
-    border-radius: 8px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: background-color 0.2s, transform 0.2s;
+  width: 40px;
+  flex-shrink: 0;
+  padding: 6px 10px;
+  font-size: 14px;
+  border: none;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s, transform 0.2s;
 }
-
-/* 變更按鈕樣式 */
 .user-actions .change-role-btn {
-    background-color: #007bff;
-    color: white;
+  background-color: #007bff;
+  color: white;
 }
 .user-actions .change-role-btn:hover {
-    background-color: #0056b3;
-    transform: translateY(-1px);
+  background-color: #0056b3;
+  transform: translateY(-1px);
 }
 .user-actions .change-role-btn:disabled {
-    background-color: #cccccc;
-    cursor: not-allowed;
-    transform: none;
+  background-color: #cccccc;
+  cursor: not-allowed;
+  transform: none;
 }
-
-/* 刪除按鈕樣式 */
 .user-actions .delete-user-btn {
-    background-color: #dc3545;
-    color: white;
+  background-color: #dc3545;
+  color: white;
 }
 .user-actions .delete-user-btn:hover {
-    background-color: #a71d2a;
+  background-color: #a71d2a;
 }
-
-/* 如果有 user-card-row-2，也套用統一寬度 */
 .user-card-row-2 .delete-user-btn {
-    width: 80px;
-    flex-shrink: 0;
+  width: 80px;
+  flex-shrink: 0;
 }
 
 /* 標題點擊排序箭頭樣式 */
 .user-list-header .sortable {
-    cursor: pointer;
-    position: relative;
+  cursor: pointer;
+  position: relative;
 }
-
 .user-list-header .sortable.sort-asc::after {
-    content: ' ▲';
-    font-size: 0.8em;
-    position: absolute;
-    right: 4px;
+  content: ' ▲';
+  font-size: 0.8em;
+  position: absolute;
+  right: 4px;
 }
-
 .user-list-header .sortable.sort-desc::after {
-    content: ' ▼';
-    font-size: 0.8em;
-    position: absolute;
-    right: 4px;
+  content: ' ▼';
+  font-size: 0.8em;
+  position: absolute;
+  right: 4px;
 }
 
 /* 註冊碼模態框計時器樣式 */
 #registrationModalMessage.countdown {
-    font-size: 16px;
-    font-weight: bold;
-    color: #007bff;
+  font-size: 16px;
+  font-weight: bold;
+  color: #007bff;
 }
 
-/* 優化渲染 */
+/* 優化渲染（行動裝置） */
 @media (max-width: 768px) {
-  /* 全面取消陰影與動畫 */
+  /* 全面取消陰影與動畫，但保留 user-location-dot 的動畫 */
   *:not(.user-location-dot),
   *:not(.user-location-dot)::before,
   *:not(.user-location-dot)::after {
-  	box-shadow: none !important;
+    box-shadow: none !important;
     transition: none !important;
   }
 
-  /* 不再全域取消圓角，讓需要圓角的元素可保留 */
-  /* 可針對個別容器或按鈕類別進行圓角優化 */
+  /* 保留必要圓角或去掉以利行動體驗 */
   .user-card,
   .action-buttons,
   .message-box-content,
@@ -911,53 +861,45 @@ body {
     border-radius: 0 !important;
   }
 
-/* 降低整個控制欄容器 */
-.leaflet-control-container {
-  z-index: 500 !important;
-  position: relative; /* 確保 z-index 有效 */
-}
-
-/* 降低個別區域控制（左上、右上、右下等） */
-.leaflet-top.leaflet-left,
-.leaflet-top.leaflet-right,
-.leaflet-bottom.leaflet.left,
-.leaflet-bottom.leaflet-right {
-  z-index: 500 !important;
-  position: relative;
-}
-  
-
-/* 恢復 Leaflet attribution 控制項的正確位置（右下角） */
-.leaflet-bottom.leaflet-right {
-  position: absolute !important;
-  bottom: 0;
-  right: 0;
-  z-index: 1;
-}
-
-.leaflet-control-attribution {
-  position: relative;
-  margin: 0 5px 5px 0;
-  background: none;
-  font-size: 11px;
-  z-index: 1;
-  pointer-events: none;
-}
-
-/* 確保地圖的各個圖層有明確的 z-index 順序 */
-
-/* 降低多邊形和線段圖層的 z-index，確保它們在標記下方 */
-.leaflet-pane.leaflet-overlay-pane {
+  /* 降低整個控制欄容器層級 */
+  .leaflet-control-container {
     z-index: 500 !important;
-}
+    position: relative; /* 確保 z-index 有效 */
+  }
 
-/* 確保標記和按鈕所在的圖層有更高的 z-index */
-.leaflet-pane.leaflet-marker-pane {
+  /* 降低個別區域控制（左上、右上、右下等） */
+  .leaflet-top.leaflet-left,
+  .leaflet-top.leaflet-right,
+  .leaflet-bottom.leaflet-left,
+  .leaflet-bottom.leaflet-right {
+    z-index: 500 !important;
+    position: relative;
+  }
+
+  /* 恢復 Leaflet attribution 控制項的正確位置（右下角） */
+  .leaflet-bottom.leaflet-right {
+    position: absolute !important;
+    bottom: 0;
+    right: 0;
+    z-index: 1;
+  }
+
+  .leaflet-control-attribution {
+    position: relative;
+    margin: 0 5px 5px 0;
+    background: none;
+    font-size: 11px;
+    z-index: 1;
+    pointer-events: none;
+  }
+
+  /* 確保地圖的各個圖層有明確的 z-index 順序 */
+  .leaflet-pane.leaflet-overlay-pane {
+    z-index: 500 !important;
+  }
+  .leaflet-pane.leaflet-marker-pane {
     z-index: 600 !important;
+  }
 }
-
-
-
-/* ===================================================== */
 
 
