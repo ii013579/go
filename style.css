@@ -194,11 +194,7 @@ body {
 }
 
 /* =====清查功能====== */
-/* 清查按鈕寬度 */
-#inspectionToggleBtn {
-  width: 100px;
-  flex-shrink: 0;
-}
+
 
 /* 清查切換按鈕 */
 .inspection-off {
@@ -901,5 +897,6 @@ body {
     z-index: 600 !important;
   }
 }
+
 
 
