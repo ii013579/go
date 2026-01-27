@@ -2,123 +2,166 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8" />
-  <title>KML Map Viewer v2.0</title>
-
-  <!-- åŽŸ v1.9.6 CSS -->
-  <link rel="stylesheet" href="style.css" />
-
-  <!-- Leaflet -->
-  <link
-    rel="stylesheet"
-    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-  />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ÂI¦ì·j´M»²§U</title>
+  <!-- ºô§}¦CICO -->
+  <link rel="icon" href="logo.ico" type="image/x-icon" />
+  <link rel="shortcut icon" href="logo.ico" type="image/x-icon" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <!-- ¥~³¡¼Ë¦¡ªí -->
+  <link rel="stylesheet" href="style.css">
+  <!-- Leaflet.markercluster CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
 </head>
-
 <body>
-
-  <!-- ===== æ¨™é¡Œ ===== -->
   <div id="title">
-    KML åœ°åœ–ç³»çµ± v2.0
-    <button id="editButton">ç·¨è¼¯</button>
+    ÂI¦ì·j´M»²§U
+    <button id="editButton">½s¿è</button>
   </div>
 
-  <!-- ===== æŽ§åˆ¶å€ ===== -->
   <div id="controls">
-
-    <!-- æœå°‹ -->
+    <div style="display: flex; gap: 10px; align-items: center; flex-wrap: nowrap;">
+        <label for="kmlLayerSelect" style="flex-shrink: 0;">¿ï¾Ü¸ê®Æ®w:</label>
+        <select id="kmlLayerSelect" style="flex-grow: 1; min-width: 150px;">
+            <option value="">-- ½Ð¿ï¾Ü KML  --</option>
+        </select>
+        <button class="pin-button-icon" id="pinButton" aria-label="°v¿ï" disabled>
+             <img src="https://fonts.gstatic.com/s/i/materialicons/push_pin/v12/24px.svg" alt="°v¿ï" class="pin-icon">
+         </button>
+    </div>
     <div id="searchContainer">
-      <span class="material-symbols-outlined">search</span>
-      <input id="searchBox" type="text" placeholder="æœå°‹é»žä½â€¦" />
-      <div id="searchResults"></div>
+        <span class="material-symbols-outlined">search</span>
+        <input type="text" id="searchBox" placeholder="·j´M¦aÂI..." autocomplete="off" />
+        <div id="searchResults"></div>
+    </div>
+  </div>
+
+  <div id="authSection">
+    <div id="loginForm">
+      <h3>½Ðµn¤J</h3>
+      <button id="googleSignInBtn" class="action-buttons google-btn">
+        <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google icon" />
+        ¨Ï¥Î Google µn¤J
+      </button>
+      <p id="loginMessage"></p>
     </div>
 
-    <!-- KML é¸æ“‡ -->
-    <select id="kmlLayerSelect">
-      <option value="">-- è«‹é¸æ“‡ KML åœ–å±¤ --</option>
-    </select>
-
-    <!-- pin -->
-    <button id="pinButton" class="pin-button-icon" disabled>
-      <img class="pin-icon" src="https://cdn-icons-png.flaticon.com/512/484/484167.png" />
-    </button>
-
-  </div>
-
-  <!-- ===== åœ°åœ– ===== -->
-  <div id="map"></div>
-
-  <!-- ===== èªè­‰ / ç·¨è¼¯é¢æ¿ ===== -->
-  <div id="authSection">
-
-    <!-- ç™»å…¥ -->
-    <form id="loginForm">
-      <button id="googleSignInBtn" type="button">Google ç™»å…¥</button>
-      <div id="loginMessage"></div>
-    </form>
-
-    <!-- å·²ç™»å…¥ -->
-    <div id="loggedInDashboard">
-      <div id="userEmailDisplay"></div>
+    <div id="loggedInDashboard" style="display: none;">
+      <h3 id="userEmailDisplay"></h3>
 
       <div id="kmlControlsDashboard">
-
-        <!-- ä¸Šå‚³ -->
-        <div id="uploadKmlSectionDashboard">
-          <label>ä¸Šå‚³ KML</label>
-          <span id="selectedKmlFileNameDashboard">å°šæœªé¸æ“‡æª”æ¡ˆ</span>
-          <button id="uploadKmlSubmitBtnDashboard" disabled>ä¸Šå‚³</button>
-        </div>
-
-        <!-- ===== v2.0 STARTï¼šæ¸…æŸ¥åˆ‡æ› ===== -->
-        <button
-          id="inspectionToggleBtn"
-          class="admin-option-button inspection-off"
-        >
-          æ¸…æŸ¥ï¼ˆé—œé–‰ä¸­ï¼‰
-        </button>
-        <!-- ===== v2.0 END ===== -->
-
-        <!-- åˆªé™¤ï¼ˆåŽŸæœ¬ v1.9.6ï¼‰ -->
-        <div id="deleteKmlSectionDashboard">
-          <label>åˆªé™¤ KML</label>
-          <select id="kmlLayerSelectDashboard"></select>
-          <button id="deleteSelectedKmlBtn" disabled>åˆªé™¤</button>
-        </div>
-
+          <div id="uploadKmlSectionDashboard">
+              <label for="hiddenKmlFileInput">¤W¶Ç KML:</label>
+              <!-- hiddenKmlFileInput ¶È¥Î©óµ{¦¡½XÅÞ¿è¡A¤£ª½±µÅã¥Ü -->
+              <input type="file" id="hiddenKmlFileInput" accept=".kml" style="display: none;" />
+              <!-- ³o­Ó span ¥Î©óÅã¥Ü¿ï¾ÜªºÀÉ®×¦WºÙ¡A¨Ã³z¹LÂIÀ»Ä²µo hiddenKmlFileInput -->
+              <span id="selectedKmlFileNameDashboard">©|¥¼¿ï¾ÜÀÉ®×</span>
+              <button id="uploadKmlSubmitBtnDashboard" class="action-buttons upload-btn" disabled>¤W¶Ç</button>
+          </div>
+          <div id="deleteKmlSectionDashboard">
+              <label for="kmlLayerSelectDashboard">½s¿è KML:</label>
+              <select id="kmlLayerSelectDashboard" disabled>
+                  <option value="">-- ½Ð¿ï¾Ü KML ¹Ï¼h --</option>
+              </select>
+              <button id="inspectionToggleBtn" class="admin-option-button inspection-off">²M¬d(Ãö³¬¤¤)</button>
+              <button id="deleteSelectedKmlBtn" class="action-buttons delete-btn">§R°£</button>
+          </div>
+            <div id="inspectionModalOverlay" class="confirmation-modal-overlay">
+            <div class="confirmation-modal-content">
+              <h3 id="inspectionModalTitle">ÂI¸¹</h3>
+         
+              <div class="button-group">
+                <button id="inspectionSubmitBtn" class="action-buttons">°e¥X</button>
+                <button id="inspectionCancelBtn" class="action-buttons" style="background-color:#6c757d;">¨ú®ø</button>
+              </div>
+            </div>
+          </div>
       </div>
+
+      <div id="registrationSettingsSection" style="display: none;">
+          <div class="registration-code-display-group">
+            <button id="generateRegistrationCodeBtn" class="action-buttons">²£¥Í¤@¦¸©Êµù¥U½X</button>
+            <div class="registration-code-content-wrapper">
+                <span id="registrationCodeDisplay" style="display: none;"></span>
+                <span id="registrationCodeCountdown" style="display: none;"></span>
+            </div>
+          </div>
+          <p id="registrationExpiryDisplay" style="display: none;"></p>
+      </div>
+
+      <div id="userManagementSection" style="display: none;">
+          <button id="refreshUsersBtn" class="action-buttons">¨Ï¥ÎªÌºÞ²z</button>
+          <div id="userList">
+            <div class="user-list-header">
+              <div class="header-item sortable" data-key="email">Email</div>
+              <div class="header-item sortable" data-key="nickname">¼ÊºÙ</div>
+              <div class="header-item sortable" data-key="role">¨¤¦â</div>
+              <div class="header-item">¾Þ§@</div>
+            </div>            <!-- ¨Ï¥ÎªÌ¦Cªí·|¥Ñ JavaScript °ÊºA¶ñ¥R -->
+          </div>
+      </div>
+
+      <button id="logoutBtn" class="action-buttons">µn¥X</button>
     </div>
   </div>
 
-  <!-- ===== v2.0 STARTï¼šæ¸…æŸ¥ Modal ===== -->
-  <div id="inspectionModalOverlay" class="confirmation-modal-overlay">
-    <div class="confirmation-modal-content">
-      <h3 id="inspectionModalTitle">é»žè™Ÿ</h3>
+  <div id="map"></div>
 
+  <!-- °T®§®Ø -->
+  <div id="messageBoxOverlay" class="message-box-overlay">
+    <div class="message-box-content">
+      <h3 id="messageBoxTitle"></h3>
+      <p id="messageBoxMessage"></p>
+      <button id="messageBoxCloseBtn">½T©w</button>
+    </div>
+  </div>
+
+  <!-- µù¥U½X¼ÒºA®Ø -->
+  <div id="registrationCodeModalOverlay" class="registration-modal-overlay">
+    <div class="registration-modal-content">
+      <h3>¿é¤Jµù¥U½X</h3>
+      <p id="registrationModalMessage">½Ð¿é¤JºÞ²z­û´£¨Ñªº¤@¦¸©Êµù¥U½X¡C</p>
+      <input type="text" id="registrationCodeInput" placeholder="µù¥U½X" />
+      <input type="text" id="nicknameInput" placeholder="±zªº¼ÊºÙ" />
       <div class="button-group">
-        <button id="inspectionSubmitBtn" class="action-buttons">
-          é€å‡º
-        </button>
-        <button
-          id="inspectionCancelBtn"
-          class="action-buttons"
-          style="background-color:#6c757d;"
-        >
-          å–æ¶ˆ
-        </button>
+          <button id="confirmRegistrationCodeBtn" class="action-buttons">½T»{</button>
+          <button id="cancelRegistrationCodeBtn" class="action-buttons">¨ú®ø</button>
       </div>
     </div>
   </div>
-  <!-- ===== v2.0 END ===== -->
 
-  <!-- åŽŸ v1.9.6 JS -->
+  <!-- ·s¼Wªº½T»{¼ÒºA®Ø -->
+  <div id="confirmationModalOverlay" class="confirmation-modal-overlay">
+    <div class="confirmation-modal-content">
+      <h3 id="confirmationModalTitle"></h3>
+      <p id="confirmationModalMessage"></p>
+      <div class="button-group">
+        <button id="confirmYesBtn" class="action-buttons">¬O</button>
+        <button id="confirmNoBtn" class="action-buttons">§_</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Firebase CDN ¸ü¤J -->
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-storage.js"></script>
+
+  <!-- Leaflet CDN ¸ü¤J -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <!-- MarkerCluster ¸ü¤J -->
+  <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+  <!-- ¨ä¥L¨ç¦¡®w -->
+  <script src="https://unpkg.com/togeojson"></script> 
+  <!-- ¦Û©w¸q JS ÀÉ®×¸ü¤J -->
+  <!-- ¶¶§Ç«Ü­«­n¡A½Ð½T«O¨Ì¿àªºÀÉ®×¥ý¸ü¤J -->
   <script src="firebase-init.js"></script>
-  <script src="auth-kml-management.js"></script>
   <script src="map-logic.js"></script>
+  <script src="auth-kml-management.js"></script>
   <script src="ui-interactions.js"></script>
-
-  <!-- ===== v2.0 START ===== -->
-  <script src="inspection.js"></script>
-  <!-- ===== v2.0 END ===== -->
-
 </body>
 </html>
