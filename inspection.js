@@ -10,11 +10,11 @@ function toggleInspectionMode() {
   window.isInspectionMode = !window.isInspectionMode;
 
   if (window.isInspectionMode) {
-    btn.textContent = '清查（開啟中）';
+    btn.textContent = '關閉清查';
     btn.classList.remove('inspection-off');
     btn.classList.add('inspection-on');
   } else {
-    btn.textContent = '清查（關閉中）';
+    btn.textContent = '開啟清查';
     btn.classList.remove('inspection-on');
     btn.classList.add('inspection-off');
   }
@@ -56,3 +56,4 @@ document.addEventListener('DOMContentLoaded', () => {
       closeInspectionModal();
     });
 });
+
