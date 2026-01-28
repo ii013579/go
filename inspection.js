@@ -1,3 +1,5 @@
+// inspection.js v2.0
+
 window.isInspectionMode = false;
 window.inspectionStatusMap = {};
 
@@ -64,3 +66,41 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 });
+
+/* ===== 顯示鉛筆按鈕（提供 map-logic 呼叫） ===== */
+window.showInspectionPencil = function({ latlng, name, featureId }) {
+    if (!window.isInspectionMode) return;
+
+    // 移除舊鉛筆
+    const old = document.getElementById('inspectionPencilBtn');
+    if (old) old.remove();
+
+    const isDone = window.inspectionStatusMap[featureId] === true;
+    const iconUrl = isDone
+        ? 'https://cdn-icons-png.freepik.com/512/8280/8280538.png'
+        : 'https://cdn-icons-png.freepik.com/512/8280/8280556.png';
+
+    const btnHtml = `
+        <div class="nav-button-content">
+            <img src="${iconUrl}" alt="清查" />
+        </div>
+    `;
+
+    const pencilIcon = L.divIcon({
+        className: 'inspection-pencil-icon',
+        html: btnHtml,
+        iconSize: [50, 50],
+        iconAnchor: [25, 25]
+    });
+
+    const pencilMarker = L.marker(latlng, {
+        icon: pencilIcon,
+        zIndexOffset: 1990,
+        interactive: true
+    }).addTo(navButtons);
+
+    pencilMarker.on('click', function(e) {
+        L.DomEvent.stopPropagation(e);
+        window.openInspectionModal(featureId, name);
+    });
+};

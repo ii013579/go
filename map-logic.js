@@ -451,9 +451,16 @@ window.createNavButton = function(latlng, name) {
         window.open(googleMapsUrl, '_blank');
     });
 
-    map.panTo(latlng, {
-        duration: 0.5
-    });
+    /* ===== v2.0 清查鉛筆 ===== */
+    if (window.isInspectionMode && window.showInspectionPencil) {
+        window.showInspectionPencil({
+            latlng,
+            name,
+            featureId
+        });
+    }
+
+    map.panTo(latlng, { duration: 0.5 });
 
     console.log(`已為 ${name} 在 ${latlng.lat}, ${latlng.lng} 創建導航按鈕。`);
 };
