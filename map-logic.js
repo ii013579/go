@@ -284,22 +284,13 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 });
 
-    // 處理 Point features
-// 建議在初始化地圖的地方先建立這個容器
-window.featureDotMap = window.featureDotMap || {};
-
+// 處理 Point features
 pointFeatures.forEach(f => {
     if (f.geometry && f.geometry.coordinates) {
         const [lon, lat] = f.geometry.coordinates;
         const latlng = L.latLng(lat, lon);
-        
-        // 1. 產生更穩定的 ID (將點替換為底線，避免 HTML id 選取器出錯)
-        const idSafeLat = lat.toString().replace(/\./g, '_');
-        const idSafeLon = lon.toString().replace(/\./g, '_');
-        const featureId = `${lat.toFixed(6)},${lon.toFixed(6)}`;
-        const labelId = `label-${idSafeLat}-${idSafeLon}`;
-
-        const name = f.properties?.name || '未命名';
+        const name = f.properties ? (f.properties.name || '未命名') : '未命名';
+        const labelId = `label-${lat}-${lon}`.replace(/\./g, '_');
 
         const dotIcon = L.divIcon({
             className: 'custom-dot-icon',
@@ -307,17 +298,17 @@ pointFeatures.forEach(f => {
             iconAnchor: [8, 8]
         });
 
-        const dot = L.marker(latlng, { icon: dotIcon, interactive: true });
-        
-        // 儲存索引
-        window.featureDotMap[featureId] = dot;
+        const dot = L.marker(latlng, {
+            icon: dotIcon,
+            interactive: true
+        });
 
         const label = L.marker(latlng, {
             icon: L.divIcon({
                 className: 'marker-label',
                 html: `<span id="${labelId}">${name}</span>`,
-                iconSize: [0, 0], // iconSize 設為 0 可減少對齊問題
-                iconAnchor: [-10, 10] // 微調文字與點的相對位置
+                iconSize: [null, null],
+                iconAnchor: [0, 0]
             }),
             interactive: false,
             zIndexOffset: 1000
@@ -325,22 +316,23 @@ pointFeatures.forEach(f => {
 
         dot.on('click', (e) => {
             L.DomEvent.stopPropagation(e);
-            window.currentInspectionDot = dot;
 
-            // 清除舊的 Active (比 querySelector 快)
-            if (window.currentActiveLabelId) {
-                const oldTarget = document.getElementById(window.currentActiveLabelId);
-                if (oldTarget) oldTarget.classList.remove('label-active');
-            }
+            // ===== v1.9.6 原本行為（完全保留）=====
+            document.querySelectorAll('.marker-label span.label-active').forEach(el => {
+                el.classList.remove('label-active');
+            });
 
             const target = document.getElementById(labelId);
             if (target) {
                 target.classList.add('label-active');
-                window.currentActiveLabelId = labelId; // 紀錄當前 ID
             }
 
+            // ===== v2.0 清查：記住目前點到的紅點 =====
+            window.currentInspectionDot = dot;
+
+            // ===== v1.9.6 原本導航邏輯（不改）=====
             if (typeof window.createNavButton === 'function') {
-                window.createNavButton(latlng, name, featureId);
+                window.createNavButton(latlng, name);
             }
         });
 
@@ -348,6 +340,14 @@ pointFeatures.forEach(f => {
         markers.addLayer(label);
     }
 });
+
+console.log(
+    `已添加 ${geojsonFeatures.length} 個 GeoJSON features 到地圖 ` +
+    `(${pointFeatures.length} 點, ${linePolygonFeatures.length} 線/多邊形)。`
+);
+
+window.allKmlFeatures = geojsonFeatures;
+
 
 // 全域函數：創建導航按鈕（v2.0 修正版）
 window.createNavButton = function(latlng, name) {
