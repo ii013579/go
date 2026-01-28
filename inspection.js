@@ -65,6 +65,14 @@ document.addEventListener('DOMContentLoaded', () => {
             closeInspectionModal();
         });
     }
+    
+    // 綁定取消按鈕
+    const cancelBtn = document.getElementById('inspectionCancelBtn');
+    if (cancelBtn) {
+        cancelBtn.addEventListener('click', () => {
+            closeInspectionModal();
+        });
+    }
 });
 
 /* ===== 顯示鉛筆按鈕（提供 map-logic 呼叫） ===== */
