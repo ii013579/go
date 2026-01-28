@@ -365,58 +365,74 @@ window.addGeoJsonLayers = function(geojsonFeatures) {
         }).addTo(geoJsonLayers);
     }
 
-    // 處理 Point features
-    pointFeatures.forEach(f => {
-        if (f.geometry && f.geometry.coordinates) {
-            const [lon, lat] = f.geometry.coordinates;
-            const latlng = L.latLng(lat, lon);
-            const name = f.properties ? (f.properties.name || '未命名') : '未命名';
-            const labelId = `label-${lat}-${lon}`.replace(/\./g, '_');
+window.featureDotMap = window.featureDotMap || {};
 
-            const dotIcon = L.divIcon({
-                className: 'custom-dot-icon',
-                iconSize: [16, 16],
-                iconAnchor: [8, 8]
-            });
+// 處理 Point features
+pointFeatures.forEach(f => {
+    if (f.geometry && f.geometry.coordinates) {
+        const [lon, lat] = f.geometry.coordinates;
+        const latlng = L.latLng(lat, lon);
+        const name = f.properties ? (f.properties.name || '未命名') : '未命名';
 
-            const dot = L.marker(latlng, {
-                icon: dotIcon,
-                interactive: true
-            });
+        // 👉 v2.0：使用 name 作為穩定 featureId
+        const featureId = name;
 
-            const label = L.marker(latlng, {
-                icon: L.divIcon({
-                    className: 'marker-label',
-                    html: `<span id="${labelId}">${name}</span>`,
-                    iconSize: [null, null],
-                    iconAnchor: [0, 0]
-                }),
-                interactive: false,
-                zIndexOffset: 1000
-            });
+        const labelId = `label-${lat}-${lon}`.replace(/\./g, '_');
 
-            dot.on('click', (e) => {
-                L.DomEvent.stopPropagation(e);
-                document.querySelectorAll('.marker-label span.label-active').forEach(el => {
-                    el.classList.remove('label-active');
-                });
-                const target = document.getElementById(labelId);
-                if (target) {
-                    target.classList.add('label-active');
-                }
-                if (typeof window.createNavButton === 'function') {
-                    window.createNavButton(latlng, name);
-                }
-            });
-            
-            markers.addLayer(dot);
-            markers.addLayer(label);
-        }
-    });
+        const dotIcon = L.divIcon({
+            className: 'custom-dot-icon',
+            iconSize: [16, 16],
+            iconAnchor: [8, 8]
+        });
 
-    console.log(`已添加 ${geojsonFeatures.length} 個 GeoJSON features 到地圖 (${pointFeatures.length} 點, ${linePolygonFeatures.length} 線/多邊形)。`);
-    window.allKmlFeatures = geojsonFeatures;
-};
+        const dot = L.marker(latlng, {
+            icon: dotIcon,
+            interactive: true
+        });
+
+        // ===== v2.0：保存紅點 reference =====
+        window.featureDotMap[featureId] = dot;
+
+        const label = L.marker(latlng, {
+            icon: L.divIcon({
+                className: 'marker-label',
+                html: `<span id="${labelId}">${name}</span>`,
+                iconSize: [null, null],
+                iconAnchor: [0, 0]
+            }),
+            interactive: false,
+            zIndexOffset: 1000
+        });
+
+        dot.on('click', (e) => {
+            L.DomEvent.stopPropagation(e);
+
+            document
+              .querySelectorAll('.marker-label span.label-active')
+              .forEach(el => el.classList.remove('label-active'));
+
+            const target = document.getElementById(labelId);
+            if (target) {
+                target.classList.add('label-active');
+            }
+
+            if (typeof window.createNavButton === 'function') {
+                // 👉 v2.0：把 featureId 一起傳進去
+                window.createNavButton(latlng, name, featureId);
+            }
+        });
+
+        markers.addLayer(dot);
+        markers.addLayer(label);
+    }
+});
+
+console.log(
+  `已添加 ${geojsonFeatures.length} 個 GeoJSON features 到地圖 ` +
+  `(${pointFeatures.length} 點, ${linePolygonFeatures.length} 線/多邊形)。`
+);
+
+window.allKmlFeatures = geojsonFeatures;
 
 // 全域函數：創建導航按鈕（v2.0 修正版）
 window.createNavButton = function(latlng, name) {
