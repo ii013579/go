@@ -459,7 +459,9 @@ window.createNavButton = function(latlng, name) {
             featureId
         });
     }
-
+    console.log('[DEBUG] inspection mode?', window.isInspectionMode);
+    console.log('[DEBUG] showInspectionPencil exists?', typeof window.showInspectionPencil);
+    
     map.panTo(latlng, { duration: 0.5 });
 
     console.log(`已為 ${name} 在 ${latlng.lat}, ${latlng.lng} 創建導航按鈕。`);
@@ -580,3 +582,4 @@ window.loadKmlLayerFromFirestore = async function(kmlId) {
     }
 
 };
+
