@@ -93,12 +93,16 @@ window.showInspectionPencil = function({ latlng, name, featureId }) {
         iconAnchor: [25, 25]
     });
 
-    const pencilMarker = L.marker(latlng, {
+    const offsetLatLng = map.containerPointToLatLng(
+        map.latLngToContainerPoint(latlng).add([0, 60]) // Y 軸往下 60px
+    );
+    
+    const pencilMarker = L.marker(offsetLatLng, {
         icon: pencilIcon,
         zIndexOffset: 1990,
         interactive: true
     }).addTo(navButtons);
-
+    
     pencilMarker.on('click', function(e) {
         L.DomEvent.stopPropagation(e);
         window.openInspectionModal(featureId, name);
