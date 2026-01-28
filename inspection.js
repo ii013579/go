@@ -107,7 +107,7 @@ window.showInspectionPencil = function({ latlng, name, featureId }) {
     
     const pencilMarker = L.marker(offsetLatLng, {
         icon: pencilIcon,
-        zIndexOffset: 1800,
+        zIndexOffset: 2200,
         interactive: true
     }).addTo(navButtons);
     
@@ -117,5 +117,6 @@ window.showInspectionPencil = function({ latlng, name, featureId }) {
     });
 
 };
+
 
 
