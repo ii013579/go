@@ -948,7 +948,7 @@ body {
    4. 清查按鈕 (修復切換失效)
    ===================================================== */
 #inspectionToggleBtn {
-    width: 120px; flex-shrink: 0; font-weight: 600;
+    width: 100px; flex-shrink: 0; font-weight: 600;
     transition: all 0.3s; border: none; padding: 8px;
     border-radius: var(--border-radius); cursor: pointer;
 }
@@ -1012,3 +1012,4 @@ body {
     .leaflet-control-container { z-index: 500 !important; }
 
 }
+
