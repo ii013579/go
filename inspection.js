@@ -58,17 +58,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const submitBtn = document.getElementById('inspectionSubmitBtn');
     if (submitBtn) {
         submitBtn.addEventListener('click', () => {
-    const dot = window.currentInspectionDot;
-    if (dot) {
-        const el = dot.getElement();
-        if (el) el.classList.add('inspection-done');
-    }
+            const dot = window.currentInspectionDot;
+            if (dot) {
+                const el = dot.getElement();
+                if (el) el.classList.add('inspection-done');
+            }
 
-           const featureId = window.currentInspectionFeatureId;
-            if (!featureId) return;
-            window.inspectionStatusMap[featureId] = true;
-            if (window.markFeatureInspectionDone) window.markFeatureInspectionDone(featureId);
-            closeInspectionModal();
+           closeInspectionModal();
         });
     }
     
