@@ -418,7 +418,7 @@ window.addGeoJsonLayers = function(geojsonFeatures) {
     window.allKmlFeatures = geojsonFeatures;
 };
 
-// 全域函數：創建導航按鈕
+// 全域函數：創建導航按鈕（v2.0 修正版）
 window.createNavButton = function(latlng, name) {
     if (!map) {
         console.error("地圖尚未初始化。");
@@ -427,6 +427,7 @@ window.createNavButton = function(latlng, name) {
 
     navButtons.clearLayers();
 
+    /* ===== 導航按鈕 ===== */
     const googleMapsUrl = `https://maps.google.com/?q=${latlng.lat},${latlng.lng}`;
     const buttonHtml = `
         <div class="nav-button-content">
@@ -451,23 +452,20 @@ window.createNavButton = function(latlng, name) {
         window.open(googleMapsUrl, '_blank');
     });
 
-    /* ===== v2.0 清查鉛筆 ===== */
-    if (window.isInspectionMode && window.showInspectionPencil) {
+    /* ===== v2.0 清查鉛筆（重點修正）===== */
+    if (window.isInspectionMode && typeof window.showInspectionPencil === 'function') {
+        // 直接用 name 當 featureId（穩定、一定存在）
         window.showInspectionPencil({
             latlng,
             name,
-            featureId
+            featureId: name
         });
     }
-    console.log('[DEBUG] inspection mode?', window.isInspectionMode);
-    console.log('[DEBUG] showInspectionPencil exists?', typeof window.showInspectionPencil);
-    
+
     map.panTo(latlng, { duration: 0.5 });
 
     console.log(`已為 ${name} 在 ${latlng.lat}, ${latlng.lng} 創建導航按鈕。`);
-    console.log('[DEBUG] createNavButton called', latlng, name, featureId);
 };
-
 // 輔助函式：計算多邊形的中心點
 window.getPolygonCentroid = function(coords) {
     let centroid = [0, 0];
@@ -580,6 +578,4 @@ window.loadKmlLayerFromFirestore = async function(kmlId) {
     } finally {
         window.isLoadingKml = false; // ❗ 不管成功或失敗最後一定要解除鎖
     }
-
 };
-
