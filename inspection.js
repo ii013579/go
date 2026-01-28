@@ -94,12 +94,12 @@ window.showInspectionPencil = function({ latlng, name, featureId }) {
     });
 
     const offsetLatLng = map.containerPointToLatLng(
-        map.latLngToContainerPoint(latlng).add([0, 60]) // Y 軸往下 60px
+        map.latLngToContainerPoint(latlng).add([0, 50]) // Y 軸往下 60px
     );
     
     const pencilMarker = L.marker(offsetLatLng, {
         icon: pencilIcon,
-        zIndexOffset: 1990,
+        zIndexOffset: 2000,
         interactive: true
     }).addTo(navButtons);
     
