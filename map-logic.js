@@ -431,11 +431,6 @@ pointFeatures.forEach(f => {
     markers.addLayer(dot);
     markers.addLayer(label);
 
-    /* ===== 若此點已完成清查，初始化為灰點 ===== */
-    if (window.inspectionStatusMap?.[featureId]) {
-        const el = dot.getElement();
-        if (el) el.classList.add('inspection-done');
-    }
 });
 
 /* ===== 紀錄 ===== */
