@@ -285,153 +285,153 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // 全域函數：添加 GeoJSON 圖層 (現在支援 Point, LineString, Polygon)
-window.addGeoJsonLayers = function(geojsonFeatures) {
-    if (!map) {
-        console.error("地圖尚未初始化。");
+    // 處理 Point features
+
+    pointFeatures.forEach(f => {
+
+        if (f.geometry && f.geometry.coordinates) {
+
+            const [lon, lat] = f.geometry.coordinates;
+
+            const latlng = L.latLng(lat, lon);
+
+            const name = f.properties ? (f.properties.name || '未命名') : '未命名';
+
+            const featureId = ${lat.toFixed(6)},${lon.toFixed(6)};
+
+            const labelId = label-${lat}-${lon}.replace(/\./g, '_');
+
+    
+
+            const dotIcon = L.divIcon({
+
+                className: 'custom-dot-icon',
+
+                iconSize: [16, 16],
+
+                iconAnchor: [8, 8]
+
+            });
+
+    
+
+            const dot = L.marker(latlng, {
+
+                icon: dotIcon,
+
+                interactive: true
+
+            });
+
+            
+
+            if (!window.featureDotMap) window.featureDotMap = {};
+
+            window.featureDotMap[featureId] = dot;
+
+    
+
+            const label = L.marker(latlng, {
+
+                icon: L.divIcon({
+
+                    className: 'marker-label',
+
+                    html: <span id="${labelId}">${name}</span>,
+
+                    iconSize: [null, null],
+
+                    iconAnchor: [0, 0]
+
+                }),
+
+                interactive: false,
+
+                zIndexOffset: 1000
+
+            });
+
+    
+
+            dot.on('click', (e) => {
+
+                L.DomEvent.stopPropagation(e);
+
+    
+
+                document.querySelectorAll('.marker-label span.label-active')
+
+                  .forEach(el => el.classList.remove('label-active'));
+
+    
+
+                const target = document.getElementById(labelId);
+
+                if (target) target.classList.add('label-active');
+
+    
+
+                if (typeof window.createNavButton === 'function') {
+
+                    // ⚠️ 先不要傳第三個參數
+
+                    window.createNavButton(latlng, name, featureId);
+
+                }
+
+            });
+
+    
+
+            markers.addLayer(dot);
+
+            markers.addLayer(label);
+
+        }
+
+    });
+
+    
+
+    // ⚠️ 先拿掉 linePolygonFeatures，避免 ReferenceError
+
+    console.log(已添加 ${geojsonFeatures.length} 個 GeoJSON features（${pointFeatures.length} 點）。);
+
+    
+
+    window.allKmlFeatures = geojsonFeatures;
+
+
+
+// ===== v2.0：清查完成後，將紅點標記為灰色 =====
+
+window.markFeatureInspectionDone = function (featureId) {
+
+    if (!window.featureDotMap) return;
+
+
+
+    const marker = window.featureDotMap[featureId];
+
+    if (!marker) {
+
+        console.warn('找不到對應紅點:', featureId);
+
         return;
+
     }
 
-    // 在載入新圖層前先清空
-    geoJsonLayers.clearLayers();
-    markers.clearLayers();
-    navButtons.clearLayers();
 
-    const linePolygonFeatures = [];
-    const pointFeatures = [];
 
-    geojsonFeatures.forEach(feature => {
-        if (feature.geometry && feature.geometry.type === 'Point') {
-            pointFeatures.push(feature);
-        } else if (feature.geometry && (feature.geometry.type === 'LineString' || feature.geometry.type === 'Polygon')) {
-            linePolygonFeatures.push(feature);
-        }
-    });
+    const el = marker.getElement();
 
-    // 處理 LineString 和 Polygon features
-    if (linePolygonFeatures.length > 0) {
-        L.geoJSON(linePolygonFeatures, {
-            onEachFeature: function(feature, layer) {
-                // 強制將多邊形圖層移到最底層
-                layer.bringToBack();
-                
-                // 建立多邊形名稱標籤
-                if (feature.geometry.type === 'Polygon' && feature.properties.name) {
-                    const featureName = feature.properties.name;
-                    const centerPoint = window.getPolygonCentroid(feature.geometry.coordinates[0]);
-                    const centerLatLng = L.latLng(centerPoint[1], centerPoint[0]);
-                    
-                    const polygonLabelIcon = L.divIcon({
-                        className: 'marker-label',
-                        html: `<span>${featureName}</span>`,
-                        iconSize: [null, null],
-                        iconAnchor: [0, 0]
-                    });
+    if (el) {
 
-                    L.marker(centerLatLng, {
-                        icon: polygonLabelIcon,
-                        interactive: false,
-                        zIndexOffset: 1000
-                    }).addTo(geoJsonLayers);
-                }
-                
-                // 點擊事件處理
-                layer.on('click', function(e) {
-                    L.DomEvent.stopPropagation(e);
-                    const featureName = feature.properties.name || '未命名地圖要素';
-                    
-                    let centerPoint = null;
-                    if (feature.geometry.type === 'Polygon') {
-                        centerPoint = window.getPolygonCentroid(feature.geometry.coordinates[0]);
-                    } else if (feature.geometry.type === 'LineString') {
-                        centerPoint = window.getLineStringMidpoint(feature.geometry.coordinates);
-                    }
+        el.classList.add('inspection-done');
 
-                    if (centerPoint) {
-                        const centerLatLng = L.latLng(centerPoint[1], centerPoint[0]);
-                        window.createNavButton(centerLatLng, featureName);
-                    }
-                });
-            },
-            style: function(feature) {
-                switch (feature.geometry.type) {
-                    case 'LineString':
-                        return { color: '#FF0000', weight: 3, opacity: 0.8 };
-                    case 'Polygon':
-                        return { color: '#0000FF', weight: 2, opacity: 0.6, fillOpacity: 0.3 };
-                    default:
-                        return {};
-                }
-            }
-        }).addTo(geoJsonLayers);
     }
 
-// ===== v2.0：處理 Point features（支援清查）=====
-pointFeatures.forEach(f => {
-    if (!f.geometry || !f.geometry.coordinates) return;
-
-    const [lon, lat] = f.geometry.coordinates;
-    const latlng = L.latLng(lat, lon);
-
-    const name = f.properties?.name || '未命名';
-
-    // 🔑 v2.0：唯一且穩定的 featureId（清查全流程都用這個）
-    const featureId = `${lat.toFixed(6)},${lon.toFixed(6)}`;
-
-    const labelId = `label-${featureId}`.replace(/[.,]/g, '_');
-
-    /* ===== 紅點 Icon ===== */
-    const dotIcon = L.divIcon({
-        className: 'custom-dot-icon',
-        iconSize: [16, 16],
-        iconAnchor: [8, 8]
-    });
-
-    /* ===== 紅點 Marker ===== */
-    const dot = L.marker(latlng, {
-        icon: dotIcon,
-        interactive: true
-    });
-
-    // 🔴 v2.0：註冊紅點（給清查完成用）
-    if (!window.featureDotMap) window.featureDotMap = {};
-    window.featureDotMap[featureId] = dot;
-
-    /* ===== 文字標籤 ===== */
-    const label = L.marker(latlng, {
-        icon: L.divIcon({
-            className: 'marker-label',
-            html: `<span id="${labelId}">${name}</span>`,
-            iconSize: [null, null],
-            iconAnchor: [0, 0]
-        }),
-        interactive: false,
-        zIndexOffset: 1000
-    });
-
-    /* ===== 點擊紅點行為 ===== */
-    dot.on('click', (e) => {
-        L.DomEvent.stopPropagation(e);
-
-        // 移除其他 label 的 active 狀態
-        document
-            .querySelectorAll('.marker-label span.label-active')
-            .forEach(el => el.classList.remove('label-active'));
-
-        // 啟用目前 label
-        const target = document.getElementById(labelId);
-        if (target) target.classList.add('label-active');
-
-        // 建立導航按鈕 +（若清查開啟）鉛筆
-        if (typeof window.createNavButton === 'function') {
-            window.createNavButton(latlng, name, featureId);
-        }
-    });
-
-    /* ===== 加入圖層 ===== */
-    markers.addLayer(dot);
-    markers.addLayer(label);
-
-});
+};
 
 /* ===== 紀錄 ===== */
 console.log(
