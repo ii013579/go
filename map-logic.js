@@ -365,58 +365,86 @@ window.addGeoJsonLayers = function(geojsonFeatures) {
         }).addTo(geoJsonLayers);
     }
 
-    // 處理 Point features
-    pointFeatures.forEach(f => {
-        if (f.geometry && f.geometry.coordinates) {
-            const [lon, lat] = f.geometry.coordinates;
-            const latlng = L.latLng(lat, lon);
-            const name = f.properties ? (f.properties.name || '未命名') : '未命名';
-            const labelId = `label-${lat}-${lon}`.replace(/\./g, '_');
+// ===== v2.0：處理 Point features（支援清查）=====
+pointFeatures.forEach(f => {
+    if (!f.geometry || !f.geometry.coordinates) return;
 
-            const dotIcon = L.divIcon({
-                className: 'custom-dot-icon',
-                iconSize: [16, 16],
-                iconAnchor: [8, 8]
-            });
+    const [lon, lat] = f.geometry.coordinates;
+    const latlng = L.latLng(lat, lon);
 
-            const dot = L.marker(latlng, {
-                icon: dotIcon,
-                interactive: true
-            });
+    const name = f.properties?.name || '未命名';
 
-            const label = L.marker(latlng, {
-                icon: L.divIcon({
-                    className: 'marker-label',
-                    html: `<span id="${labelId}">${name}</span>`,
-                    iconSize: [null, null],
-                    iconAnchor: [0, 0]
-                }),
-                interactive: false,
-                zIndexOffset: 1000
-            });
+    // 🔑 v2.0：唯一且穩定的 featureId（清查全流程都用這個）
+    const featureId = `${lat.toFixed(6)},${lon.toFixed(6)}`;
 
-            dot.on('click', (e) => {
-                L.DomEvent.stopPropagation(e);
-                document.querySelectorAll('.marker-label span.label-active').forEach(el => {
-                    el.classList.remove('label-active');
-                });
-                const target = document.getElementById(labelId);
-                if (target) {
-                    target.classList.add('label-active');
-                }
-                if (typeof window.createNavButton === 'function') {
-                    window.createNavButton(latlng, name);
-                }
-            });
-            
-            markers.addLayer(dot);
-            markers.addLayer(label);
+    const labelId = `label-${featureId}`.replace(/[.,]/g, '_');
+
+    /* ===== 紅點 Icon ===== */
+    const dotIcon = L.divIcon({
+        className: 'custom-dot-icon',
+        iconSize: [16, 16],
+        iconAnchor: [8, 8]
+    });
+
+    /* ===== 紅點 Marker ===== */
+    const dot = L.marker(latlng, {
+        icon: dotIcon,
+        interactive: true
+    });
+
+    // 🔴 v2.0：註冊紅點（給清查完成用）
+    if (!window.featureDotMap) window.featureDotMap = {};
+    window.featureDotMap[featureId] = dot;
+
+    /* ===== 文字標籤 ===== */
+    const label = L.marker(latlng, {
+        icon: L.divIcon({
+            className: 'marker-label',
+            html: `<span id="${labelId}">${name}</span>`,
+            iconSize: [null, null],
+            iconAnchor: [0, 0]
+        }),
+        interactive: false,
+        zIndexOffset: 1000
+    });
+
+    /* ===== 點擊紅點行為 ===== */
+    dot.on('click', (e) => {
+        L.DomEvent.stopPropagation(e);
+
+        // 移除其他 label 的 active 狀態
+        document
+            .querySelectorAll('.marker-label span.label-active')
+            .forEach(el => el.classList.remove('label-active'));
+
+        // 啟用目前 label
+        const target = document.getElementById(labelId);
+        if (target) target.classList.add('label-active');
+
+        // 建立導航按鈕 +（若清查開啟）鉛筆
+        if (typeof window.createNavButton === 'function') {
+            window.createNavButton(latlng, name, featureId);
         }
     });
 
-    console.log(`已添加 ${geojsonFeatures.length} 個 GeoJSON features 到地圖 (${pointFeatures.length} 點, ${linePolygonFeatures.length} 線/多邊形)。`);
-    window.allKmlFeatures = geojsonFeatures;
-};
+    /* ===== 加入圖層 ===== */
+    markers.addLayer(dot);
+    markers.addLayer(label);
+
+    /* ===== 若此點已完成清查，初始化為灰點 ===== */
+    if (window.inspectionStatusMap?.[featureId]) {
+        const el = dot.getElement();
+        if (el) el.classList.add('inspection-done');
+    }
+});
+
+/* ===== 紀錄 ===== */
+console.log(
+    `已添加 ${pointFeatures.length} 個 Point features（v2.0 清查版）`
+);
+
+window.allKmlFeatures = geojsonFeatures;
+
 
 // 全域函數：創建導航按鈕（v2.0 修正版）
 window.createNavButton = function(latlng, name) {
@@ -466,6 +494,7 @@ window.createNavButton = function(latlng, name) {
 
     console.log(`已為 ${name} 在 ${latlng.lat}, ${latlng.lng} 創建導航按鈕。`);
 };
+
 // 輔助函式：計算多邊形的中心點
 window.getPolygonCentroid = function(coords) {
     let centroid = [0, 0];
