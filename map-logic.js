@@ -357,7 +357,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 L.DomEvent.stopPropagation(e);
 
-    
+                window.currentInspectionDot = dot;
 
                 document.querySelectorAll('.marker-label span.label-active')
 

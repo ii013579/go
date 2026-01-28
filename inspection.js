@@ -58,7 +58,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const submitBtn = document.getElementById('inspectionSubmitBtn');
     if (submitBtn) {
         submitBtn.addEventListener('click', () => {
-            const featureId = window.currentInspectionFeatureId;
+    const dot = window.currentInspectionDot;
+    if (dot) {
+        const el = dot.getElement();
+        if (el) el.classList.add('inspection-done');
+    }
+
+           const featureId = window.currentInspectionFeatureId;
             if (!featureId) return;
             window.inspectionStatusMap[featureId] = true;
             if (window.markFeatureInspectionDone) window.markFeatureInspectionDone(featureId);
@@ -102,12 +108,12 @@ window.showInspectionPencil = function({ latlng, name, featureId }) {
     });
 
     const offsetLatLng = map.containerPointToLatLng(
-        map.latLngToContainerPoint(latlng).add([0, 45]) // Y 軸往下 60px
+        map.latLngToContainerPoint(latlng).add([0, 50]) // Y 軸往下 60px
     );
     
     const pencilMarker = L.marker(offsetLatLng, {
         icon: pencilIcon,
-        zIndexOffset: 2200,
+        zIndexOffset: 2000,
         interactive: true
     }).addTo(navButtons);
     
@@ -115,8 +121,4 @@ window.showInspectionPencil = function({ latlng, name, featureId }) {
         L.DomEvent.stopPropagation(e);
         window.openInspectionModal(featureId, name);
     });
-
 };
-
-
-
