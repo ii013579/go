@@ -463,6 +463,7 @@ window.createNavButton = function(latlng, name) {
     map.panTo(latlng, { duration: 0.5 });
 
     console.log(`已為 ${name} 在 ${latlng.lat}, ${latlng.lng} 創建導航按鈕。`);
+    console.log('[DEBUG] createNavButton called', latlng, name, featureId);
 };
 
 // 輔助函式：計算多邊形的中心點
@@ -577,4 +578,5 @@ window.loadKmlLayerFromFirestore = async function(kmlId) {
     } finally {
         window.isLoadingKml = false; // ❗ 不管成功或失敗最後一定要解除鎖
     }
+
 };
