@@ -1,9 +1,9 @@
-// map-renderer.js v2.0 (地圖渲染引擎)
+//(地圖渲染引擎)
+// map-renderer.js v2.0 
 (function () {
     'use strict';
-    const layers = window.mapLayers; // 來自 map-core.js
 
-    // --- 核心演算法：質心與中點 ---
+    // 質心計算
     window.getPolygonCentroid = function(coords) {
         let area = 0, x = 0, y = 0;
         const pts = coords[0] || coords;
@@ -16,30 +16,44 @@
         return [x / (6 * area), y / (6 * area)];
     };
 
+    // 渲染 GeoJSON
     window.addGeoJsonLayers = function (features) {
+        if (!window.mapLayers) return;
         const { markers, geoJsonLayers, navButtons, map } = window.mapLayers;
-        [markers, geoJsonLayers, navButtons].forEach(l => l.clearLayers());
+        
+        markers.clearLayers();
+        geoJsonLayers.clearLayers();
+        navButtons.clearLayers();
 
         features.forEach(f => {
             if (f.geometry.type === 'Point') {
                 const [lon, lat] = f.geometry.coordinates;
-                const dot = L.marker([lat, lon], { icon: L.divIcon({ className: 'custom-dot-icon', iconSize:[16,16] }) }).addTo(markers);
-                dot.on('click', () => window.createNavButton([lat, lon], f.properties.name));
+                const dot = L.marker([lat, lon], {
+                    icon: L.divIcon({ className: 'custom-dot-icon', iconSize: [16, 16], iconAnchor: [8, 8] })
+                }).addTo(markers);
+                dot.on('click', (e) => {
+                    L.DomEvent.stopPropagation(e);
+                    window.createNavButton([lat, lon], f.properties.name);
+                });
             } else {
-                const layer = L.geoJSON(f).addTo(geoJsonLayers);
-                layer.on('click', () => {
-                    const cp = f.geometry.type === 'Polygon' ? window.getPolygonCentroid(f.geometry.coordinates) : null;
+                const layer = L.geoJSON(f, { style: { color: '#FF0000', weight: 3 } }).addTo(geoJsonLayers);
+                layer.on('click', (e) => {
+                    L.DomEvent.stopPropagation(e);
+                    let cp = f.geometry.type === 'Polygon' ? window.getPolygonCentroid(f.geometry.coordinates) : null;
                     if (cp) window.createNavButton([cp[1], cp[0]], f.properties.name);
                 });
             }
         });
-        map.fitBounds(L.featureGroup([markers, geoJsonLayers]).getBounds());
+
+        const bounds = L.featureGroup([markers, geoJsonLayers]).getBounds();
+        if (bounds.isValid()) map.fitBounds(bounds, { padding: [50, 50] });
     };
 
     window.createNavButton = function (latlng, name) {
         window.mapLayers.navButtons.clearLayers();
         L.marker(latlng, {
-            icon: L.divIcon({ className: 'nav-button-icon', html: `<div class="nav-button-content">??</div>`, iconSize: [50, 50] })
-        }).addTo(window.mapLayers.navButtons).on('click', () => window.open(`https://www.google.com/maps/dir/?api=1&destination=${latlng[0]},${latlng[1]}`, '_blank'));
+            icon: L.divIcon({ className: 'nav-button-icon', html: '<div class="nav-button-content">??</div>', iconSize: [50, 50], iconAnchor: [25, 25] })
+        }).addTo(window.mapLayers.navButtons).on('click', () => window.open(`https://www.google.com/maps?q=${latlng[0]},${latlng[1]}`, '_blank'));
+        window.map.panTo(latlng);
     };
 })();
