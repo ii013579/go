@@ -1,3 +1,4 @@
+//(核心初始化)
 // firebase-init.js v2.0
 (function() {
     const firebaseConfig = {
@@ -27,5 +28,5 @@
         .then(() => console.log('Firestore persistence 已啟用'))
         .catch((err) => console.warn('Persistence 啟用失敗:', err.code));
 
-    console.log("Firebase Init Success. AppId:", window.appId);
+    console.log("Firebase 初始化成功. AppId:", window.appId);
 })();
