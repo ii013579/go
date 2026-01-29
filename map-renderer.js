@@ -39,29 +39,25 @@
             
             if (f.geometry.type === 'Point') {
                 const [lon, lat] = f.geometry.coordinates;
-                
-                // 修正處：確保變數名稱統一為 marker
                 const marker = L.marker([lat, lon], {
                     icon: L.divIcon({ 
                         className: 'custom-dot-icon', 
-                        iconSize: [10, 10], 
-                        iconAnchor: [5, 5] 
+                        iconSize: [5, 5], 
+                        iconAnchor: [2.5, 2.5] 
                     })
                 });
 
-                // 綁定標籤 (v1.9.6 樣式)
-                marker.bindTooltip(name, { 
-                    permanent: true, 
-                    direction: 'right', 
-                    className: 'feature-label', 
-                    offset: [10, 0] 
-                });
-
-                // 點擊事件：產生導航按鈕
-                marker.on('click', (e) => {
-                    L.DomEvent.stopPropagation(e);
-                    window.createNavButton([lat, lon], name);
-                });
+                // 標籤
+                marker.bindTooltip(`<span>${name}</span>`, { 
+                        permanent: true, 
+                        direction: 'right', 
+                        className: 'marker-label',
+                        offset: [5, -5],
+                        opacity: 1
+                    });
+                
+                    marker.on('click', () => window.createNavButton([lat, lon], name));
+                }
 
                 marker.addTo(markers); // 加入叢集圖層
 

@@ -1,5 +1,6 @@
 //(介面互動模組)
 // ui-interactions.js v2.0 
+// ui-interactions.js v2.0 - 完整版
 (function () {
     'use strict';
     const $ = id => document.getElementById(id);
@@ -8,61 +9,69 @@
     let userMarker = null;
 
     /**
-     * 初始化地理定位功能 (加回 v1.9.6 的脈衝圓點邏輯)
+     * 1. 建立自定義定位按鈕 (解決 image_1a628b.png 遺失按鈕問題)
+     * 對應 CSS: .leaflet-control-locate-me
+     */
+    const addLocateButton = (map) => {
+        // 避免重複建立
+        if (document.querySelector('.leaflet-control-locate-me')) return;
+
+        const LocateControl = L.Control.extend({
+            options: { position: 'topleft' },
+            onAdd: function() {
+                const container = L.DomUtil.create('div', 'leaflet-bar leaflet-control leaflet-control-locate-me');
+                container.innerHTML = '<a href="#" title="我的位置" style="display:flex;justify-content:center;align-items:center;text-decoration:none;font-size:18px;">??</a>';
+                
+                container.onclick = (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (userMarker) {
+                        map.setView(userMarker.getLatLng(), 17);
+                    } else {
+                        if (window.showMessage) window.showMessage('提示', '正在取得 GPS 定位中，請稍候...');
+                    }
+                };
+                return container;
+            }
+        });
+        map.addControl(new LocateControl());
+    };
+
+    /**
+     * 2. 初始化地理定位與脈衝點
+     * 對應 CSS: .user-location-dot
      */
     const initLocation = () => {
-        if (!navigator.geolocation) {
-            console.warn("瀏覽器不支援地理定位");
-            return;
-        }
+        if (!navigator.geolocation) return;
 
-        const geoOptions = {
-            enableHighAccuracy: true,
-            timeout: 10000,
-            maximumAge: 0
-        };
+        const geoOptions = { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 };
 
         const success = (position) => {
             const { latitude, longitude } = position.coords;
             const latlng = [latitude, longitude];
 
-            // 確保地圖已載入
             if (!window.mapLayers || !window.mapLayers.map) return;
             const map = window.mapLayers.map;
 
             if (userMarker) {
                 userMarker.setLatLng(latlng);
             } else {
-                // 使用 style.css 中的 .user-location-dot 樣式
                 const locationIcon = L.divIcon({
                     className: 'user-location-dot',
                     iconSize: [16, 16],
                     iconAnchor: [8, 8]
                 });
-                userMarker = L.marker(latlng, { 
-                    icon: locationIcon,
-                    zIndexOffset: 1000 // 確保定位點在最上層
-                }).addTo(map);
-                
-                // 首次取得定位後，將視角移至使用者位置
+                userMarker = L.marker(latlng, { icon: locationIcon, zIndexOffset: 1000 }).addTo(map);
+                // 首次定位成功自動跳轉
                 map.setView(latlng, 16);
             }
         };
 
-        const error = (err) => {
-            console.warn(`定位失敗 (${err.code}): ${err.message}`);
-            // 排除使用者主動拒絕的情況，才彈出錯誤提示
-            if (err.code !== 1 && window.showMessage) {
-                window.showMessage('定位提示', '無法取得您的目前位置，請檢查 GPS 是否開啟。');
-            }
-        };
-
-        // 持續監控位置
-        navigator.geolocation.watchPosition(success, error, geoOptions);
+        navigator.geolocation.watchPosition(success, (err) => console.warn(err), geoOptions);
     };
 
     /**
-     * 處理搜尋功能與結果清單
+     * 3. 搜尋功能邏輯
      */
     const initSearch = () => {
         const searchBox = $('searchBox');
@@ -78,15 +87,14 @@
                 return;
             }
 
-            // 從 DataManager 的快取中過濾
             const matched = window.DataManager.allFeatures.filter(f => 
                 f.properties.name?.toLowerCase().includes(query)
-            ).slice(0, 10); // 僅顯示前 10 筆提高效能
+            ).slice(0, 10);
 
             if (matched.length > 0) {
                 matched.forEach(f => {
                     const div = document.createElement('div');
-                    div.className = 'search-result-item';
+                    div.className = 'result-item'; // 對應 style.css 中的搜尋結果樣式
                     div.textContent = f.properties.name;
                     div.onclick = () => {
                         handleSearchResultClick(f);
@@ -95,80 +103,59 @@
                     };
                     searchResults.appendChild(div);
                 });
-                searchResults.style.display = 'block';
+                searchResults.style.display = 'grid'; // 配合 CSS 的 grid 佈局
+                searchResults.classList.add('columns-2');
             } else {
                 searchResults.style.display = 'none';
             }
         });
-
-        // 點擊外部關閉搜尋結果
-        document.addEventListener('click', (e) => {
-            if (!searchBox.contains(e.target) && !searchResults.contains(e.target)) {
-                searchResults.style.display = 'none';
-            }
-        });
     };
 
-    /**
-     * 點擊搜尋結果後的跳轉邏輯
-     */
     const handleSearchResultClick = (feature) => {
         if (!window.mapLayers || !window.mapLayers.map) return;
         const map = window.mapLayers.map;
 
-        let targetLatLng;
+        let latlng;
         if (feature.geometry.type === 'Point') {
-            const [lon, lat] = feature.geometry.coordinates;
-            targetLatLng = [lat, lon];
-        } else if (feature.geometry.type === 'Polygon' || feature.geometry.type === 'MultiPolygon') {
-            // 使用渲染器中的質心演算法
+            latlng = [feature.geometry.coordinates[1], feature.geometry.coordinates[0]];
+        } else {
             const cp = window.getPolygonCentroid(feature.geometry.coordinates);
-            targetLatLng = [cp[1], cp[0]];
+            latlng = [cp[1], cp[0]];
         }
 
-        if (targetLatLng) {
-            map.setView(targetLatLng, 18);
-            // 觸發導航按鈕
-            if (window.createNavButton) {
-                window.createNavButton(targetLatLng, feature.properties.name);
-            }
-        }
+        map.setView(latlng, 18);
+        if (window.createNavButton) window.createNavButton(latlng, feature.properties.name);
     };
 
     /**
-     * 初始化介面按鈕 (編輯/返回地圖)
+     * 4. UI 按鈕初始化
      */
     const initUIButtons = () => {
         const editBtn = $('editButton');
-        const authSec = $('authSection');
-        const controls = $('controls');
-
         if (editBtn) {
             editBtn.onclick = () => {
-                const isAuthVisible = (authSec.style.display === 'flex');
-                
-                if (isAuthVisible) {
-                    // 切換回地圖模式
-                    authSec.style.display = 'none';
-                    controls.style.display = 'flex';
-                    editBtn.textContent = '編輯';
-                    editBtn.classList.remove('active');
-                } else {
-                    // 切換至編輯/登入模式
-                    authSec.style.display = 'flex';
-                    controls.style.display = 'none';
-                    editBtn.textContent = '返回地圖';
-                    editBtn.classList.add('active');
-                }
+                const authSec = $('authSection');
+                const controls = $('controls');
+                const isAuthVisible = authSec.style.display === 'flex';
+                authSec.style.display = isAuthVisible ? 'none' : 'flex';
+                controls.style.display = isAuthVisible ? 'flex' : 'none';
+                editBtn.textContent = isAuthVisible ? '編輯' : '返回地圖';
             };
         }
     };
 
-    // --- 啟動初始化 ---
+    // --- 程式啟動點 ---
     document.addEventListener('DOMContentLoaded', () => {
-        initLocation();   // 啟動 GPS 定位
-        initSearch();     // 啟動搜尋功能
-        initUIButtons();  // 啟動按鈕監聽
+        // 等待地圖核心載入完成
+        const waitMap = setInterval(() => {
+            if (window.mapLayers && window.mapLayers.map) {
+                clearInterval(waitMap);
+                addLocateButton(window.mapLayers.map); // 加回左上角按鈕
+                initLocation();                        // 啟動 GPS
+                initSearch();                          // 啟動搜尋
+                initUIButtons();                       // 啟動介面按鈕
+            }
+        }, 100);
     });
 
 })();
