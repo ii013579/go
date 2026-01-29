@@ -31,16 +31,20 @@
                 const dot = L.marker([lat, lon], {
                     icon: L.divIcon({ className: 'custom-dot-icon', iconSize: [16, 16], iconAnchor: [8, 8] })
                 }).addTo(markers);
-                dot.on('click', (e) => {
-                    L.DomEvent.stopPropagation(e);
-                    window.createNavButton([lat, lon], f.properties.name);
-                });
+                
+                marker.bindTooltip(name, { permanent: true, direction: 'top', className: 'feature-label', offset: [0, -10] });
+                marker.on('click', () => window.createNavButton([lat, lon], name));
+
             } else {
-                const layer = L.geoJSON(f, { style: { color: '#FF0000', weight: 3 } }).addTo(geoJsonLayers);
-                layer.on('click', (e) => {
-                    L.DomEvent.stopPropagation(e);
-                    let cp = f.geometry.type === 'Polygon' ? window.getPolygonCentroid(f.geometry.coordinates) : null;
-                    if (cp) window.createNavButton([cp[1], cp[0]], f.properties.name);
+                const layer = L.geoJSON(f, {
+                    style: { color: '#2193b0', weight: 3, fillOpacity: 0.2 }
+                }).addTo(geoJsonLayers);
+                
+                layer.bindTooltip(name, { sticky: true, className: 'feature-label' });
+                
+                layer.on('click', () => {
+                    const cp = f.geometry.type === 'Polygon' ? window.getPolygonCentroid(f.geometry.coordinates) : null;
+                    if (cp) window.createNavButton([cp[1], cp[0]], name);
                 });
             }
         });
