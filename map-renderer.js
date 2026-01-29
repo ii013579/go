@@ -2,7 +2,9 @@
 (function () {
     'use strict';
 
-    // 質心計算法 (用於點擊多邊形時導航按鈕出現的位置)
+    /**
+     * 質心計算演算法 (用於多邊形導航定位)
+     */
     window.getPolygonCentroid = function(coords) {
         let area = 0, x = 0, y = 0;
         const pts = coords[0] || coords;
@@ -12,13 +14,22 @@
             area += f; x += (p1[0] + p2[0]) * f; y += (p1[1] + p2[1]) * f;
         }
         area /= 2;
+        if (area === 0) return pts[0]; // 防止除以零
         return [x / (6 * area), y / (6 * area)];
     };
 
+    /**
+     * 渲染 GeoJSON 圖層 (修正 marker is not defined 錯誤)
+     */
     window.addGeoJsonLayers = function (features) {
-        if (!window.mapLayers) return;
+        if (!window.mapLayers) {
+            console.error("地圖圖層未初始化 (window.mapLayers 不存在)");
+            return;
+        }
+        
         const { markers, geoJsonLayers, navButtons, map } = window.mapLayers;
         
+        // 清除舊圖層
         markers.clearLayers();
         geoJsonLayers.clearLayers();
         navButtons.clearLayers();
@@ -28,70 +39,84 @@
             
             if (f.geometry.type === 'Point') {
                 const [lon, lat] = f.geometry.coordinates;
-                // 1. 建立紅色圓點 (對應您的 CSS .custom-dot-icon)
+                
+                // 修正處：確保變數名稱統一為 marker
                 const marker = L.marker([lat, lon], {
                     icon: L.divIcon({ 
                         className: 'custom-dot-icon', 
                         iconSize: [10, 10], 
                         iconAnchor: [5, 5] 
                     })
-                }).addTo(markers);
-                
-                // 2. 補回文字標籤 (對應截圖樣式)
-                // 使用 permanent: true 讓它一直顯示，className 套用 CSS 樣式
+                });
+
+                // 綁定標籤 (v1.9.6 樣式)
                 marker.bindTooltip(name, { 
                     permanent: true, 
                     direction: 'right', 
-                    className: 'feature-label', // 若您的 CSS 是 .marker-label span，請改用該類別
-                    offset: [10, 0],
-                    opacity: 0.9
+                    className: 'feature-label', 
+                    offset: [10, 0] 
                 });
 
-                marker.on('click', () => window.createNavButton([lat, lon], name));
+                // 點擊事件：產生導航按鈕
+                marker.on('click', (e) => {
+                    L.DomEvent.stopPropagation(e);
+                    window.createNavButton([lat, lon], name);
+                });
+
+                marker.addTo(markers); // 加入叢集圖層
 
             } else {
-                // 多邊形或線段
-                const layer = L.geoJSON(f, {
-                    style: { color: '#2193b0', weight: 3, fillOpacity: 0.2 }
-                }).addTo(geoJsonLayers);
-                
-                // 多邊形標籤通常滑鼠移上去才顯示 (sticky: true)
-                layer.bindTooltip(name, { 
-                    sticky: true, 
-                    className: 'feature-label' 
+                // 多邊形或線段渲染
+                const layer = L.geoJson(f, {
+                    style: { color: '#2193b0', weight: 3, fillOpacity: 0.2, opacity: 0.8 }
                 });
+
+                layer.bindTooltip(name, { sticky: true, className: 'feature-label' });
                 
                 layer.on('click', (e) => {
-                    // 若是多邊形則計算質心，否則取點擊處
+                    L.DomEvent.stopPropagation(e);
                     let center = e.latlng;
-                    if (f.geometry.type === 'Polygon') {
+                    if (f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon') {
                         const cp = window.getPolygonCentroid(f.geometry.coordinates);
                         if (cp) center = [cp[1], cp[0]];
                     }
                     window.createNavButton(center, name);
                 });
+
+                layer.addTo(geoJsonLayers);
             }
         });
 
-        const bounds = L.featureGroup([markers, geoJsonLayers]).getBounds();
-        if (bounds.isValid()) map.fitBounds(bounds, { padding: [50, 50] });
+        // 自動縮放至圖層範圍
+        const combinedGroup = L.featureGroup([markers, geoJsonLayers]);
+        const bounds = combinedGroup.getBounds();
+        if (bounds.isValid()) {
+            map.fitBounds(bounds, { padding: [50, 50], maxZoom: 18 });
+        }
     };
 
+    /**
+     * 建立導航按鈕 ??
+     */
     window.createNavButton = function (latlng, name) {
+        if (!window.mapLayers) return;
         window.mapLayers.navButtons.clearLayers();
-        // 建立導航圖示 (對應您的 CSS .nav-button-icon)
-        L.marker(latlng, {
+        
+        const lat = Array.isArray(latlng) ? latlng[0] : latlng.lat;
+        const lng = Array.isArray(latlng) ? latlng[1] : latlng.lng;
+
+        L.marker([lat, lng], {
             icon: L.divIcon({ 
                 className: 'nav-button-icon', 
                 html: '<div class="nav-button-content">??</div>', 
-                iconSize: [40, 40], 
-                iconAnchor: [20, 20] 
+                iconSize: [44, 44], 
+                iconAnchor: [22, 22] 
             })
-        }).addTo(window.mapLayers.navButtons).on('click', () => {
-            // 轉換為座標陣列確保格式正確
-            const lat = Array.isArray(latlng) ? latlng[0] : latlng.lat;
-            const lng = Array.isArray(latlng) ? latlng[1] : latlng.lng;
+        }).addTo(window.mapLayers.navButtons).on('click', (e) => {
+            L.DomEvent.stopPropagation(e);
             window.open(`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`, '_blank');
         });
+        
+        window.mapLayers.map.panTo([lat, lng]);
     };
 })();
