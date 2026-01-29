@@ -1,4 +1,4 @@
-// map-core.js v2.0 (¦a¹Ï°òÂ¦)
+ï»¿// map-core.js v2.0 (åœ°åœ–åŸºç¤Ž)
 (function () {
     'use strict';
     const ns = {
@@ -13,13 +13,13 @@
             ns.map = L.map('map', { attributionControl: true, zoomControl: false, maxZoom: 25, minZoom: 5 }).setView([23.6, 120.9], 8);
             
             const baseLayers = {
-                'Google µó¹D¹Ï': L.tileLayer('https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', { maxZoom: 25, maxNativeZoom: 20 }),
-                'Google ½Ã¬P¹Ï': L.tileLayer('https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', { maxZoom: 25, maxNativeZoom: 20 }),
+                'Google è¡—é“åœ–': L.tileLayer('https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', { maxZoom: 25, maxNativeZoom: 20 }),
+                'Google è¡›æ˜Ÿåœ–': L.tileLayer('https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', { maxZoom: 25, maxNativeZoom: 20 }),
                 'OpenStreetMap': L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 25, maxNativeZoom: 20 })
             };
 
-            const lastLayer = localStorage.getItem('lastBaseLayer') || 'Google µó¹D¹Ï';
-            (baseLayers[lastLayer] || baseLayers['Google µó¹D¹Ï']).addTo(ns.map);
+            const lastLayer = localStorage.getItem('lastBaseLayer') || 'Google è¡—é“åœ–';
+            (baseLayers[lastLayer] || baseLayers['Google è¡—é“åœ–']).addTo(ns.map);
 
             ns.geoJsonLayers.addTo(ns.map); ns.markers.addTo(ns.map); ns.navButtons.addTo(ns.map);
             L.control.zoom({ position: 'topright' }).addTo(ns.map);
@@ -27,7 +27,7 @@
 
             ns.map.on('baselayerchange', e => localStorage.setItem('lastBaseLayer', e.name));
             
-            // ¦a¹ÏÂIÀ»¥þ°ì¨Æ¥ó¡G²MªÅ UI ª¬ºA
+            // åœ°åœ–é»žæ“Šå…¨åŸŸäº‹ä»¶ï¼šæ¸…ç©º UI ç‹€æ…‹
             ns.map.on('click', () => {
                 document.getElementById('searchResults').style.display = 'none';
                 document.querySelectorAll('.marker-label span.label-active').forEach(el => el.classList.remove('label-active'));
