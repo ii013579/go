@@ -31,6 +31,10 @@
                 const dot = L.marker([lat, lon], {
                     icon: L.divIcon({ className: 'custom-dot-icon', iconSize: [16, 16], iconAnchor: [8, 8] })
                 }).addTo(markers);
+                dot.on('click', (e) => {
+                    L.DomEvent.stopPropagation(e);
+                    window.createNavButton([lat, lon], f.properties.name);
+                });
                 
                 marker.bindTooltip(name, { permanent: true, direction: 'top', className: 'feature-label', offset: [0, -10] });
                 marker.on('click', () => window.createNavButton([lat, lon], name));
