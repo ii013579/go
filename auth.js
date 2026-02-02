@@ -1,116 +1,73 @@
-/*************************************************                     
- * auth.js                                                             
- * ¨Ï¥ÎªÌ / ¨¤¦âºŞ²z¡]users ¥uÅª¤@¦¸¡^                                 
- * v1.9.6 ¬Û®e                                                         
- *************************************************/                    
-                                                                       
-// ===== ¥ş°ì Auth ª¬ºA¡]°ß¤@¯u¹ê¨Ó·½¡^=====                           
-window.authState = {                                                   
-    uid: null,                                                         
-    email: null,                                                       
-    role: 'guest',   // guest | user | editor | owner | unapproved     
-    loaded: false                                                      
-};                                                                     
-                                                                       
-const auth = window.firebaseAuth;                                      
-const db = window.firebaseDB;                                          
-                                                                       
-// ===== Auth ª¬ºAºÊÅ¥¡]¥u¦¹¤@³B¡^=====                                
-auth.onAuthStateChanged(async (user) => {                              
-                                                                       
-    // ===== Guest =====                                               
-    if (!user) {                                                       
-        authState.uid = null;                                          
-        authState.email = null;                                        
-        authState.role = 'guest';                                      
-        authState.loaded = true;                                       
-                                                                       
-        console.log('[auth] guest');                                   
-        notifyAuthReady();                                             
-        return;                                                        
-    }                                                                  
-                                                                       
-    // ===== ¤w¸ü¤J¹L¡AÁ×§K­«½ÆÅª¨ú =====                              
-    if (authState.loaded && authState.uid === user.uid) {              
-        console.log('[auth] user already loaded:', authState.role);    
-        notifyAuthReady();                                             
-        return;                                                        
-    }                                                                  
-                                                                       
-    // ===== Åª¨ú users ¤å¥ó¡]¥u¤@¦¸¡^=====                            
-    try {                                                              
-        const snap = await db.collection('users').doc(user.uid).get(); 
-                                                                       
-        let role = 'unapproved';                                       
-        if (snap.exists && snap.data()?.role) {                        
-            role = snap.data().role;                                   
-        }                                                              
-                                                                       
-        authState.uid = user.uid;                                      
-        authState.email = user.email;                                  
-        authState.role = role;                                         
-        authState.loaded = true;                                       
-                                                                       
-        console.log('[auth] loaded user role:', role);                 
-        notifyAuthReady();                                             
-                                                                       
-    } catch (err) {                                                    
-        console.error('[auth] failed to load user profile', err);      
-                                                                       
-        // «O©³¡G·í¦¨ guest¡AÁ×§K¾ã¯¸Ãa±¼                              
-        authState.uid = null;                                          
-        authState.email = null;                                        
-        authState.role = 'guest';                                      
-        authState.loaded = true;                                       
-                                                                       
-        notifyAuthReady();                                             
-    }                                                                  
-});                                                                    
-                                                                       
-// ===== Auth Ready ¨Æ¥ó¡]µ¹¨ä¥L¼Ò²Õ±¾¡^=====                          
-function notifyAuthReady() {                                           
-    document.dispatchEvent(                                            
-        new CustomEvent('auth-ready', { detail: { ...authState } })    
-    );                                                                 
-}                                                                      
-                                                                       
-// ===== Åv­­§PÂ_¡]¤£Åª Firestore¡^=====                               
-window.isOwner = function () {                                         
-    return authState.role === 'owner';                                 
-};                                                                     
-                                                                       
-window.isEditor = function () {                                        
-    return authState.role === 'editor';                                
-};                                                                     
-                                                                       
-window.isEditorOrOwner = function () {                                 
-    return authState.role === 'editor' || authState.role === 'owner';  
-};                                                                     
-                                                                       
-window.isLoggedInUser = function () {                                  
-    return authState.role !== 'guest';                                 
-};                                                                     
-                                                                       
-// ===== KML ¬ÛÃöÅv­­¡]v1.9.6 ¬Û®e¡^=====                              
-window.canUploadKml = function () {                                    
-    return isEditorOrOwner();                                          
-};                                                                     
-                                                                       
-window.canDeleteKml = function (uploadedByEmail) {                     
-    if (isOwner()) return true;                                        
-    if (isEditor() && uploadedByEmail === authState.email) return true;
-    return false;                                                      
-};                                                                     
-                                                                       
-// ===== ÂÂµ{¦¡¥i¯à·|¥Î¨ìªº Getter =====                               
-window.getCurrentUserRole = function () {                              
-    return authState.role;                                             
-};                                                                     
-                                                                       
-window.getCurrentUserEmail = function () {                             
-    return authState.email;                                            
-};                                                                     
-                                                                       
-window.getCurrentUserUid = function () {                               
-    return authState.uid;                                              
-};                                                                     
+// auth.js
+// ç®¡ç†ç™»å…¥/ç™»å‡ºèˆ‡å–å¾— user roleï¼ˆusers åªè®€ä¸€æ¬¡ï¼‰
+// ä¾†æºåƒè€ƒï¼šauth-kml-management.js
+
+(function () {
+  'use strict';
+
+  if (typeof auth === 'undefined' || typeof db === 'undefined') {
+    console.error('auth.js éœ€è¦å…ˆè¼‰å…¥ firebase.jsï¼ˆæä¾› auth, dbï¼‰ã€‚');
+    return;
+  }
+
+  // å…¨åŸŸ currentUserRoleï¼ˆç¶­æŒåŸå°ˆæ¡ˆç›¸å®¹ï¼‰
+  window.currentUserRole = null;
+  window.currentUser = null;
+
+  // ä¾›å¤–éƒ¨ UI å‘¼å«ï¼šä»¥ Google ç™»å…¥ï¼ˆå¯æ“´å……ï¼‰
+  window.loginWithGoogle = async function () {
+    const provider = new firebase.auth.GoogleAuthProvider();
+    try {
+      const res = await auth.signInWithPopup(provider);
+      console.info('ç™»å…¥æˆåŠŸï¼š', res.user && res.user.email);
+      return res.user;
+    } catch (err) {
+      console.error('Google ç™»å…¥å¤±æ•—ï¼š', err);
+      throw err;
+    }
+  };
+
+  window.logout = async function () {
+    try {
+      await auth.signOut();
+      console.info('å·²ç™»å‡º');
+    } catch (err) {
+      console.error('ç™»å‡ºå¤±æ•—ï¼š', err);
+      throw err;
+    }
+  };
+
+  // ç•¶ auth state è®ŠåŒ–æ™‚ï¼Œè®€å– users è³‡æ–™ï¼ˆåªåšä¸€æ¬¡ get()ï¼‰
+  auth.onAuthStateChanged(async (user) => {
+    window.currentUser = user || null;
+
+    if (!user) {
+      window.currentUserRole = null;
+      // å¯åœ¨ UI æ¨¡çµ„è™•ç†åˆ‡æ›
+      document.dispatchEvent(new CustomEvent('app:user-changed', { detail: null }));
+      return;
+    }
+
+    try {
+      // åªè®€ä¸€æ¬¡ users docï¼ˆç¬¦åˆä½ è¦æ±‚ï¼šusers åªè®€ä¸€æ¬¡ï¼‰
+      const userDoc = await db.collection('users').doc(user.uid).get();
+      if (!userDoc.exists) {
+        console.warn('ä½¿ç”¨è€…æ–‡ä»¶ä¸å­˜åœ¨ï¼Œä½¿ç”¨é è¨­è§’è‰²ã€‚');
+        window.currentUserRole = null;
+      } else {
+        const data = userDoc.data() || {};
+        window.currentUserRole = data.role || null;
+      }
+      document.dispatchEvent(new CustomEvent('app:user-changed', { detail: { user, role: window.currentUserRole } }));
+    } catch (err) {
+      console.error('è®€å–ä½¿ç”¨è€…è§’è‰²å¤±æ•—ï¼š', err);
+      window.currentUserRole = null;
+      document.dispatchEvent(new CustomEvent('app:user-changed', { detail: { user, role: null, error: err } }));
+    }
+  });
+
+  // æ–¹ä¾¿å–å¾— role çš„åŒæ­¥ helper
+  window.getCurrentUserRole = function () {
+    return window.currentUserRole;
+  };
+})();

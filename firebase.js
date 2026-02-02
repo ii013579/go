@@ -1,39 +1,40 @@
-/*************************************************
- * firebase.js
- * Firebase ªì©l¤Æ + Firestore persistence
- * v1.9.6 ¬Û®e¡]¤£¼vÅT¬J¦³¥\¯à¡^
- *************************************************/
+// firebase.js
+// ä¾†æºä¸¦æ”¹å¯«è‡ª firebase-init.js
+// åˆå§‹åŒ– Firebase ä¸¦å•Ÿç”¨ Firestore persistence
+(function () {
+  'use strict';
 
-// ===== ¨¾¤î­«½Æªì©l¤Æ =====
-if (!firebase.apps.length) {
-    firebase.initializeApp({
-        apiKey: "AIzaSyC-uaCnvgtYacPf_7BtwbwdDUw-WMx4d8s",
-        authDomain: "kmldata-d22fb.firebaseapp.com",
-        projectId: "kmldata-d22fb",
-        storageBucket: "kmldata-d22fb.firebasestorage.app",
-        messagingSenderId: "6673236901",
-        appId: "1:6673236901:web:5aac773cbb512a14b8de4c",
-        measurementId: "G-TJFH5SXNJX"
-    });
-}
+  // Firebase config â€” è‹¥è¦æ›¿æ›è«‹åœ¨éƒ¨ç½²æ™‚æ›´æ–°é€™è£¡æˆ–æ”¹ç‚ºç’°å¢ƒè®Šæ•¸
+  const firebaseConfig = {
+    apiKey: "AIzaSyC-uaCnvgtYacPf_7BtwbwdDUw-WMx4d8s",
+    authDomain: "kmldata-d22fb.firebaseapp.com",
+    projectId: "kmldata-d22fb",
+    storageBucket: "kmldata-d22fb.firebasestorage.app",
+    messagingSenderId: "6673236901",
+    appId: "1:6673236901:web:5aac773cbb512a14b8de4c",
+    measurementId: "G-TJFH5SXNJX"
+  };
 
-// ===== ¥þ°ì Firebase ª«¥ó =====
-window.firebaseApp = firebase.app();
-window.firebaseAuth = firebase.auth();
-window.firebaseDB = firebase.firestore();
-window.firebaseStorage = firebase.storage();
+  // åˆå§‹åŒ–ï¼ˆå‡è¨­ Firebase v8 CDN å·²è¼‰å…¥æ–¼ index.htmlï¼‰
+  if (!window.firebase) {
+    console.error('Firebase å°šæœªè¼‰å…¥ï¼Œè«‹ç¢ºèª index.html å·²è¼‰å…¥ Firebase SDKã€‚');
+    return;
+  }
 
-// ===== ±Ò¥Î Firestore ¥»¦a§Ö¨ú¡]­°§CÅª¨ú¦¸¼Æ¡^=====
-firebaseDB.enablePersistence({ synchronizeTabs: true })
-    .then(() => {
-        console.log('[firebase] Firestore persistence enabled');
-    })
-    .catch((err) => {
-        // ¦h¤À­¶©ÎÂsÄý¾¹¤£¤ä´©®É·|¶i¨Ó¡A¦ý¤£¼vÅT¥\¯à
-        console.warn('[firebase] persistence failed:', err.code);
-    });
+  window.firebaseApp = firebase.initializeApp(firebaseConfig);
+  // åŒ¯å‡ºåŽŸå…ˆå°ˆæ¡ˆç”¨åˆ°çš„å…¨åŸŸè®Šæ•¸ï¼ˆç¶­æŒç›¸å®¹ï¼‰
+  window.auth = firebase.auth();
+  window.db = firebase.firestore();
+  window.storage = firebase.storage();
 
-// ===== °ò¥»³]©w¡]¥i¿ï¡A¦ý¦w¥þ¡^=====
-firebaseDB.settings({
-    ignoreUndefinedProperties: true
-});
+  // å•Ÿç”¨ offline persistenceï¼ˆå˜—è©¦ï¼‰
+  if (window.db && typeof window.db.enablePersistence === 'function') {
+    window.db.enablePersistence()
+      .then(() => {
+        console.info('Firestore persistence å·²å•Ÿç”¨ã€‚');
+      })
+      .catch((err) => {
+        console.warn('ç„¡æ³•å•Ÿç”¨ Firestore persistence:', err && err.code ? err.code : err);
+      });
+  }
+})();

@@ -1,129 +1,114 @@
-/*************************************************
- * map.js
- * �a����ܡ]v1.9.6 �����^
- *************************************************/
+// map.js
+// 地圖初始化、紅點/灰點、導航、addGeoJsonLayers、clearAllKmlLayers
+// 來源改寫自 map-logic.js
 
-let map;
-let markers;
-let navButtons;
+(function () {
+  'use strict';
 
-/**
- * ��l�Ʀa��
- */
-window.initMap = function () {
-    map = L.map('map', {
-        center: [23.7, 121],
-        zoom: 7
-    });
+  // 命名空間（內部狀態）
+  const ns = {
+    map: null,
+    markers: L.featureGroup(),
+    navButtons: L.featureGroup(),
+    geoJsonLayers: L.featureGroup()
+  };
 
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        maxZoom: 19
-    }).addTo(map);
+  // 初始化地圖（在 DOMContentLoaded 時執行）
+  document.addEventListener('DOMContentLoaded', () => {
+    if (typeof L === 'undefined') {
+      console.error('Leaflet 未載入，無法初始化地圖。');
+      return;
+    }
 
-    markers = L.layerGroup().addTo(map);
-    navButtons = L.layerGroup().addTo(map);
+    ns.map = L.map('map', {
+      attributionControl: true,
+      zoomControl: false,
+      maxZoom: 25,
+      minZoom: 5
+    }).setView([23.6, 120.9], 8);
 
-    console.log('[map] initialized');
-};
+    // 範例 baseLayers（可依需求擴充）
+    const baseLayers = {
+      'Google 街道圖': L.tileLayer('https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {
+        attribution: 'Google Maps',
+        maxZoom: 25,
+        maxNativeZoom: 20
+      })
+    };
 
-/**
- * ���� KML ���J�ƥ�
- */
-document.addEventListener('kml-loaded', (e) => {
-    const geojson = e.detail.geojson;
-    drawGeoJson(geojson);
-});
+    baseLayers['Google 街道圖'].addTo(ns.map);
 
-/**
- * ø�s GeoJSON�]�u�B�z Point�^
- */
-function drawGeoJson(geojson) {
-    markers.clearLayers();
-    navButtons.clearLayers();
+    // 加入控制圖層 group
+    ns.geoJsonLayers.addTo(ns.map);
+    ns.markers.addTo(ns.map);
+  });
 
-    if (!geojson || !geojson.features) return;
+  // 在地圖上加入 GeoJSON features（features 是 GeoJSON Feature 陣列）
+  window.addGeoJsonLayers = function (features) {
+    if (!Array.isArray(features) || features.length === 0) {
+      console.info('addGeoJsonLayers: 沒有 features 可加入。');
+      return;
+    }
 
-    const pointFeatures = geojson.features.filter(
-        f => f.geometry?.type === 'Point'
-    );
+    // 清除先前的 geoJsonLayers
+    ns.geoJsonLayers.clearLayers();
 
-    pointFeatures.forEach(f => {
-        const [lon, lat] = f.geometry.coordinates;
-        const latlng = L.latLng(lat, lon);
-        const name = f.properties?.name || '���R�W';
-
-        const labelId = `label-${lat}-${lon}`.replace(/\./g, '_');
-
-        // ���I
-        const dot = L.marker(latlng, {
-            icon: L.divIcon({
-                className: 'custom-dot-icon',
-                iconSize: [16, 16],
-                iconAnchor: [8, 8]
-            }),
-            interactive: true
+    features.forEach((f) => {
+      try {
+        const g = L.geoJSON(f, {
+          onEachFeature: function (feature, layer) {
+            // 若 feature.properties 有 popup 內容可在此處處理
+            if (feature.properties && feature.properties.popup) {
+              layer.bindPopup(feature.properties.popup);
+            }
+          },
+          pointToLayer: function (feature, latlng) {
+            // 依照 properties 判定紅點/灰點或其他樣式
+            const isMarked = feature.properties && feature.properties._isMarked;
+            const className = isMarked ? 'red-marker' : 'gray-marker';
+            return L.circleMarker(latlng, { radius: 6, className });
+          }
         });
-
-        // Label
-        const label = L.marker(latlng, {
-            icon: L.divIcon({
-                className: 'marker-label',
-                html: `<span id="${labelId}">${name}</span>`
-            }),
-            interactive: false,
-            zIndexOffset: 1000
-        });
-
-        dot.on('click', (e) => {
-            L.DomEvent.stopPropagation(e);
-
-            // label active
-            document
-                .querySelectorAll('.marker-label span.label-active')
-                .forEach(el => el.classList.remove('label-active'));
-
-            const target = document.getElementById(labelId);
-            if (target) target.classList.add('label-active');
-
-            createNavButton(latlng, name);
-        });
-
-        markers.addLayer(dot);
-        markers.addLayer(label);
+        ns.geoJsonLayers.addLayer(g);
+      } catch (err) {
+        console.warn('處理 feature 時發生錯誤：', err, feature);
+      }
     });
 
-    console.log(`[map] drawn ${pointFeatures.length} points`);
-}
+    // 自動 fit bounds（若 map 有範圍）
+    try {
+      const allLayers = L.featureGroup([ns.geoJsonLayers, ns.markers]);
+      const bounds = allLayers.getBounds();
+      if (bounds && bounds.isValid && bounds.isValid()) {
+        ns.map.fitBounds(bounds, { padding: L.point(50, 50) });
+      }
+    } catch (err) {
+      // ignore
+    }
+  };
 
-/**
- * �ɯ���s�]v1.9.6 �欰�^
- */
-window.createNavButton = function (latlng, name) {
-    navButtons.clearLayers();
+  // 清除所有 KML/GeoJSON 圖層與 marker
+  window.clearAllKmlLayers = function () {
+    if (ns.geoJsonLayers) ns.geoJsonLayers.clearLayers();
+    if (ns.markers) ns.markers.clearLayers();
+    console.info('所有 KML 圖層和相關數據已清除。');
+  };
 
-    const googleMapsUrl = `https://maps.google.com/?q=${latlng.lat},${latlng.lng}`;
+  // 導航按鈕示意（可擴充）
+  window.addNavButton = function (label, onClick) {
+    // 建立一個簡單的 DOM 按鈕並加入到地圖 container
+    const btn = L.control({ position: 'topright' });
+    btn.onAdd = function () {
+      const el = L.DomUtil.create('button', 'map-nav-button');
+      el.textContent = label;
+      el.onclick = onClick;
+      return el;
+    };
+    btn.addTo(ns.map);
+    ns.navButtons.addLayer(btn);
+    return btn;
+  };
 
-    const icon = L.divIcon({
-        className: 'nav-button-icon',
-        html: `
-            <div class="nav-button-content">
-                <img src="https://i0.wp.com/canadasafetycouncil.org/wp-content/uploads/2018/08/offroad.png"/>
-            </div>
-        `,
-        iconSize: [50, 50],
-        iconAnchor: [25, 25]
-    });
-
-    const marker = L.marker(latlng, {
-        icon,
-        zIndexOffset: 2000,
-        interactive: true
-    }).addTo(navButtons);
-
-    marker.on('click', (e) => {
-        L.DomEvent.stopPropagation(e);
-        window.open(googleMapsUrl, '_blank');
-    });
-
-    map.panTo(latlng, { duration: 0.5 });
-};
+  // 對外暴露內部（debug）
+  window._mapModule = ns;
+})();
