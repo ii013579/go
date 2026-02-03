@@ -1,20 +1,25 @@
 /*************************************************
- * kml.js（v1.9.6 相容修正版）
+ * kml.js (v2.0, compatible with v1.9.6)
+ * 注意：不宣告 db
  *************************************************/
-
-const db = window.firebaseDB;
 
 window.kmlState = {
     currentKmlId: null,
     unsubscribe: null
 };
 
-// === 新核心 ===
+/**
+ * 新核心 API
+ */
 window.loadKmlById = function (appId, kmlId) {
+    if (!appId || !kmlId) return;
+
     if (kmlState.currentKmlId === kmlId) return;
 
+    // 移除舊 listener，避免重複讀取
     if (typeof kmlState.unsubscribe === 'function') {
         kmlState.unsubscribe();
+        kmlState.unsubscribe = null;
     }
 
     kmlState.currentKmlId = kmlId;
@@ -27,10 +32,11 @@ window.loadKmlById = function (appId, kmlId) {
         .collection('kmlLayers')
         .doc(kmlId);
 
-    kmlState.unsubscribe = ref.onSnapshot(snap => {
+    kmlState.unsubscribe = ref.onSnapshot((snap) => {
         if (!snap.exists) return;
+
         const data = snap.data();
-        if (!data.geojsonContent) return;
+        if (!data || !data.geojsonContent) return;
 
         document.dispatchEvent(
             new CustomEvent('kml-loaded', {
@@ -40,8 +46,9 @@ window.loadKmlById = function (appId, kmlId) {
     });
 };
 
-// === v1.9.6 bridge（非常重要） ===
-// 舊 UI 其實是呼叫這個
+/**
+ * v1.9.6 UI 仍會呼叫的函數
+ */
 window.loadKmlLayer = function (kmlId) {
     if (!window.APP_ID) {
         console.error('APP_ID not defined');

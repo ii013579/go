@@ -1,5 +1,5 @@
 /*************************************************
- * map.js（v1.9.6 相容修正版）
+ * map.js (v2.0, compatible with v1.9.6)
  *************************************************/
 
 let map;
@@ -20,6 +20,7 @@ window.initMap = function () {
     navButtons = L.layerGroup().addTo(map);
 };
 
+// 監聽 KML 載入事件（由 kml.js 觸發）
 document.addEventListener('kml-loaded', (e) => {
     drawGeoJson(e.detail);
 });
@@ -31,9 +32,8 @@ function drawGeoJson(geojson) {
     if (!geojson || !geojson.features) return;
 
     geojson.features
-        .filter(f => f.geometry?.type === 'Point')
+        .filter(f => f.geometry && f.geometry.type === 'Point')
         .forEach(f => {
-
             const [lon, lat] = f.geometry.coordinates;
             const latlng = L.latLng(lat, lon);
             const name = f.properties?.name || '未命名';
@@ -60,9 +60,9 @@ function drawGeoJson(geojson) {
             dot.on('click', (e) => {
                 L.DomEvent.stopPropagation(e);
 
-                document.querySelectorAll(
-                    '.marker-label span.label-active'
-                ).forEach(el => el.classList.remove('label-active'));
+                document
+                    .querySelectorAll('.marker-label span.label-active')
+                    .forEach(el => el.classList.remove('label-active'));
 
                 const target = document.getElementById(labelId);
                 if (target) target.classList.add('label-active');
@@ -80,7 +80,7 @@ window.createNavButton = function (latlng) {
 
     const url = `https://maps.google.com/?q=${latlng.lat},${latlng.lng}`;
 
-    const marker = L.marker(latlng, {
+    const navMarker = L.marker(latlng, {
         icon: L.divIcon({
             className: 'nav-button-icon',
             html: `
@@ -95,7 +95,7 @@ window.createNavButton = function (latlng) {
         interactive: true
     }).addTo(navButtons);
 
-    marker.on('click', (e) => {
+    navMarker.on('click', (e) => {
         L.DomEvent.stopPropagation(e);
         window.open(url, '_blank');
     });

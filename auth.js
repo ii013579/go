@@ -1,5 +1,6 @@
 /*************************************************
- * auth.js（v1.9.6 相容修正版）
+ * auth.js (v2.0, compatible with v1.9.6)
+ * 注意：不宣告 auth / db
  *************************************************/
 
 window.authState = {
@@ -9,18 +10,14 @@ window.authState = {
     loaded: false
 };
 
-const auth = window.firebaseAuth;
-const db = window.firebaseDB;
-
 auth.onAuthStateChanged(async (user) => {
-
     if (!user) {
         authState.uid = null;
         authState.email = null;
         authState.role = 'guest';
         authState.loaded = true;
 
-        // === v1.9.6 bridge ===
+        // v1.9.6 相容
         window.currentUserRole = 'guest';
         window.currentUserEmail = null;
 
@@ -28,6 +25,7 @@ auth.onAuthStateChanged(async (user) => {
         return;
     }
 
+    // 避免重複讀取
     if (authState.loaded && authState.uid === user.uid) {
         document.dispatchEvent(new Event('auth-ready'));
         return;
@@ -42,14 +40,14 @@ auth.onAuthStateChanged(async (user) => {
         authState.role = role;
         authState.loaded = true;
 
-        // === v1.9.6 bridge ===
+        // v1.9.6 相容
         window.currentUserRole = role;
         window.currentUserEmail = user.email;
 
         document.dispatchEvent(new Event('auth-ready'));
 
-    } catch (e) {
-        console.error('[auth] load user failed', e);
+    } catch (err) {
+        console.error('[auth] failed to load user doc', err);
 
         authState.role = 'guest';
         authState.loaded = true;
@@ -59,7 +57,7 @@ auth.onAuthStateChanged(async (user) => {
     }
 });
 
-// ===== 舊 UI 仍會用到的全域函數 =====
+/* ===== v1.9.6 仍會用到的 helper ===== */
 window.isOwner = () => authState.role === 'owner';
 window.isEditor = () => authState.role === 'editor';
 window.isEditorOrOwner = () =>
