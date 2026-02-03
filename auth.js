@@ -1,42 +1,74 @@
-// auth.js
-window.currentUserRole = 'user';
-window.currentUserNickname = '';
+/*************************************************
+ * auth.js¡]v1.9.6 ¬Û®e­×¥¿ª©¡^
+ *************************************************/
+
+window.authState = {
+    uid: null,
+    email: null,
+    role: 'guest',
+    loaded: false
+};
+
+const auth = window.firebaseAuth;
+const db = window.firebaseDB;
 
 auth.onAuthStateChanged(async (user) => {
-    const els = {
-        loginForm: document.getElementById('loginForm'),
-        loggedInDashboard: document.getElementById('loggedInDashboard'),
-        adminSection: document.getElementById('adminSection'),
-        userManagementSection: document.getElementById('userManagementSection')
-    };
 
-    if (user) {
-        els.loginForm.style.display = 'none';
-        els.loggedInDashboard.style.display = 'block';
-        const userDoc = await db.collection('users').doc(user.uid).get();
-        if (userDoc.exists) {
-            const data = userDoc.data();
-            window.currentUserRole = data.role;
-            window.currentUserNickname = data.nickname;
-            document.getElementById('userEmailDisplay').textContent = `${data.nickname} (${data.role})`;
-            
-            // æ¬Šé™é¢æ¿é‚è¼¯: owner/editor é¡¯ç¤ºç®¡ç†å€å¡Š
-            const isAdmin = ['owner', 'editor'].includes(data.role);
-            els.adminSection.style.display = isAdmin ? 'block' : 'none';
-            if (isAdmin) window.refreshUserList?.(); 
-        }
-        window.updateKmlLayerSelects(); // å‘¼å« kml.js
-    } else {
-        els.loginForm.style.display = 'block';
-        els.loggedInDashboard.style.display = 'none';
+    if (!user) {
+        authState.uid = null;
+        authState.email = null;
+        authState.role = 'guest';
+        authState.loaded = true;
+
+        // === v1.9.6 bridge ===
+        window.currentUserRole = 'guest';
+        window.currentUserEmail = null;
+
+        document.dispatchEvent(new Event('auth-ready'));
+        return;
+    }
+
+    if (authState.loaded && authState.uid === user.uid) {
+        document.dispatchEvent(new Event('auth-ready'));
+        return;
+    }
+
+    try {
+        const snap = await db.collection('users').doc(user.uid).get();
+        const role = snap.exists ? snap.data().role : 'unapproved';
+
+        authState.uid = user.uid;
+        authState.email = user.email;
+        authState.role = role;
+        authState.loaded = true;
+
+        // === v1.9.6 bridge ===
+        window.currentUserRole = role;
+        window.currentUserEmail = user.email;
+
+        document.dispatchEvent(new Event('auth-ready'));
+
+    } catch (e) {
+        console.error('[auth] load user failed', e);
+
+        authState.role = 'guest';
+        authState.loaded = true;
+        window.currentUserRole = 'guest';
+
+        document.dispatchEvent(new Event('auth-ready'));
     }
 });
 
-// ä¿ç•™è¨»å†Šç¢¼ç”Ÿæˆ logic
-window.generateRegistrationCode = async () => {
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
-    const expiry = Date.now() + (10 * 60 * 1000);
-    await db.collection('registrationCodes').doc(code).set({ code, expiry, used: false });
-    document.getElementById('registrationCodeDisplay').textContent = code;
-    // ...åŠ å…¥åŽŸæœ¬çš„ setInterval å€’æ•¸é‚è¼¯
+// ===== ÂÂ UI ¤´·|¥Î¨ìªº¥þ°ì¨ç¼Æ =====
+window.isOwner = () => authState.role === 'owner';
+window.isEditor = () => authState.role === 'editor';
+window.isEditorOrOwner = () =>
+    authState.role === 'editor' || authState.role === 'owner';
+
+window.canUploadKml = () => isEditorOrOwner();
+
+window.canDeleteKml = (uploadedBy) => {
+    if (isOwner()) return true;
+    if (isEditor() && uploadedBy === authState.email) return true;
+    return false;
 };

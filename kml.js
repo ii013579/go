@@ -1,31 +1,51 @@
-// kml.js
-window.updateKmlLayerSelects = async () => {
-    const snapshot = await db.collection('kmls').get();
-    const select = document.getElementById('kmlLayerSelect');
-    const dashboardSelect = document.getElementById('kmlLayerSelectDashboard');
-    
-    let optionsHtml = '<option value="">-- è«‹é¸æ“‡åœ–å±¤ --</option>';
-    snapshot.forEach(doc => {
-        optionsHtml += `<option value="${doc.id}">${doc.data().name}</option>`;
-    });
-    
-    if(select) select.innerHTML = optionsHtml;
-    if(dashboardSelect) dashboardSelect.innerHTML = optionsHtml;
-    
-    // æª¢æŸ¥é‡˜é¸
-    const pinnedId = localStorage.getItem('pinnedKmlId');
-    if (pinnedId && select) {
-        select.value = pinnedId;
-        window.loadKmlLayerFromFirestore(pinnedId);
-    }
+/*************************************************
+ * kml.js¡]v1.9.6 ¬Û®e­×¥¿ª©¡^
+ *************************************************/
+
+const db = window.firebaseDB;
+
+window.kmlState = {
+    currentKmlId: null,
+    unsubscribe: null
 };
 
-// åˆªé™¤ KML é‚è¼¯
-window.deleteSelectedKml = async () => {
-    const id = document.getElementById('kmlLayerSelectDashboard').value;
-    if (!id) return alert("è«‹é¸æ“‡è¦åˆªé™¤çš„åœ–å±¤");
-    if (confirm("ç¢ºå®šè¦åˆªé™¤æ­¤åœ–å±¤å—ï¼Ÿæ­¤å‹•ä½œç„¡æ³•å¾©åŸã€‚")) {
-        await db.collection('kmls').doc(id).delete();
-        window.updateKmlLayerSelects();
+// === ·s®Ö¤ß ===
+window.loadKmlById = function (appId, kmlId) {
+    if (kmlState.currentKmlId === kmlId) return;
+
+    if (typeof kmlState.unsubscribe === 'function') {
+        kmlState.unsubscribe();
     }
+
+    kmlState.currentKmlId = kmlId;
+
+    const ref = db
+        .collection('artifacts')
+        .doc(appId)
+        .collection('public')
+        .doc('data')
+        .collection('kmlLayers')
+        .doc(kmlId);
+
+    kmlState.unsubscribe = ref.onSnapshot(snap => {
+        if (!snap.exists) return;
+        const data = snap.data();
+        if (!data.geojsonContent) return;
+
+        document.dispatchEvent(
+            new CustomEvent('kml-loaded', {
+                detail: data.geojsonContent
+            })
+        );
+    });
+};
+
+// === v1.9.6 bridge¡]«D±`­«­n¡^ ===
+// ÂÂ UI ¨ä¹ê¬O©I¥s³o­Ó
+window.loadKmlLayer = function (kmlId) {
+    if (!window.APP_ID) {
+        console.error('APP_ID not defined');
+        return;
+    }
+    loadKmlById(window.APP_ID, kmlId);
 };
