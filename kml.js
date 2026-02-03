@@ -1,58 +1,80 @@
-/*************************************************
- * kml.js (v2.0, compatible with v1.9.6)
- * 注意：不宣告 db
- *************************************************/
+// kml.js — v2.0 baseline，集中 KML Firebase 監聽（不重複）
 
-window.kmlState = {
-    currentKmlId: null,
-    unsubscribe: null
-};
+let kmlUnsubscribe = null;
 
-/**
- * 新核心 API
- */
-window.loadKmlById = function (appId, kmlId) {
-    if (!appId || !kmlId) return;
+window.allKmlFeatures = [];
 
-    if (kmlState.currentKmlId === kmlId) return;
+window.loadKmlLayer = function (kmlId) {
+    if (!window.APP_ID || !kmlId) return;
 
-    // 移除舊 listener，避免重複讀取
-    if (typeof kmlState.unsubscribe === 'function') {
-        kmlState.unsubscribe();
-        kmlState.unsubscribe = null;
+    // ?? 只保留一個 listener（解決重複讀取）
+    if (typeof kmlUnsubscribe === 'function') {
+        kmlUnsubscribe();
+        kmlUnsubscribe = null;
     }
-
-    kmlState.currentKmlId = kmlId;
 
     const ref = db
         .collection('artifacts')
-        .doc(appId)
+        .doc(window.APP_ID)
         .collection('public')
         .doc('data')
         .collection('kmlLayers')
         .doc(kmlId);
 
-    kmlState.unsubscribe = ref.onSnapshot((snap) => {
+    kmlUnsubscribe = ref.onSnapshot((snap) => {
         if (!snap.exists) return;
-
         const data = snap.data();
-        if (!data || !data.geojsonContent) return;
+        if (!data.geojsonContent) return;
 
-        document.dispatchEvent(
-            new CustomEvent('kml-loaded', {
-                detail: data.geojsonContent
-            })
-        );
+        const geojson = data.geojsonContent;
+
+        window.allKmlFeatures = geojson.features || [];
+
+        // === 清空地圖 ===
+        window.markers.clearLayers();
+        window.navButtons.clearLayers();
+
+        geojson.features.forEach(f => {
+            if (f.geometry?.type !== 'Point') return;
+
+            const [lon, lat] = f.geometry.coordinates;
+            const latlng = L.latLng(lat, lon);
+            const name = f.properties?.name || '未命名';
+            const labelId = `label-${lat}-${lon}`.replace(/\./g, '_');
+
+            const dot = L.marker(latlng, {
+                icon: L.divIcon({
+                    className: 'custom-dot-icon',
+                    iconSize: [16, 16],
+                    iconAnchor: [8, 8]
+                }),
+                interactive: true
+            });
+
+            const label = L.marker(latlng, {
+                icon: L.divIcon({
+                    className: 'marker-label',
+                    html: `<span id="${labelId}">${name}</span>`
+                }),
+                interactive: false,
+                zIndexOffset: 1000
+            });
+
+            dot.on('click', (e) => {
+                L.DomEvent.stopPropagation(e);
+
+                document
+                    .querySelectorAll('.marker-label span.label-active')
+                    .forEach(el => el.classList.remove('label-active'));
+
+                const target = document.getElementById(labelId);
+                if (target) target.classList.add('label-active');
+
+                window.createNavButton(latlng, name);
+            });
+
+            window.markers.addLayer(dot);
+            window.markers.addLayer(label);
+        });
     });
-};
-
-/**
- * v1.9.6 UI 仍會呼叫的函數
- */
-window.loadKmlLayer = function (kmlId) {
-    if (!window.APP_ID) {
-        console.error('APP_ID not defined');
-        return;
-    }
-    loadKmlById(window.APP_ID, kmlId);
 };

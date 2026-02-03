@@ -1,32 +1,15 @@
-/*************************************************
- * auth.js (v2.0, compatible with v1.9.6)
- * 注意：不宣告 auth / db
- *************************************************/
+// auth.js — v2.0 baseline，功能等同 v1.9.6
 
-window.authState = {
-    uid: null,
-    email: null,
-    role: 'guest',
-    loaded: false
-};
+window.currentUserRole = 'guest';
+window.currentUserEmail = null;
+
+window.authReady = false;
 
 auth.onAuthStateChanged(async (user) => {
     if (!user) {
-        authState.uid = null;
-        authState.email = null;
-        authState.role = 'guest';
-        authState.loaded = true;
-
-        // v1.9.6 相容
         window.currentUserRole = 'guest';
         window.currentUserEmail = null;
-
-        document.dispatchEvent(new Event('auth-ready'));
-        return;
-    }
-
-    // 避免重複讀取
-    if (authState.loaded && authState.uid === user.uid) {
+        window.authReady = true;
         document.dispatchEvent(new Event('auth-ready'));
         return;
     }
@@ -35,38 +18,21 @@ auth.onAuthStateChanged(async (user) => {
         const snap = await db.collection('users').doc(user.uid).get();
         const role = snap.exists ? snap.data().role : 'unapproved';
 
-        authState.uid = user.uid;
-        authState.email = user.email;
-        authState.role = role;
-        authState.loaded = true;
-
-        // v1.9.6 相容
         window.currentUserRole = role;
         window.currentUserEmail = user.email;
+        window.authReady = true;
 
         document.dispatchEvent(new Event('auth-ready'));
-
     } catch (err) {
-        console.error('[auth] failed to load user doc', err);
-
-        authState.role = 'guest';
-        authState.loaded = true;
+        console.error('[auth] failed', err);
         window.currentUserRole = 'guest';
-
+        window.authReady = true;
         document.dispatchEvent(new Event('auth-ready'));
     }
 });
 
-/* ===== v1.9.6 仍會用到的 helper ===== */
-window.isOwner = () => authState.role === 'owner';
-window.isEditor = () => authState.role === 'editor';
+// === v1.9.6 helper（UI 會用）===
+window.isOwner = () => window.currentUserRole === 'owner';
+window.isEditor = () => window.currentUserRole === 'editor';
 window.isEditorOrOwner = () =>
-    authState.role === 'editor' || authState.role === 'owner';
-
-window.canUploadKml = () => isEditorOrOwner();
-
-window.canDeleteKml = (uploadedBy) => {
-    if (isOwner()) return true;
-    if (isEditor() && uploadedBy === authState.email) return true;
-    return false;
-};
+    window.currentUserRole === 'editor' || window.currentUserRole === 'owner';
