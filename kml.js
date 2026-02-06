@@ -9,28 +9,22 @@
   };
 
   async function load(id) {
-    if (!id) {
-      MAP.clear();
-      STATE.currentId = null;
-      return;
-    }
-    if (STATE.loading || STATE.currentId === id) return;
+    if (!id || STATE.loading || STATE.currentId === id) return;
 
     STATE.loading = true;
-    const geojson = await KML_DB.geojson(id);
-    MAP.render(geojson.features || geojson);
+    const features = await KML_DB.geojson(id);
+    MAP.render(features);
+
     STATE.currentId = id;
     STATE.loading = false;
   }
 
   async function refreshList() {
-    if (STATE.listLoaded || !AUTH.user) return;
+    if (!AUTH.user || STATE.listLoaded) return;
 
-    const role = AUTH.role;
-    const email = AUTH.user.email;
-    const list = await KML_DB.list(role === 'editor' ? email : null);
-
+    const list = await KML_DB.list();
     UI.updateKmlSelect(list);
+
     STATE.listLoaded = true;
 
     const pinned = localStorage.getItem('pinnedKmlId');

@@ -1,4 +1,4 @@
-// ui.js
+ï»¿// ui.js
 (function () {
   'use strict';
 
@@ -24,9 +24,9 @@
     updateKmlSelect(list = []) {
       if (!els.kmlSelect) return;
 
-      els.kmlSelect.innerHTML = '<option value="">-- ½Ğ¿ï¾Ü KML ¹Ï¼h --</option>';
+      els.kmlSelect.innerHTML = '<option value="">-- è«‹é¸æ“‡ KML åœ–å±¤ --</option>';
       if (els.kmlSelectDashboard) {
-        els.kmlSelectDashboard.innerHTML = '<option value="">-- ½Ğ¿ï¾Ü KML ¹Ï¼h --</option>';
+        els.kmlSelectDashboard.innerHTML = '<option value="">-- è«‹é¸æ“‡ KML åœ–å±¤ --</option>';
       }
 
       list.forEach(k => {
@@ -36,14 +36,14 @@
     }
   };
 
-  // KML ¿ï¾Ü
+  // KML é¸æ“‡
   els.kmlSelect?.addEventListener('change', e => {
     document.dispatchEvent(
       new CustomEvent('kml:select', { detail: e.target.value })
     );
   });
 
-  // ¤W¶ÇÀÉ®×
+  // ä¸Šå‚³æª”æ¡ˆ
   els.uploadBtn?.addEventListener('click', () => {
     const file = els.fileInput?.files?.[0];
     document.dispatchEvent(
@@ -51,7 +51,7 @@
     );
   });
 
-  // §R°£ KML
+  // åˆªé™¤ KML
   els.deleteBtn?.addEventListener('click', () => {
     const id = els.kmlSelectDashboard?.value;
     document.dispatchEvent(
@@ -59,13 +59,13 @@
     );
   });
 
-  // ²£¥Íµù¥U½X
+  // ç”¢ç”Ÿè¨»å†Šç¢¼
   els.genCodeBtn?.addEventListener('click', () => {
     document.dispatchEvent(new Event('auth:generateCode'));
   });
   
    /* ========================
-     UX ¤u¨ã
+     UX å·¥å…·
   ======================== */
 
   function setStatus(msg, type = 'info') {
@@ -88,14 +88,14 @@
 
       if (els.countdown) {
         els.countdown.textContent = sec > 0
-          ? `³Ñ¾l ${sec} ¬í`
-          : '¤w¹L´Á';
+          ? `å‰©é¤˜ ${sec} ç§’`
+          : 'å·²éæœŸ';
       }
 
       if (sec <= 0) {
         clearInterval(countdownTimer);
         disableVerify(true);
-        setStatus('µù¥U½X¤w¹L´Á', 'error');
+        setStatus('è¨»å†Šç¢¼å·²éæœŸ', 'error');
       }
     }
 
@@ -104,18 +104,18 @@
   }
 
   /* ========================
-     ¨Ï¥ÎªÌ¾Ş§@
+     ä½¿ç”¨è€…æ“ä½œ
   ======================== */
 
   els.verifyBtn?.addEventListener('click', () => {
     const code = els.codeInput?.value?.trim();
     if (!code) {
-      setStatus('½Ğ¿é¤Jµù¥U½X', 'error');
+      setStatus('è«‹è¼¸å…¥è¨»å†Šç¢¼', 'error');
       return;
     }
 
     disableVerify(true);
-    setStatus('ÅçÃÒ¤¤¡K');
+    setStatus('é©—è­‰ä¸­â€¦');
 
     document.dispatchEvent(
       new CustomEvent('auth:verifyCode', { detail: code })
@@ -127,18 +127,18 @@
   });
 
   /* ========================
-     Auth ¨Æ¥ó¦^õX
+     Auth äº‹ä»¶å›é¥‹
   ======================== */
 
   document.addEventListener('auth:codeGenerated', e => {
     const { code, expireAt } = e.detail;
-    setStatus(`µù¥U½X¡G${code}`, 'success');
+    setStatus(`è¨»å†Šç¢¼ï¼š${code}`, 'success');
     disableVerify(false);
     startCountdown(expireAt);
   });
 
   document.addEventListener('auth:verifySuccess', () => {
-    setStatus('µù¥U¦¨¥\¡AÅv­­¤w¶}³q', 'success');
+    setStatus('è¨»å†ŠæˆåŠŸï¼Œæ¬Šé™å·²é–‹é€š', 'success');
     disableVerify(true);
     clearInterval(countdownTimer);
   });

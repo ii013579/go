@@ -6,31 +6,54 @@
     user: null,
     role: null
   };
+  
+  const loginBtn = $('googleSignInBtn');
+  const logoutBtn = $('logoutBtn');
+  const loginForm = $('loginForm');
+  const dashboard = $('loggedInDashboard');
+  const emailDisplay = $('userEmailDisplay');
 
-  /* ========================
-     Auth / Role 監聽
-  ======================== */
+  /* ========= Google 登入 ========= */
+
+  loginBtn?.addEventListener('click', async () => {
+    const provider = new firebase.auth.GoogleAuthProvider();
+    try {
+      await auth.signInWithPopup(provider);
+    } catch (e) {
+      alert(e.message);
+    }
+  });
+
+  logoutBtn?.addEventListener('click', () => auth.signOut());
+
+ /* ========= Auth 狀態 ========= */
 
   auth.onAuthStateChanged(user => {
     AUTH.user = user;
-    document.dispatchEvent(new CustomEvent('auth:changed', { detail: user }));
 
-    if (!user) return;
+    if (!user) {
+      loginForm.style.display = '';
+      dashboard.style.display = 'none';
+      AUTH.role = null;
+      return;
+    }
+
+    loginForm.style.display = 'none';
+    dashboard.style.display = '';
+    emailDisplay.textContent = user.email;
 
     db.collection('users').doc(user.uid).onSnapshot(doc => {
       const role = doc.data()?.role || 'unapproved';
       if (AUTH.role === role) return;
 
       AUTH.role = role;
-      document.dispatchEvent(
-        new CustomEvent('auth:role', { detail: role })
-      );
+      document.dispatchEvent(new CustomEvent('auth:role', { detail: role }));
     });
-  });
 
-  /* ========================
-     Owner：產生註冊碼
-  ======================== */
+    document.dispatchEvent(new CustomEvent('auth:changed', { detail: user }));
+  });
+ 
+  /* ========= 產生註冊碼 ========= */
 
   async function generateRegistrationCode() {
     if (AUTH.role !== 'owner') {
