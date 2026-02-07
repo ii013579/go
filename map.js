@@ -12,7 +12,7 @@
   };
 
   /* =========================
-     ªì©l¤Æ¡]¥u°µ¤@¦¸¡^
+     åˆå§‹åŒ–ï¼ˆåªåšä¸€æ¬¡ï¼‰
   ========================= */
 
   function initMap() {
@@ -31,16 +31,16 @@
   }
 
   /* =========================
-     ©³¹Ï
+     åº•åœ–
   ========================= */
 
   function initBaseLayers() {
     ns.baseLayers = {
-      'Google µó¹D¹Ï': L.tileLayer(
+      'Google è¡—é“åœ–': L.tileLayer(
         'https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}',
         { maxZoom: 25, maxNativeZoom: 20 }
       ),
-      'Google ½Ã¬P¹Ï': L.tileLayer(
+      'Google è¡›æ˜Ÿåœ–': L.tileLayer(
         'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
         { maxZoom: 25, maxNativeZoom: 20 }
       ),
@@ -51,7 +51,7 @@
     };
 
     const last = localStorage.getItem('lastBaseLayer');
-    (ns.baseLayers[last] || ns.baseLayers['Google µó¹D¹Ï'])
+    (ns.baseLayers[last] || ns.baseLayers['Google è¡—é“åœ–'])
       .addTo(ns.map);
 
     const ctrl = L.control.layers(ns.baseLayers, null, {
@@ -65,7 +65,7 @@
   }
 
   /* =========================
-     ¹Ï¼h
+     åœ–å±¤
   ========================= */
 
   function initLayers() {
@@ -75,7 +75,7 @@
   }
 
   /* =========================
-     ±±¨î¶µ
+     æ§åˆ¶é …
   ========================= */
 
   function initControls() {
@@ -83,7 +83,7 @@
   }
 
   /* =========================
-     ¨Ï¥ÎªÌ©w¦ì¡]??¡^
+     ä½¿ç”¨è€…å®šä½ï¼ˆ??ï¼‰
   ========================= */
 
   function initLocateControl() {
@@ -108,7 +108,7 @@
 
   function locateUser() {
     if (!navigator.geolocation) {
-      alert('ÂsÄı¾¹¤£¤ä´©©w¦ì');
+      alert('ç€è¦½å™¨ä¸æ”¯æ´å®šä½');
       return;
     }
 
@@ -127,7 +127,7 @@
   }
 
   /* =========================
-     GeoJSON Render¡]®Ö¤ß¡^
+     GeoJSON Renderï¼ˆæ ¸å¿ƒï¼‰
   ========================= */
 
   function render(features = []) {
@@ -195,7 +195,7 @@
   }
 
   /* =========================
-     ¾É¯è
+     å°èˆª
   ========================= */
 
   function createNav(latlng, name = '') {
@@ -215,7 +215,7 @@
   }
 
   /* =========================
-     ´X¦ó¤u¨ã
+     å¹¾ä½•å·¥å…·
   ========================= */
 
   function getCenter(feature) {
@@ -245,7 +245,7 @@
   }
 
   /* =========================
-     ²M°£
+     æ¸…é™¤
   ========================= */
 
   function clear() {
@@ -255,7 +255,7 @@
   }
 
   /* =========================
-     ¹ï¥~ API
+     å°å¤– API
   ========================= */
 
   window.MAP = {
