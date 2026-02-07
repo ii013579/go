@@ -1,151 +1,148 @@
-﻿// ui.js
-(function () {
-  'use strict';
+﻿// ui.js (v2.0, Firebase v9+)
 
-  const $ = id => document.getElementById(id);
+import { AUTH } from "./auth.js";
+import { KML_DB } from "./kml-db.js";
+import { db } from "./firebase-init.js";
 
-  const els = {
-    kmlSelect: $('kmlLayerSelect'),
-    kmlSelectDashboard: $('kmlLayerSelectDashboard'),
-    uploadBtn: $('uploadKmlSubmitBtnDashboard'),
-    deleteBtn: $('deleteSelectedKmlBtn'),
-    fileInput: $('hiddenKmlFileInput'),
-    fileName: $('selectedKmlFileNameDashboard'),
-    codeInput: $('registrationCodeInput'),
-    verifyBtn: $('verifyRegistrationCodeBtn'),
-    genCodeBtn: $('generateRegistrationCodeBtn'),
-    status: $('registrationCodeStatus'),
-    countdown: $('registrationCodeCountdown')
-  };
+import {
+  collection,
+  getDocs,
+  doc,
+  updateDoc
+} from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
 
-  let countdownTimer = null;
-  
-  window.UI = {
-    updateKmlSelect(list = []) {
-      if (!els.kmlSelect) return;
+/* =========================
+   DOM 快捷
+========================= */
 
-      els.kmlSelect.innerHTML = '<option value="">-- 請選擇 KML 圖層 --</option>';
-      if (els.kmlSelectDashboard) {
-        els.kmlSelectDashboard.innerHTML = '<option value="">-- 請選擇 KML 圖層 --</option>';
+const $ = id => document.getElementById(id);
+
+/* =========================
+   DOM 元件
+========================= */
+
+const editBtn = $('editButton');
+const searchBox = $('searchBox');
+const searchResults = $('searchResults');
+
+const registrationSection = $('registrationSettingsSection');
+const userMgmtSection = $('userManagementSection');
+const refreshUsersBtn = $('refreshUsersBtn');
+const userList = $('userList');
+
+/* =========================
+   編輯模式（v1.9.6）
+========================= */
+
+let editMode = false;
+
+editBtn?.addEventListener('click', () => {
+  editMode = !editMode;
+  editBtn.classList.toggle('active', editMode);
+  document.body.classList.toggle('edit-mode', editMode);
+});
+
+/* =========================
+   搜尋（v1.9.6）
+========================= */
+
+let searchCache = [];
+
+async function buildSearchIndex() {
+  const list = await KML_DB.list();
+  searchCache = [];
+
+  for (const item of list) {
+    const features = await KML_DB.getGeoJSON(item.id);
+    features.forEach(f => {
+      const name = f.properties?.name;
+      if (name) {
+        searchCache.push({
+          name,
+          feature: f
+        });
       }
+    });
+  }
+}
 
-      list.forEach(k => {
-        els.kmlSelect.appendChild(new Option(k.name, k.id));
-        els.kmlSelectDashboard?.appendChild(new Option(k.name, k.id));
+searchBox?.addEventListener('focus', buildSearchIndex);
+
+searchBox?.addEventListener('input', () => {
+  const q = searchBox.value.trim().toLowerCase();
+  searchResults.innerHTML = '';
+  if (!q) return;
+
+  searchCache
+    .filter(i => i.name.toLowerCase().includes(q))
+    .slice(0, 20)
+    .forEach(item => {
+      const div = document.createElement('div');
+      div.textContent = item.name;
+      div.addEventListener('click', () => {
+        MAP.render([item.feature]);
+        searchResults.innerHTML = '';
+        searchBox.value = item.name;
       });
-    }
-  };
+      searchResults.appendChild(div);
+    });
+});
 
-  // KML 選擇
-  els.kmlSelect?.addEventListener('change', e => {
+/* =========================
+   Auth / Role UI 切換
+========================= */
+
+document.addEventListener('auth:role', e => {
+  const role = e.detail;
+
+  registrationSection.style.display =
+    role === 'owner' ? '' : 'none';
+
+  userMgmtSection.style.display =
+    role === 'owner' ? '' : 'none';
+
+  if (role === 'unapproved') {
     document.dispatchEvent(
-      new CustomEvent('kml:select', { detail: e.target.value })
+      new Event('auth:requireRegistration')
     );
-  });
-
-  // 上傳檔案
-  els.uploadBtn?.addEventListener('click', () => {
-    const file = els.fileInput?.files?.[0];
-    document.dispatchEvent(
-      new CustomEvent('kml:upload', { detail: file })
-    );
-  });
-
-  // 刪除 KML
-  els.deleteBtn?.addEventListener('click', () => {
-    const id = els.kmlSelectDashboard?.value;
-    document.dispatchEvent(
-      new CustomEvent('kml:delete', { detail: id })
-    );
-  });
-
-  // 產生註冊碼
-  els.genCodeBtn?.addEventListener('click', () => {
-    document.dispatchEvent(new Event('auth:generateCode'));
-  });
-  
-   /* ========================
-     UX 工具
-  ======================== */
-
-  function setStatus(msg, type = 'info') {
-    if (!els.status) return;
-    els.status.textContent = msg;
-    els.status.className = `status ${type}`;
   }
+});
 
-  function disableVerify(disabled) {
-    if (els.verifyBtn) els.verifyBtn.disabled = disabled;
-    if (els.codeInput) els.codeInput.disabled = disabled;
-  }
+/* =========================
+   使用者管理（v1.9.6）
+========================= */
 
-  function startCountdown(expireAt) {
-    clearInterval(countdownTimer);
+refreshUsersBtn?.addEventListener('click', loadUsers);
 
-    function tick() {
-      const diff = Math.max(0, expireAt - Date.now());
-      const sec = Math.ceil(diff / 1000);
+async function loadUsers() {
+  userList.querySelectorAll('.user-row').forEach(e => e.remove());
 
-      if (els.countdown) {
-        els.countdown.textContent = sec > 0
-          ? `剩餘 ${sec} 秒`
-          : '已過期';
-      }
+  const snap = await getDocs(collection(db, 'users'));
 
-      if (sec <= 0) {
-        clearInterval(countdownTimer);
-        disableVerify(true);
-        setStatus('註冊碼已過期', 'error');
-      }
-    }
+  snap.forEach(docSnap => {
+    const u = docSnap.data();
+    const row = document.createElement('div');
+    row.className = 'user-row';
 
-    tick();
-    countdownTimer = setInterval(tick, 1000);
-  }
+    row.innerHTML = `
+      <div>${u.email || ''}</div>
+      <div>${u.nickname || ''}</div>
+      <div>${u.role || ''}</div>
+      <div>
+        <button data-role="editor">Editor</button>
+        <button data-role="viewer">Viewer</button>
+      </div>
+    `;
 
-  /* ========================
-     使用者操作
-  ======================== */
+    row.querySelectorAll('button').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        await updateDoc(doc(db, 'users', docSnap.id), {
+          role: btn.dataset.role
+        });
+        loadUsers();
+      });
+    });
 
-  els.verifyBtn?.addEventListener('click', () => {
-    const code = els.codeInput?.value?.trim();
-    if (!code) {
-      setStatus('請輸入註冊碼', 'error');
-      return;
-    }
-
-    disableVerify(true);
-    setStatus('驗證中…');
-
-    document.dispatchEvent(
-      new CustomEvent('auth:verifyCode', { detail: code })
-    );
+    userList.appendChild(row);
   });
-
-  els.genCodeBtn?.addEventListener('click', () => {
-    document.dispatchEvent(new Event('auth:generateCode'));
-  });
-
-  /* ========================
-     Auth 事件回饋
-  ======================== */
-
-  document.addEventListener('auth:codeGenerated', e => {
-    const { code, expireAt } = e.detail;
-    setStatus(`註冊碼：${code}`, 'success');
-    disableVerify(false);
-    startCountdown(expireAt);
-  });
-
-  document.addEventListener('auth:verifySuccess', () => {
-    setStatus('註冊成功，權限已開通', 'success');
-    disableVerify(true);
-    clearInterval(countdownTimer);
-  });
-
-  document.addEventListener('auth:verifyFail', e => {
-    setStatus(e.detail, 'error');
-    disableVerify(false);
-  });
-
-})();
+}

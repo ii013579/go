@@ -1,6 +1,14 @@
-// firebase-init.js v1.9.6
+// firebase-init.js (v2.0, Firebase v9+)
 
-// Firebase 配置 (請替換為您自己的 Firebase 專案配置)
+import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
+import { getAuth } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js";
+import { getFirestore } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
+import { getStorage } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-storage.js";
+
+/* =========================
+   Firebase 設定
+========================= */
+
 const firebaseConfig = {
   apiKey: "AIzaSyC-uaCnvgtYacPf_7BtwbwdDUw-WMx4d8s",
   authDomain: "kmldata-d22fb.firebaseapp.com",
@@ -11,99 +19,109 @@ const firebaseConfig = {
   measurementId: "G-TJFH5SXNJX"
 };
 
-// 初始化 Firebase
-firebase.initializeApp(firebaseConfig);
+/* =========================
+   初始化（只會一次）
+========================= */
 
-// 獲取 Firebase 服務實例
-const auth = firebase.auth();
-const db = firebase.firestore();
-const storage = firebase.storage();
+export const app = initializeApp(firebaseConfig);
+export const auth = getAuth(app);
+export const db = getFirestore(app);
+export const storage = getStorage(app);
 
-// 根據 Canvas 環境提供的 __app_id 或是 Firebase 配置中的 projectId 來確定 appId
-const appId = typeof __app_id !== 'undefined' ? __app_id : firebaseConfig.projectId;
+/* =========================
+   appId（🔥 v1.9.6 行為保留）
+========================= */
+
+export const appId =
+  typeof window.__app_id !== 'undefined'
+    ? window.__app_id
+    : firebaseConfig.projectId;
+
 console.log("Using App ID for Firestore path:", appId);
 
+/* =========================
+   全域 UI：showMessage（保留）
+========================= */
 
-// 定義 showMessage 函數以便全局使用
-window.showMessage = function(title, message, callback) {
-    const messageBoxOverlay = document.getElementById('messageBoxOverlay');
-    const messageBoxTitle = document.getElementById('messageBoxTitle');
-    const messageBoxMessage = document.getElementById('messageBoxMessage');
-    const messageBoxCloseBtn = document.getElementById('messageBoxCloseBtn');
+window.showMessage = function (title, message, callback) {
+  const overlay = document.getElementById('messageBoxOverlay');
+  const titleEl = document.getElementById('messageBoxTitle');
+  const msgEl = document.getElementById('messageBoxMessage');
+  const closeBtn = document.getElementById('messageBoxCloseBtn');
 
-    messageBoxTitle.textContent = title;
-    messageBoxMessage.textContent = message;
-    messageBoxOverlay.classList.add('visible'); // 顯示彈窗
+  titleEl.textContent = title;
+  msgEl.textContent = message;
+  overlay.classList.add('visible');
 
-    const closeHandler = () => {
-        messageBoxOverlay.classList.remove('visible'); // 隱藏彈窗
-        messageBoxCloseBtn.removeEventListener('click', closeHandler);
-        if (callback) {
-            callback();
-        }
-    };
-    messageBoxCloseBtn.addEventListener('click', closeHandler);
+  const handler = () => {
+    overlay.classList.remove('visible');
+    closeBtn.removeEventListener('click', handler);
+    if (callback) callback();
+  };
+
+  closeBtn.addEventListener('click', handler);
 };
 
-// 定義 showRegistrationCodeModal 函數以便全局使用，增加計時器功能
-window.showRegistrationCodeModal = function(callback) {
-    const modalOverlay = document.getElementById('registrationCodeModalOverlay');
-    const registrationCodeInput = document.getElementById('registrationCodeInput');
-    const nicknameInput = document.getElementById('nicknameInput');
-    const confirmBtn = document.getElementById('confirmRegistrationCodeBtn');
-    const cancelBtn = document.getElementById('cancelRegistrationCodeBtn');
-    const modalMessage = document.getElementById('registrationModalMessage');
+/* =========================
+   全域 UI：註冊碼 Modal（100% 行為保留）
+========================= */
 
-    registrationCodeInput.value = ''; // 清空註冊碼輸入框
-    nicknameInput.value = ''; // 清空暱稱輸入框
-    modalMessage.textContent = '請輸入管理員提供的一次性註冊碼。'; // 重設訊息
-    modalMessage.classList.remove('countdown'); // 移除計時器樣式
-    modalOverlay.classList.add('visible'); // 顯示模態框
+window.showRegistrationCodeModal = function (callback) {
+  const overlay = document.getElementById('registrationCodeModalOverlay');
+  const codeInput = document.getElementById('registrationCodeInput');
+  const nicknameInput = document.getElementById('nicknameInput');
+  const confirmBtn = document.getElementById('confirmRegistrationCodeBtn');
+  const cancelBtn = document.getElementById('cancelRegistrationCodeBtn');
+  const messageEl = document.getElementById('registrationModalMessage');
 
-    let countdown = 60; // 60秒計時
-    let timerInterval;
+  codeInput.value = '';
+  nicknameInput.value = '';
+  overlay.classList.add('visible');
 
-    const updateTimer = () => {
-        modalMessage.textContent = `請輸入管理員提供的一次性註冊碼。剩餘時間: ${countdown} 秒`;
-        modalMessage.classList.add('countdown');
-        if (countdown <= 0) {
-            clearInterval(timerInterval);
-            modalOverlay.classList.remove('visible'); // 隱藏模態框
-            cleanupListeners();
-            callback(null); // 表示時間到，自動取消
-        }
-        countdown--;
-    };
+  let countdown = 60;
+  let timer;
 
-    const cleanupListeners = () => {
-        clearInterval(timerInterval);
-        confirmBtn.removeEventListener('click', confirmHandler);
-        cancelBtn.removeEventListener('click', cancelHandler);
-    };
+  const update = () => {
+    messageEl.textContent =
+      `請輸入管理員提供的一次性註冊碼。剩餘時間: ${countdown} 秒`;
+    messageEl.classList.add('countdown');
 
-    const confirmHandler = () => {
-        const code = registrationCodeInput.value.trim();
-        const nickname = nicknameInput.value.trim();
-        if (code && nickname) {
-            modalOverlay.classList.remove('visible'); // 隱藏模態框
-            cleanupListeners();
-            callback({ code: code, nickname: nickname });
-        } else {
-            modalMessage.textContent = '請輸入註冊碼和您的暱稱。';
-            modalMessage.classList.remove('countdown');
-        }
-    };
+    if (countdown <= 0) {
+      cleanup();
+      overlay.classList.remove('visible');
+      callback(null);
+    }
+    countdown--;
+  };
 
-    const cancelHandler = () => {
-        modalOverlay.classList.remove('visible'); // 隱藏模態框
-        cleanupListeners();
-        callback(null); // 表示取消
-    };
+  const cleanup = () => {
+    clearInterval(timer);
+    confirmBtn.removeEventListener('click', onConfirm);
+    cancelBtn.removeEventListener('click', onCancel);
+  };
 
-    // 啟動計時器
-    timerInterval = setInterval(updateTimer, 1000);
-    updateTimer(); // 立即執行一次以顯示初始時間
+  const onConfirm = () => {
+    const code = codeInput.value.trim();
+    const nickname = nicknameInput.value.trim();
+    if (code && nickname) {
+      cleanup();
+      overlay.classList.remove('visible');
+      callback({ code, nickname });
+    } else {
+      messageEl.textContent = '請輸入註冊碼和您的暱稱。';
+      messageEl.classList.remove('countdown');
+    }
+  };
 
-    confirmBtn.addEventListener('click', confirmHandler);
-    cancelBtn.addEventListener('click', cancelHandler);
+  const onCancel = () => {
+    cleanup();
+    overlay.classList.remove('visible');
+    callback(null);
+  };
+
+  confirmBtn.addEventListener('click', onConfirm);
+  cancelBtn.addEventListener('click', onCancel);
+
+  timer = setInterval(update, 1000);
+  update();
 };

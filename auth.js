@@ -1,140 +1,193 @@
-// auth.js
-(function () {
-  'use strict';
+// auth.js (v2.0, Firebase v9+)
 
-  window.AUTH = {
-    user: null,
-    role: null
-  };
-  
-  const loginBtn = $('googleSignInBtn');
-  const logoutBtn = $('logoutBtn');
-  const loginForm = $('loginForm');
-  const dashboard = $('loggedInDashboard');
-  const emailDisplay = $('userEmailDisplay');
+import {
+  GoogleAuthProvider,
+  signInWithPopup,
+  signOut,
+  onAuthStateChanged
+} from "https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js";
 
-  /* ========= Google 登入 ========= */
+import {
+  doc,
+  getDoc,
+  setDoc,
+  updateDoc,
+  collection,
+  getDocs,
+  onSnapshot,
+  runTransaction,
+  serverTimestamp
+} from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
 
-  loginBtn?.addEventListener('click', async () => {
-    const provider = new firebase.auth.GoogleAuthProvider();
-    try {
-      await auth.signInWithPopup(provider);
-    } catch (e) {
-      alert(e.message);
-    }
-  });
+import { auth, db } from "./firebase-init.js";
 
-  logoutBtn?.addEventListener('click', () => auth.signOut());
+/* =========================
+   全域狀態（v1.9.6 對齊）
+========================= */
 
- /* ========= Auth 狀態 ========= */
+export const AUTH = {
+  user: null,
+  role: null,
+  nickname: null
+};
 
-  auth.onAuthStateChanged(user => {
-    AUTH.user = user;
+/* =========================
+   DOM
+========================= */
 
-    if (!user) {
-      loginForm.style.display = '';
-      dashboard.style.display = 'none';
-      AUTH.role = null;
-      return;
-    }
+const loginBtn = document.getElementById('googleSignInBtn');
+const logoutBtn = document.getElementById('logoutBtn');
+const loginForm = document.getElementById('loginForm');
+const dashboard = document.getElementById('loggedInDashboard');
+const emailDisplay = document.getElementById('userEmailDisplay');
 
-    loginForm.style.display = 'none';
-    dashboard.style.display = '';
-    emailDisplay.textContent = user.email;
+const generateCodeBtn = document.getElementById('generateRegistrationCodeBtn');
+const registrationDisplay = document.getElementById('registrationCodeDisplay');
+const registrationCountdown = document.getElementById('registrationCodeCountdown');
 
-    db.collection('users').doc(user.uid).onSnapshot(doc => {
-      const role = doc.data()?.role || 'unapproved';
-      if (AUTH.role === role) return;
+/* =========================
+   Google 登入 / 登出
+========================= */
 
-      AUTH.role = role;
-      document.dispatchEvent(new CustomEvent('auth:role', { detail: role }));
-    });
+loginBtn?.addEventListener('click', async () => {
+  try {
+    const provider = new GoogleAuthProvider();
+    await signInWithPopup(auth, provider);
+  } catch (err) {
+    showMessage('登入失敗', err.message);
+  }
+});
 
-    document.dispatchEvent(new CustomEvent('auth:changed', { detail: user }));
-  });
- 
-  /* ========= 產生註冊碼 ========= */
+logoutBtn?.addEventListener('click', async () => {
+  await signOut(auth);
+});
 
-  async function generateRegistrationCode() {
-    if (AUTH.role !== 'owner') {
-      alert('只有管理員可以產生註冊碼');
-      return;
-    }
+/* =========================
+   Auth 狀態監聽（核心）
+========================= */
 
-    const code =
-      Math.random().toString(36).substring(2, 5).toUpperCase() +
-      Math.random().toString(36).substring(2, 7).toUpperCase();
+onAuthStateChanged(auth, async user => {
+  AUTH.user = user;
 
-    const expireAt = new Date(Date.now() + 60 * 1000);
+  if (!user) {
+    AUTH.role = null;
+    AUTH.nickname = null;
 
-    await db.collection('settings').doc('registration').set({
-      oneTimeCode: code,
-      oneTimeCodeExpiry: firebase.firestore.Timestamp.fromDate(expireAt)
-    }, { merge: true });
-
-    document.dispatchEvent(new CustomEvent('auth:codeGenerated', {
-      detail: { code, expireAt }
-    }));
+    loginForm.style.display = '';
+    dashboard.style.display = 'none';
+    return;
   }
 
-  /* ========================
-     使用者：驗證註冊碼（核心）
-  ======================== */
+  loginForm.style.display = 'none';
+  dashboard.style.display = '';
+  emailDisplay.textContent = user.email;
 
-  async function verifyRegistrationCode(inputCode) {
-    if (!AUTH.user) {
-      alert('請先登入');
-      return;
+  const userRef = doc(db, 'users', user.uid);
+
+  onSnapshot(userRef, snap => {
+    const data = snap.data() || {};
+    AUTH.role = data.role || 'unapproved';
+    AUTH.nickname = data.nickname || '';
+
+    document.dispatchEvent(
+      new CustomEvent('auth:role', { detail: AUTH.role })
+    );
+  });
+
+  document.dispatchEvent(
+    new CustomEvent('auth:changed', { detail: user })
+  );
+});
+
+/* =========================
+   Owner：產生一次性註冊碼
+========================= */
+
+generateCodeBtn?.addEventListener('click', async () => {
+  if (AUTH.role !== 'owner') {
+    showMessage('權限不足', '只有管理員可以產生註冊碼');
+    return;
+  }
+
+  const code =
+    Math.random().toString(36).substring(2, 6).toUpperCase() +
+    Math.random().toString(36).substring(2, 6).toUpperCase();
+
+  const expireAt = Date.now() + 60 * 1000;
+
+  await setDoc(
+    doc(db, 'settings', 'registration'),
+    {
+      oneTimeCode: code,
+      oneTimeCodeExpiry: expireAt
+    },
+    { merge: true }
+  );
+
+  registrationDisplay.textContent = code;
+  registrationDisplay.style.display = 'inline';
+  registrationCountdown.style.display = 'inline';
+
+  let remain = 60;
+  const timer = setInterval(() => {
+    registrationCountdown.textContent = `剩餘 ${remain--} 秒`;
+    if (remain < 0) {
+      clearInterval(timer);
+      registrationCountdown.textContent = '已過期';
     }
+  }, 1000);
+});
 
-    const regRef = db.collection('settings').doc('registration');
-    const userRef = db.collection('users').doc(AUTH.user.uid);
+/* =========================
+   使用者：註冊碼驗證（v1.9.6 行為）
+========================= */
 
-    try {
-      await db.runTransaction(async tx => {
-        const regSnap = await tx.get(regRef);
-        if (!regSnap.exists) throw new Error('註冊碼不存在');
+export async function verifyRegistrationCode({ code, nickname }) {
+  const user = AUTH.user;
+  if (!user) return;
 
-        const data = regSnap.data();
-        const now = new Date();
+  const regRef = doc(db, 'settings', 'registration');
+  const userRef = doc(db, 'users', user.uid);
 
-        if (!data.oneTimeCode || data.oneTimeCode !== inputCode) {
-          throw new Error('註冊碼錯誤');
-        }
+  try {
+    await runTransaction(db, async tx => {
+      const regSnap = await tx.get(regRef);
+      if (!regSnap.exists()) throw '註冊碼不存在';
 
-        if (!data.oneTimeCodeExpiry ||
-            data.oneTimeCodeExpiry.toDate() < now) {
-          throw new Error('註冊碼已過期');
-        }
+      const data = regSnap.data();
+      if (data.oneTimeCode !== code) throw '註冊碼錯誤';
+      if (Date.now() > data.oneTimeCodeExpiry) throw '註冊碼已過期';
 
-        // consume：立即失效
-        tx.update(regRef, {
-          oneTimeCode: firebase.firestore.FieldValue.delete(),
-          oneTimeCodeExpiry: firebase.firestore.FieldValue.delete()
-        });
-
-        // 升權（依你系統：editor）
-        tx.set(userRef, {
-          role: 'editor',
-          approvedAt: firebase.firestore.FieldValue.serverTimestamp()
-        }, { merge: true });
+      // consume（一次性）
+      tx.update(regRef, {
+        oneTimeCode: '',
+        oneTimeCodeExpiry: 0
       });
 
-      document.dispatchEvent(new Event('auth:verifySuccess'));
-    } catch (err) {
-      document.dispatchEvent(new CustomEvent('auth:verifyFail', {
-        detail: err.message || '驗證失敗'
-      }));
-    }
+      tx.set(
+        userRef,
+        {
+          role: 'editor',
+          nickname,
+          approvedAt: serverTimestamp()
+        },
+        { merge: true }
+      );
+    });
+
+    showMessage('成功', '註冊完成，權限已開通');
+  } catch (err) {
+    showMessage('驗證失敗', err.toString());
   }
+}
 
-  /* ========================
-     事件對外綁定
-  ======================== */
+/* =========================
+   觸發註冊碼 Modal（v1.9.6 對齊）
+========================= */
 
-  document.addEventListener('auth:generateCode', generateRegistrationCode);
-  document.addEventListener('auth:verifyCode', e => {
-    verifyRegistrationCode(e.detail);
+document.addEventListener('auth:requireRegistration', () => {
+  showRegistrationCodeModal(result => {
+    if (!result) return;
+    verifyRegistrationCode(result);
   });
-
-})();
+});
