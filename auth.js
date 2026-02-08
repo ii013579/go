@@ -22,7 +22,7 @@ import {
 import { auth, db } from "./firebase-init.js";
 
 /* =========================
-   ¥þ°ìª¬ºA¡]v1.9.6 ¹ï»ô¡^
+   å…¨åŸŸç‹€æ…‹ï¼ˆv1.9.6 å°é½Šï¼‰
 ========================= */
 
 export const AUTH = {
@@ -46,7 +46,7 @@ const registrationDisplay = document.getElementById('registrationCodeDisplay');
 const registrationCountdown = document.getElementById('registrationCodeCountdown');
 
 /* =========================
-   Google µn¤J / µn¥X
+   Google ç™»å…¥ / ç™»å‡º
 ========================= */
 
 loginBtn?.addEventListener('click', async () => {
@@ -54,7 +54,7 @@ loginBtn?.addEventListener('click', async () => {
     const provider = new GoogleAuthProvider();
     await signInWithPopup(auth, provider);
   } catch (err) {
-    showMessage('µn¤J¥¢±Ñ', err.message);
+    showMessage('ç™»å…¥å¤±æ•—', err.message);
   }
 });
 
@@ -63,7 +63,7 @@ logoutBtn?.addEventListener('click', async () => {
 });
 
 /* =========================
-   Auth ª¬ºAºÊÅ¥¡]®Ö¤ß¡^
+   Auth ç‹€æ…‹ç›£è½ï¼ˆæ ¸å¿ƒï¼‰
 ========================= */
 
 onAuthStateChanged(auth, async user => {
@@ -101,12 +101,12 @@ onAuthStateChanged(auth, async user => {
 });
 
 /* =========================
-   Owner¡G²£¥Í¤@¦¸©Êµù¥U½X
+   Ownerï¼šç”¢ç”Ÿä¸€æ¬¡æ€§è¨»å†Šç¢¼
 ========================= */
 
 generateCodeBtn?.addEventListener('click', async () => {
   if (AUTH.role !== 'owner') {
-    showMessage('Åv­­¤£¨¬', '¥u¦³ºÞ²z­û¥i¥H²£¥Íµù¥U½X');
+    showMessage('æ¬Šé™ä¸è¶³', 'åªæœ‰ç®¡ç†å“¡å¯ä»¥ç”¢ç”Ÿè¨»å†Šç¢¼');
     return;
   }
 
@@ -131,16 +131,16 @@ generateCodeBtn?.addEventListener('click', async () => {
 
   let remain = 60;
   const timer = setInterval(() => {
-    registrationCountdown.textContent = `³Ñ¾l ${remain--} ¬í`;
+    registrationCountdown.textContent = `å‰©é¤˜ ${remain--} ç§’`;
     if (remain < 0) {
       clearInterval(timer);
-      registrationCountdown.textContent = '¤w¹L´Á';
+      registrationCountdown.textContent = 'å·²éŽæœŸ';
     }
   }, 1000);
 });
 
 /* =========================
-   ¨Ï¥ÎªÌ¡Gµù¥U½XÅçÃÒ¡]v1.9.6 ¦æ¬°¡^
+   ä½¿ç”¨è€…ï¼šè¨»å†Šç¢¼é©—è­‰ï¼ˆv1.9.6 è¡Œç‚ºï¼‰
 ========================= */
 
 export async function verifyRegistrationCode({ code, nickname }) {
@@ -153,13 +153,13 @@ export async function verifyRegistrationCode({ code, nickname }) {
   try {
     await runTransaction(db, async tx => {
       const regSnap = await tx.get(regRef);
-      if (!regSnap.exists()) throw new Error('µù¥U½X¤£¦s¦b');
+      if (!regSnap.exists()) throw new Error('è¨»å†Šç¢¼ä¸å­˜åœ¨');
 
       const data = regSnap.data();
-      if (data.oneTimeCode !== code) throw new Error('µù¥U½X¿ù»~');
-      if (Date.now() > data.oneTimeCodeExpiry) throw new Error('µù¥U½X¤w¹L´Á');
+      if (data.oneTimeCode !== code) throw new Error('è¨»å†Šç¢¼éŒ¯èª¤');
+      if (Date.now() > data.oneTimeCodeExpiry) throw new Error('è¨»å†Šç¢¼å·²éŽæœŸ');
 
-      // consume¡]¤@¦¸©Ê¡^
+      // consumeï¼ˆä¸€æ¬¡æ€§ï¼‰
       tx.update(regRef, {
         oneTimeCode: '',
         oneTimeCodeExpiry: 0
@@ -176,13 +176,14 @@ export async function verifyRegistrationCode({ code, nickname }) {
       );
     });
 
-    showMessage('¦¨¥\', 'µù¥U§¹¦¨¡AÅv­­¤w¶}³q');
+    showMessage('æˆåŠŸ', 'è¨»å†Šå®Œæˆï¼Œæ¬Šé™å·²é–‹é€š');
   } catch (err) {
-    showMessage('ÅçÃÒ¥¢±Ñ', err.message || String(err));
+    showMessage('é©—è­‰å¤±æ•—', err.message || String(err));
   }
+}
 
 /* =========================
-   Ä²µoµù¥U½X Modal¡]v1.9.6 ¹ï»ô¡^
+   è§¸ç™¼è¨»å†Šç¢¼ Modalï¼ˆv1.9.6 å°é½Šï¼‰
 ========================= */
 
 document.addEventListener('auth:requireRegistration', () => {
@@ -191,3 +192,4 @@ document.addEventListener('auth:requireRegistration', () => {
     verifyRegistrationCode(result);
   });
 });
+
