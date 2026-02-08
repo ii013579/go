@@ -153,11 +153,11 @@ export async function verifyRegistrationCode({ code, nickname }) {
   try {
     await runTransaction(db, async tx => {
       const regSnap = await tx.get(regRef);
-      if (!regSnap.exists()) throw '註冊碼不存在';
+      if (!regSnap.exists()) throw new Error('註冊碼不存在');
 
       const data = regSnap.data();
-      if (data.oneTimeCode !== code) throw '註冊碼錯誤';
-      if (Date.now() > data.oneTimeCodeExpiry) throw '註冊碼已過期';
+      if (data.oneTimeCode !== code) throw new Error('註冊碼錯誤');
+      if (Date.now() > data.oneTimeCodeExpiry) throw new Error('註冊碼已過期');
 
       // consume（一次性）
       tx.update(regRef, {

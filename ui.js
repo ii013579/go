@@ -38,14 +38,18 @@ let editMode = false;
 
 const editBtn = document.getElementById('editButton');
 
-editBtn?.addEventListener('click', () => {
-  editMode = !editMode;
-  editBtn.classList.toggle('active', editMode);
-  document.body.classList.toggle('edit-mode', editMode);
-  Document.dispatchEvent(new CustomEvent('edit:toggle', {
-    detail: editMode
-  }));
-});
+if (editBtn) {
+  editBtn.addEventListener('click', () => {
+    editMode = !editMode;
+
+    editBtn.classList.toggle('active', editMode);
+    document.body.classList.toggle('edit-mode', editMode);
+
+    document.dispatchEvent(
+      new CustomEvent('edit:toggle', { detail: editMode })
+    );
+  });
+}
 
 /* =========================
    搜尋（v1.9.6）
