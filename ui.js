@@ -36,10 +36,15 @@ const userList = $('userList');
 
 let editMode = false;
 
+const editBtn = document.getElementById('editButton');
+
 editBtn?.addEventListener('click', () => {
   editMode = !editMode;
   editBtn.classList.toggle('active', editMode);
   document.body.classList.toggle('edit-mode', editMode);
+  Document.dispatchEvent(new CustomEvent('edit:toggle', {
+    detail: editMode
+  }));
 });
 
 /* =========================
@@ -92,13 +97,17 @@ searchBox?.addEventListener('input', () => {
    Auth / Role UI 切換
 ========================= */
 
+document.addEventListener('auth:changed', e => {
+  const user = e.detail;
+  document.getElementById('loginForm').style.display = user ? 'none' : '';
+  document.getElementById('loggedInDashboard').style.display = user ? '' : 'none';
+});
+
 document.addEventListener('auth:role', e => {
   const role = e.detail;
-
-  registrationSection.style.display =
+  document.getElementById('registrationSettingsSection').style.display =
     role === 'owner' ? '' : 'none';
-
-  userMgmtSection.style.display =
+  document.getElementById('userManagementSection').style.display =
     role === 'owner' ? '' : 'none';
 
   if (role === 'unapproved') {

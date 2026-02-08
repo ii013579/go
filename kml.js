@@ -18,14 +18,14 @@ const deleteBtn = document.getElementById('deleteSelectedKmlBtn');
 const pinBtn = document.getElementById('pinButton');
 
 /* =========================
-   ç‹€æ…‹
+   ª¬ºA
 ========================= */
 
 let currentKmlId = null;
 let lastPinnedId = localStorage.getItem('pinnedKmlId');
 
 /* =========================
-   åˆå§‹åŒ–
+   ªì©l¤Æ
 ========================= */
 
 document.addEventListener('auth:changed', refreshKmlList);
@@ -38,14 +38,14 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 /* =========================
-   KML æ¸…å–®
+   KML ²M³æ
 ========================= */
 
 async function refreshKmlList() {
   const list = await KML_DB.list();
 
-  fillSelect(kmlSelect, list, '-- è«‹é¸æ“‡ KML --');
-  fillSelect(kmlSelectDashboard, list, '-- è«‹é¸æ“‡ KML åœ–å±¤ --');
+  fillSelect(kmlSelect, list, '-- ½Ð¿ï¾Ü KML --');
+  fillSelect(kmlSelectDashboard, list, '-- ½Ð¿ï¾Ü KML ¹Ï¼h --');
 
   kmlSelectDashboard.disabled = AUTH.role !== 'owner';
 }
@@ -67,7 +67,7 @@ function fillSelect(select, list, placeholder) {
 }
 
 /* =========================
-   è¼‰å…¥ä¸¦é¡¯ç¤º KML
+   ¸ü¤J¨ÃÅã¥Ü KML
 ========================= */
 
 async function loadKml(id) {
@@ -82,7 +82,7 @@ async function loadKml(id) {
 }
 
 /* =========================
-   ä¸‹æ‹‰é¸å–®äº‹ä»¶
+   ¤U©Ô¿ï³æ¨Æ¥ó
 ========================= */
 
 kmlSelect?.addEventListener('change', e => {
@@ -90,18 +90,18 @@ kmlSelect?.addEventListener('change', e => {
 });
 
 /* =========================
-   Pinï¼ˆv1.9.6 è¡Œç‚ºï¼‰
+   Pin¡]v1.9.6 ¦æ¬°¡^
 ========================= */
 
 pinBtn?.addEventListener('click', () => {
   if (!currentKmlId) return;
 
   localStorage.setItem('pinnedKmlId', currentKmlId);
-  showMessage('å·²é‡˜é¸', 'æ­¤ KML å°‡åœ¨ä¸‹æ¬¡é–‹å•Ÿæ™‚è‡ªå‹•è¼‰å…¥');
+  showMessage('¤w°v¿ï', '¦¹ KML ±N¦b¤U¦¸¶}±Ò®É¦Û°Ê¸ü¤J');
 });
 
 /* =========================
-   æª”æ¡ˆé¸æ“‡
+   ÀÉ®×¿ï¾Ü
 ========================= */
 
 fileNameLabel?.addEventListener('click', () => {
@@ -117,7 +117,7 @@ fileInput?.addEventListener('change', () => {
 });
 
 /* =========================
-   ä¸Šå‚³ KMLï¼ˆv1.9.6ï¼‰
+   ¤W¶Ç KML¡]v1.9.6¡^
 ========================= */
 
 uploadBtn?.addEventListener('click', async () => {
@@ -137,20 +137,20 @@ uploadBtn?.addEventListener('click', async () => {
       filename: file.name
     });
 
-    showMessage('æˆåŠŸ', 'KML ä¸Šå‚³å®Œæˆ');
+    showMessage('¦¨¥\', 'KML ¤W¶Ç§¹¦¨');
     fileInput.value = '';
-    fileNameLabel.textContent = 'å°šæœªé¸æ“‡æª”æ¡ˆ';
+    fileNameLabel.textContent = '©|¥¼¿ï¾ÜÀÉ®×';
 
     await refreshKmlList();
   } catch (err) {
-    showMessage('ä¸Šå‚³å¤±æ•—', err.toString());
+    showMessage('¤W¶Ç¥¢±Ñ', err.toString());
   } finally {
     uploadBtn.disabled = false;
   };
 });
 
 /* =========================
-   åˆªé™¤ KMLï¼ˆv1.9.6ï¼‰
+   §R°£ KML¡]v1.9.6¡^
 ========================= */
 
 deleteBtn?.addEventListener('click', () => {
@@ -158,11 +158,11 @@ deleteBtn?.addEventListener('click', () => {
   if (!id) return;
 
   showConfirmation(
-    'ç¢ºèªåˆªé™¤',
-    'ç¢ºå®šè¦åˆªé™¤æ­¤ KML åœ–å±¤å—Žï¼Ÿ',
+    '½T»{§R°£',
+    '½T©w­n§R°£¦¹ KML ¹Ï¼h¶Ü¡H',
     async () => {
       await KML_DB.remove(id);
-      showMessage('å®Œæˆ', 'KML å·²åˆªé™¤');
+      showMessage('§¹¦¨', 'KML ¤w§R°£');
       currentKmlId = null;
       MAP.clear();
       refreshKmlList();
@@ -171,7 +171,7 @@ deleteBtn?.addEventListener('click', () => {
 });
 
 /* =========================
-   Confirmation Modalï¼ˆå…±ç”¨ï¼‰
+   Confirmation Modal¡]¦@¥Î¡^
 ========================= */
 
 function showConfirmation(title, message, onConfirm) {
@@ -201,4 +201,3 @@ function showConfirmation(title, message, onConfirm) {
   yesBtn.addEventListener('click', yesHandler);
   noBtn.addEventListener('click', noHandler);
 }
-

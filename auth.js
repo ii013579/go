@@ -22,7 +22,7 @@ import {
 import { auth, db } from "./firebase-init.js";
 
 /* =========================
-   å…¨åŸŸç‹€æ…‹ï¼ˆv1.9.6 å°é½Šï¼‰
+   ¥þ°ìª¬ºA¡]v1.9.6 ¹ï»ô¡^
 ========================= */
 
 export const AUTH = {
@@ -46,7 +46,7 @@ const registrationDisplay = document.getElementById('registrationCodeDisplay');
 const registrationCountdown = document.getElementById('registrationCodeCountdown');
 
 /* =========================
-   Google ç™»å…¥ / ç™»å‡º
+   Google µn¤J / µn¥X
 ========================= */
 
 loginBtn?.addEventListener('click', async () => {
@@ -54,7 +54,7 @@ loginBtn?.addEventListener('click', async () => {
     const provider = new GoogleAuthProvider();
     await signInWithPopup(auth, provider);
   } catch (err) {
-    showMessage('ç™»å…¥å¤±æ•—', err.message);
+    showMessage('µn¤J¥¢±Ñ', err.message);
   }
 });
 
@@ -63,49 +63,50 @@ logoutBtn?.addEventListener('click', async () => {
 });
 
 /* =========================
-   Auth ç‹€æ…‹ç›£è½ï¼ˆæ ¸å¿ƒï¼‰
+   Auth ª¬ºAºÊÅ¥¡]®Ö¤ß¡^
 ========================= */
 
 onAuthStateChanged(auth, async user => {
-  AUTH.user = user;
-
-  if (!user) {
-    AUTH.role = null;
-    AUTH.nickname = null;
-
-    loginForm.style.display = '';
-    dashboard.style.display = 'none';
-    return;
-  }
-
-  loginForm.style.display = 'none';
-  dashboard.style.display = '';
-  emailDisplay.textContent = user.email;
-
-  const userRef = doc(db, 'users', user.uid);
-
-  onSnapshot(userRef, snap => {
-    const data = snap.data() || {};
-    AUTH.role = data.role || 'unapproved';
-    AUTH.nickname = data.nickname || '';
-
-    document.dispatchEvent(
-      new CustomEvent('auth:role', { detail: AUTH.role })
-    );
-  });
+  AUTH.user = user || null;
 
   document.dispatchEvent(
     new CustomEvent('auth:changed', { detail: user })
   );
+
+  if (!user) {
+    AUTH.role = null;
+    document.dispatchEvent(
+      new CustomEvent('auth:role', { detail: null })
+    );
+    return;
+  }
+
+  const userRef = doc(db, 'users', user.uid);
+  const snap = await getDoc(userRef);
+
+  if (!snap.exists()) {
+    await setDoc(userRef, {
+      email: user.email,
+      role: 'unapproved',
+      createdAt: serverTimestamp()
+    });
+    AUTH.role = 'unapproved';
+  } else {
+    AUTH.role = snap.data().role;
+  }
+
+  document.dispatchEvent(
+    new CustomEvent('auth:role', { detail: AUTH.role })
+  );
 });
 
 /* =========================
-   Ownerï¼šç”¢ç”Ÿä¸€æ¬¡æ€§è¨»å†Šç¢¼
+   Owner¡G²£¥Í¤@¦¸©Êµù¥U½X
 ========================= */
 
 generateCodeBtn?.addEventListener('click', async () => {
   if (AUTH.role !== 'owner') {
-    showMessage('æ¬Šé™ä¸è¶³', 'åªæœ‰ç®¡ç†å“¡å¯ä»¥ç”¢ç”Ÿè¨»å†Šç¢¼');
+    showMessage('Åv­­¤£¨¬', '¥u¦³ºÞ²z­û¥i¥H²£¥Íµù¥U½X');
     return;
   }
 
@@ -130,16 +131,16 @@ generateCodeBtn?.addEventListener('click', async () => {
 
   let remain = 60;
   const timer = setInterval(() => {
-    registrationCountdown.textContent = `å‰©é¤˜ ${remain--} ç§’`;
+    registrationCountdown.textContent = `³Ñ¾l ${remain--} ¬í`;
     if (remain < 0) {
       clearInterval(timer);
-      registrationCountdown.textContent = 'å·²éŽæœŸ';
+      registrationCountdown.textContent = '¤w¹L´Á';
     }
   }, 1000);
 });
 
 /* =========================
-   ä½¿ç”¨è€…ï¼šè¨»å†Šç¢¼é©—è­‰ï¼ˆv1.9.6 è¡Œç‚ºï¼‰
+   ¨Ï¥ÎªÌ¡Gµù¥U½XÅçÃÒ¡]v1.9.6 ¦æ¬°¡^
 ========================= */
 
 export async function verifyRegistrationCode({ code, nickname }) {
@@ -152,13 +153,13 @@ export async function verifyRegistrationCode({ code, nickname }) {
   try {
     await runTransaction(db, async tx => {
       const regSnap = await tx.get(regRef);
-      if (!regSnap.exists()) throw 'è¨»å†Šç¢¼ä¸å­˜åœ¨';
+      if (!regSnap.exists()) throw 'µù¥U½X¤£¦s¦b';
 
       const data = regSnap.data();
-      if (data.oneTimeCode !== code) throw 'è¨»å†Šç¢¼éŒ¯èª¤';
-      if (Date.now() > data.oneTimeCodeExpiry) throw 'è¨»å†Šç¢¼å·²éŽæœŸ';
+      if (data.oneTimeCode !== code) throw 'µù¥U½X¿ù»~';
+      if (Date.now() > data.oneTimeCodeExpiry) throw 'µù¥U½X¤w¹L´Á';
 
-      // consumeï¼ˆä¸€æ¬¡æ€§ï¼‰
+      // consume¡]¤@¦¸©Ê¡^
       tx.update(regRef, {
         oneTimeCode: '',
         oneTimeCodeExpiry: 0
@@ -175,14 +176,13 @@ export async function verifyRegistrationCode({ code, nickname }) {
       );
     });
 
-    showMessage('æˆåŠŸ', 'è¨»å†Šå®Œæˆï¼Œæ¬Šé™å·²é–‹é€š');
+    showMessage('¦¨¥\', 'µù¥U§¹¦¨¡AÅv­­¤w¶}³q');
   } catch (err) {
-    showMessage('é©—è­‰å¤±æ•—', err.toString());
+    showMessage('ÅçÃÒ¥¢±Ñ', err.toString());
   }
-};
 
 /* =========================
-   è§¸ç™¼è¨»å†Šç¢¼ Modalï¼ˆv1.9.6 å°é½Šï¼‰
+   Ä²µoµù¥U½X Modal¡]v1.9.6 ¹ï»ô¡^
 ========================= */
 
 document.addEventListener('auth:requireRegistration', () => {
@@ -191,4 +191,3 @@ document.addEventListener('auth:requireRegistration', () => {
     verifyRegistrationCode(result);
   });
 });
-
