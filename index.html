@@ -146,19 +146,8 @@
 <script type="module" src="ui.js"></script>
 
 <script>
-window.googleSignIn = () => {
-        if (typeof window.login === 'function') {
-            window.login();
-        } else {
-            console.error("Auth module not ready yet.");
-            alert("系統正在啟動中，請等候 1-2 秒再點擊。");
-        }
-    };
-    
-    // v1.9.6 的登出按鈕通常叫 logout，對接 window.logout
-    window.doLogout = () => {
-        if (window.logout) window.logout();
-    };
+window.googleSignIn = () => window.login();
+    window.logout = () => window.logoutUser();
 </script>
 </body>
 </html>
