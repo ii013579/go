@@ -147,17 +147,18 @@
 
 <script>
 window.googleSignIn = () => {
-        if (typeof window.login === 'function') {
-            window.login();
-        } else {
-            console.log("系統初始化中...");
-        }
-    };
-    window.doLogout = () => {
-        if (typeof window.logout === 'function') {
-            window.logout();
-        }
-    };
+  // v1.9.6 的原始邏輯中，這應該呼叫 auth.js 暴露出來的函式
+  if (typeof window.login === 'function') {
+    window.login();
+  } else {
+    // 如果模組載入較慢，嘗試手動觸發一次
+    console.warn("系統初始化中，嘗試重新呼叫...");
+    setTimeout(() => {
+      if (window.login) window.login();
+      else alert("系統載入異常，請重新整理網頁。");
+    }, 500);
+  }
+};
 </script>
 </body>
 </html>
