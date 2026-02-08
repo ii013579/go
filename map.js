@@ -91,24 +91,29 @@ function initControls() {
 function initLocateControl() {
   if (!navigator.geolocation) return;
 
-  const Locate = L.Control.extend({
-    onAdd() {
-      const btn = L.DomUtil.create(
-        'a',
-        'leaflet-bar leaflet-control'
-      );
-      btn.innerHTML = '📍';
-      btn.href = '#';
-      btn.title = '定位';
+  const locateControl = L.control({ position: 'topright' });
 
-      L.DomEvent.on(btn, 'click', e => {
-        L.DomEvent.stop(e);
-        locateUser();
-      });
+  locateControl.onAdd = function () {
+    const container = L.DomUtil.create(
+      'div',
+      'leaflet-bar leaflet-control'
+    );
 
-      return btn;
-    }
-  });
+    const btn = L.DomUtil.create('a', '', container);
+    btn.innerHTML = '◎';
+    btn.href = '#';
+    btn.title = '定位';
+
+    L.DomEvent.on(btn, 'click', e => {
+      L.DomEvent.stop(e);
+      locateUser();
+    });
+
+    return container;
+  };
+
+  locateControl.addTo(ns.map);
+}
 
   ns.locateControl = new Locate({ position: 'topright' });
   ns.locateControl.addTo(ns.map);

@@ -178,7 +178,7 @@ export async function verifyRegistrationCode({ code, nickname }) {
 
     showMessage('成功', '註冊完成，權限已開通');
   } catch (err) {
-    showMessage('驗證失敗', err.toString());
+    showMessage('驗證失敗', err.message || String(err));
   }
 
 /* =========================

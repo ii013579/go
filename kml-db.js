@@ -92,7 +92,7 @@ export const KML_DB = {
 
   /* ===== 上傳 / 覆蓋 KML（v1.9.6 行為）===== */
   async upload({ file, geojson, filename }) {
-    if (!AUTH.user) throw '尚未登入';
+    if (!AUTH.user) throw new Error('尚未登入');
 
     // Storage 路徑（與 v1.9.6 一致）
     const storageRef = ref(
