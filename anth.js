@@ -3,52 +3,25 @@ import { doc, getDoc } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-
 
 const provider = new GoogleAuthProvider();
 
+// 立即掛載，解決 Auth module not ready
 window.login = () => {
-    if (!window.auth) {
-        alert("Firebase 尚未就緒，請稍後再試");
-        return;
-    }
-    signInWithPopup(window.auth, provider)
-        .then(() => console.log("Login Success"))
-        .catch(err => alert("登入失敗: " + err.message));
+    signInWithPopup(window.auth, provider).catch(e => alert("登入失敗: " + e.message));
 };
 
-window.logout = () => signOut(window.auth);
-
-// 監聽登入狀態 (與 v1.9.6 邏輯相同)
 onAuthStateChanged(window.auth, async (user) => {
     const dash = document.getElementById('loggedInDashboard');
     const form = document.getElementById('loginForm');
     
-if (user) {
-        console.log("Logged in as:", user.email);
-        try {
-            const snap = await getDoc(doc(window.db, `apps/${window.appId}/users`, user.uid));
-            window.App.userRole = snap.exists() ? snap.data().role : 'guest';
-            
-            if(dash) dash.style.display = 'block';
-            if(form) form.style.display = 'none';
-            if(document.getElementById('userEmailDisplay')) {
-                document.getElementById('userEmailDisplay').textContent = user.email;
-            }
-                    
-        if (window.App.userRole === 'admin') {
-            document.getElementById('registrationSettingsSection').style.display = 'block';
-        }
+    // 無論是否登入，都先讀取資料庫 (恢復 Guest 讀取模式)
+    if (window.updateKmlSelect) window.updateKmlSelect();
+
+    if (user) {
+        const snap = await getDoc(doc(window.db, `apps/${window.appId}/users`, user.uid));
+        window.App.userRole = snap.exists() ? snap.data().role : 'guest';
+        dash.style.display = 'block';
+        form.style.display = 'none';
+        document.getElementById('userEmailDisplay').textContent = user.email;
         
-        // 觸發 KML 清單更新 )
-if (window.updateKmlSelect) window.updateKmlSelect();
-            const pinned = localStorage.getItem('pinnedKmlId');
-            if (pinned && window.loadKml) window.loadKml(pinned);
-            
-        } catch (e) { console.error("Auth Snap Error:", e); }
-    } else {
-        if(dash) dash.style.display = 'none';
-        if(form) form.style.display = 'block';
-    }
-});
-        
-        // 檢查釘選
         const pinned = localStorage.getItem('pinnedKmlId');
         if (pinned && window.loadKml) window.loadKml(pinned);
     } else {
