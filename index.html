@@ -42,7 +42,7 @@
   <div id="authSection">
     <div id="loginForm">
       <h3>請登入</h3>
-      <button id="googleSignInBtn" class="action-buttons google-btn">
+      <button id="googleSignInBtn" class="action-buttons google-btn" onclick="googleSignIn()">
         <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google icon" />
         使用 Google 登入
       </button>
@@ -146,9 +146,18 @@
 <script type="module" src="ui.js"></script>
 
 <script>
-    // 確保登入/登出按鈕正常工作
-    window.googleSignIn = () => window.login?.();
-    window.logout = () => window.logoutUser?.();
+window.googleSignIn = () => {
+        if (typeof window.login === 'function') {
+            window.login();
+        } else {
+            console.log("系統初始化中...");
+        }
+    };
+    window.doLogout = () => {
+        if (typeof window.logout === 'function') {
+            window.logout();
+        }
+    };
 </script>
 </body>
 </html>
