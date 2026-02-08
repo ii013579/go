@@ -115,9 +115,7 @@ function initLocateControl() {
   locateControl.addTo(ns.map);
 }
 
-  ns.locateControl = new Locate({ position: 'topright' });
-  ns.locateControl.addTo(ns.map);
-}
+
 
 function locateUser() {
   navigator.geolocation.getCurrentPosition(
