@@ -1,12 +1,7 @@
 ﻿document.addEventListener('DOMContentLoaded', () => {
-    const map = L.map('map', { 
-        zoomControl: false, 
-        maxZoom: 25, 
-        minZoom: 5,
-        attributionControl: true 
-    }).setView([23.6, 120.9], 8);
+    const map = L.map('map', { zoomControl: false, maxZoom: 25, minZoom: 5 }).setView([23.6, 120.9], 8);
     window.App.map = map;
-
+    
     const baseLayers = {
 'Google 街道圖': L.tileLayer('https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}'),
         'Google 衛星圖': L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}'),
@@ -14,7 +9,9 @@
         'OpenStreetMap': L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png')
     };
     baseLayers['Google 街道圖'].addTo(map);
-    L.control.layers(baseLayers, null, { position: 'topright' }).addTo(map);
+
+// 控制面板置於右上方 (v1.9.6 模式)
+    L.control.layers(baseLayers, null, { position: 'topright', collapsed: true }).addTo(map);
 
 // 恢復縮放按鈕
     L.control.zoom({ position: 'bottomright' }).addTo(map);
