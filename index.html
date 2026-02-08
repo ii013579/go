@@ -147,18 +147,18 @@
 
 <script>
 window.googleSignIn = () => {
-  // v1.9.6 的原始邏輯中，這應該呼叫 auth.js 暴露出來的函式
-  if (typeof window.login === 'function') {
-    window.login();
-  } else {
-    // 如果模組載入較慢，嘗試手動觸發一次
-    console.warn("系統初始化中，嘗試重新呼叫...");
-    setTimeout(() => {
-      if (window.login) window.login();
-      else alert("系統載入異常，請重新整理網頁。");
-    }, 500);
-  }
-};
+        if (typeof window.login === 'function') {
+            window.login();
+        } else {
+            console.error("Auth module not ready yet.");
+            alert("系統正在啟動中，請等候 1-2 秒再點擊。");
+        }
+    };
+    
+    // v1.9.6 的登出按鈕通常叫 logout，對接 window.logout
+    window.doLogout = () => {
+        if (window.logout) window.logout();
+    };
 </script>
 </body>
 </html>
