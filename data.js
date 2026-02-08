@@ -10,14 +10,15 @@ window.renderGeoJson = (features) => {
             window.App.markers.addLayer(m);
         } else {import { doc, getDoc, collection, getDocs } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
 
+// 恢復 v1.9.6 的 GeoJSON 渲染邏輯
 window.addGeoJsonLayers = (features) => {
     window.App.markers.clearLayers();
     window.App.geoJsonLayers.clearLayers();
     features.forEach(f => {
-        if (f.geometry.type === 'Point') {
-            const marker = L.marker([f.geometry.coordinates[1], f.geometry.coordinates[0]]);
-            marker.bindPopup(`<b>${f.properties.name || '未命名'}</b>`);
-            window.App.markers.addLayer(marker);
+        if (f.geometry && f.geometry.type === 'Point') {
+            const m = L.marker([f.geometry.coordinates[1], f.geometry.coordinates[0]]);
+            m.bindPopup(`<b>${f.properties.name || '未命名'}</b>`);
+            window.App.markers.addLayer(m);
         } else {
             window.App.geoJsonLayers.addLayer(L.geoJSON(f));
         }
@@ -26,32 +27,39 @@ window.addGeoJsonLayers = (features) => {
     if (bounds.isValid()) window.App.map.fitBounds(bounds, { padding: [50, 50] });
 };
 
-window.loadKml = async (id) => {
-    if (!id || window.App.isLoading) return;
-    window.App.isLoading = true;
+// 恢復 v1.9.6 的 KML 載入邏輯
+window.loadKml = async (kmlId) => {
+    if (!kmlId || window.App.isLoadingKml) return;
+    window.App.isLoadingKml = true;
     try {
-        const snap = await getDoc(doc(window.db, `apps/${window.appId}/kmlLayers`, id));
+        const docRef = doc(window.db, `apps/${window.appId}/kmlLayers`, kmlId);
+        const snap = await getDoc(docRef);
         if (snap.exists()) {
             let geo = snap.data().geojson;
             if (typeof geo === 'string') geo = JSON.parse(geo);
-            window.App.allKmlFeatures = geo.features.filter(f => f.geometry && f.properties);
-            window.addGeoJsonLayers(window.App.allKmlFeatures);
+            const features = (geo.features || []).filter(f => f.geometry && f.properties);
+            window.App.allKmlFeatures = features;
+            window.addGeoJsonLayers(features);
         }
-    } finally { window.App.isLoading = false; }
+    } catch (e) {
+        console.error("資料讀取失敗:", e);
+        window.showMessage("錯誤", "無法讀取資料庫圖層: " + e.message);
+    } finally { window.App.isLoadingKml = false; }
 };
 
+// 刷新下拉選單
 window.updateKmlSelect = async () => {
-    const snap = await getDocs(collection(window.db, `apps/${window.appId}/kmlLayers`));
+    const colRef = collection(window.db, `apps/${window.appId}/kmlLayers`);
+    const snap = await getDocs(colRef);
     const select = document.getElementById('kmlLayerSelect');
     if (!select) return;
     select.innerHTML = '<option value="">請選擇圖層</option>';
     snap.forEach(d => {
-        const opt = document.createElement('option');
-        opt.value = d.id;
-        opt.textContent = d.data().name;
-        select.appendChild(opt);
+        const opt = new Option(d.data().name || d.id, d.id);
+        select.add(opt);
     });
 };
+
             window.App.geoJsonLayers.addLayer(L.geoJSON(f));
         }
     });

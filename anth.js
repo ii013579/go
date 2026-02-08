@@ -28,7 +28,7 @@ onAuthStateChanged(window.auth, async (user) => {
         }
         
         // 觸發 KML 清單更新 (由 data.js 提供)
-        if (window.updateSelect) window.updateSelect();
+        window.updateKmlSelect();
         
         // 檢查釘選
         const pinned = localStorage.getItem('pinnedKmlId');

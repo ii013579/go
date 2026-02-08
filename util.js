@@ -17,8 +17,6 @@ window.showMessageCustom = (cfg) => {
 window.showRegModal = (callback) => {
     const overlay = document.getElementById('registrationCodeModalOverlay');
     const msg = document.getElementById('registrationCodeModalMessage');
-    const codeIn = document.getElementById('registrationCodeInput');
-    const nickIn = document.getElementById('nicknameInput');
     let countdown = 180;
     overlay.classList.add('visible');
     const timer = setInterval(() => {
@@ -26,10 +24,9 @@ window.showRegModal = (callback) => {
         if (countdown < 0) { clearInterval(timer); overlay.classList.remove('visible'); callback(null); }
     }, 1000);
     document.getElementById('confirmRegistrationCodeBtn').onclick = () => {
-        if (codeIn.value && nickIn.value) {
-            clearInterval(timer); overlay.classList.remove('visible');
-            callback({ code: codeIn.value.trim(), nickname: nickIn.value.trim() });
-        }
+        const code = document.getElementById('registrationCodeInput').value.trim();
+        const nick = document.getElementById('nicknameInput').value.trim();
+        if (code && nick) { clearInterval(timer); overlay.classList.remove('visible'); callback({ code, nickname: nick }); }
     };
     document.getElementById('cancelRegistrationCodeBtn').onclick = () => {
         clearInterval(timer); overlay.classList.remove('visible'); callback(null);
