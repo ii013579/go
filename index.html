@@ -146,13 +146,27 @@
 <script type="module" src="ui.js"></script>
 
 <script>
-    // 增加緩衝判斷
-    window.googleSignIn = () => {
-        if (typeof window.login === 'function') {
-            window.login();
+    // 建立全域命令佇列，確保按鈕點擊時不會報錯
+    window.googleSignIn = function() {
+        console.log("正在確認 Auth 模組...");
+        if (window.FireAuth && typeof window.FireAuth.login === 'function') {
+            window.FireAuth.login();
         } else {
-            console.warn("模組載入中...");
-            setTimeout(() => { if(window.login) window.login(); }, 500);
+            alert("系統啟動中，請稍候 1-2 秒再試一次。");
+        }
+    };
+</script>
+
+<script type="module">
+    import { signInWithPopup, GoogleAuthProvider } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js";
+    
+    // 強制將登入函式綁定到一個獨立的全域物件，防止被覆蓋
+    window.FireAuth = {
+        login: function() {
+            const provider = new GoogleAuthProvider();
+            signInWithPopup(window.auth, provider)
+                .then(() => console.log("登入成功"))
+                .catch(e => alert("登入失敗: " + e.message));
         }
     };
 </script>

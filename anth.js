@@ -1,33 +1,29 @@
-﻿import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js";
+﻿import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js";
 import { doc, getDoc } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
 
-const provider = new GoogleAuthProvider();
-
-// 立即掛載到全域，防止 HTML 呼叫不到
-window.login = () => {
-    if (!window.auth) {
-        alert("Firebase 初始化中，請稍候...");
-        return;
+setTimeout(() => {
+    if (window.updateKmlSelect) {
+        console.log("Guest 模式：嘗試預載資料庫...");
+        window.updateKmlSelect();
     }
-    signInWithPopup(window.auth, provider).catch(e => alert("登入失敗: " + e.message));
-};
-
-window.logoutUser = () => signOut(window.auth);
+}, 1000);
 
 onAuthStateChanged(window.auth, async (user) => {
-    // 即使沒登入，也嘗試讀取資料庫 (解決問題 2-3)
-    if (window.updateKmlSelect) window.updateKmlSelect();
-
+    const dash = document.getElementById('loggedInDashboard');
+    const form = document.getElementById('loginForm');
+    
     if (user) {
-        const snap = await getDoc(doc(window.db, `apps/${window.appId}/users`, user.uid));
-        window.App.userRole = snap.exists() ? snap.data().role : 'guest';
+        const userRef = doc(window.db, `apps/${window.appId}/users`, user.uid);
+        const userSnap = await getDoc(userRef);
+        window.App.userRole = userSnap.exists() ? userSnap.data().role : 'guest';
+        
         if(dash) dash.style.display = 'block';
         if(form) form.style.display = 'none';
-        document.getElementById('userEmailDisplay').textContent = user.email;
         
-        const pinned = localStorage.getItem('pinnedKmlId');
-        if (pinned && window.loadKml) window.loadKml(pinned);
+        // 登入後再次刷新（以獲取權限圖層）
+        if (window.updateKmlSelect) window.updateKmlSelect();
     } else {
+        window.App.userRole = 'guest';
         if(dash) dash.style.display = 'none';
         if(form) form.style.display = 'block';
     }
