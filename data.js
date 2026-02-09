@@ -75,22 +75,17 @@ window.loadKml = async function(kmlId) {
 };
 
 // 3. 恢復 v1.9.6 的下拉選單更新
-window.updateKmlSelect = async function() {
-    const select = document.getElementById('kmlLayerSelect');
-    if (!select) return;
-
+window.updateKmlSelect = async () => {
+    // 檢查 appId 是否存在，避免路徑錯誤
+    const currentAppId = window.appId || "kmldata-d22fb";
     try {
-        const colRef = collection(window.db, `apps/${window.appId}/kmlLayers`);
-        const snap = await getDocs(colRef);
-        
-        select.innerHTML = '<option value="">請選擇圖層</option>';
-        snap.forEach(d => {
-            const opt = document.createElement('option');
-            opt.value = d.id;
-            opt.textContent = d.data().name || d.id;
-            select.appendChild(opt);
-        });
-    } catch (error) {
-        console.error("更新選單失敗:", error);
+        const snap = await getDocs(collection(window.db, `apps/${currentAppId}/kmlLayers`));
+        const sel = document.getElementById('kmlLayerSelect');
+        if (!sel) return;
+        sel.innerHTML = '<option value="">請選擇圖層</option>';
+        snap.forEach(d => sel.add(new Option(d.data().name, d.id)));
+        console.log("資料庫讀取成功 (Guest 模式)");
+    } catch (e) {
+        console.error("資料庫讀取失敗:", e.message);
     }
 };

@@ -5,17 +5,17 @@ const provider = new GoogleAuthProvider();
 
 // 立即掛載到全域，防止 HTML 呼叫不到
 window.login = () => {
-    if (!window.auth) return alert("初始化中...");
-    signInWithPopup(window.auth, provider).catch(e => console.error(e));
+    if (!window.auth) {
+        alert("Firebase 初始化中，請稍候...");
+        return;
+    }
+    signInWithPopup(window.auth, provider).catch(e => alert("登入失敗: " + e.message));
 };
 
 window.logoutUser = () => signOut(window.auth);
 
 onAuthStateChanged(window.auth, async (user) => {
-    const dash = document.getElementById('loggedInDashboard');
-    const form = document.getElementById('loginForm');
-    
-    // v1.9.6 模式：無論是否登入都先嘗試載入選單 (Guest 讀取)
+    // 即使沒登入，也嘗試讀取資料庫 (解決問題 2-3)
     if (window.updateKmlSelect) window.updateKmlSelect();
 
     if (user) {

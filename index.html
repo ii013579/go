@@ -146,8 +146,15 @@
 <script type="module" src="ui.js"></script>
 
 <script>
-window.googleSignIn = () => window.login();
-    window.logout = () => window.logoutUser();
+    // 增加緩衝判斷
+    window.googleSignIn = () => {
+        if (typeof window.login === 'function') {
+            window.login();
+        } else {
+            console.warn("模組載入中...");
+            setTimeout(() => { if(window.login) window.login(); }, 500);
+        }
+    };
 </script>
 </body>
 </html>
