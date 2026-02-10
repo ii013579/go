@@ -151,5 +151,15 @@
     window.doLocate = () => window.App.map.locate({setView: true, maxZoom: 16});
     window.doCancelLocate = () => window.cancelLocate && window.cancelLocate();
 </script>
-</body>
+<script>
+    // 解決 3-1: 登出按鈕
+    function logout() { 
+        if(window.logoutUser) window.logoutUser(); 
+    }
+    // 解決 3-2: 上傳按鈕
+    function uploadKML() { 
+        if(window.triggerUpload) window.triggerUpload(); 
+    }
+</script></body>
 </html>
+
