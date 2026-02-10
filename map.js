@@ -1,5 +1,5 @@
 ﻿document.addEventListener('DOMContentLoaded', () => {
-    // 建立地圖，關閉預設縮放控制
+    // 關閉預設縮放鍵，手動添加以控制順序
     const map = L.map('map', { zoomControl: false, maxZoom: 25, minZoom: 5 }).setView([23.6, 120.9], 8);
     window.App.map = map;
 
@@ -11,23 +11,29 @@
     };
     baseLayers['Google 街道圖'].addTo(map);
 
-    // --- 嚴格依照 v1.9.6 順序添加 (由上至下) ---
-    
-    // 1. 最上方：縮放按鈕
+    // --- 依照 v1.9.6 順序添加至 topright ---
+    // 1. 縮放
     L.control.zoom({ position: 'topright' }).addTo(map);
 
-    // 2. 中間：定位按鈕
+    // 2. 定位 (自定義樣式)
     const LocateBtn = L.Control.extend({
         onAdd: function() {
-            const container = L.DomUtil.create('div', 'leaflet-bar leaflet-control-custom');
-            container.innerHTML = '<button title="我的位置" style="background:#fff; width:30px; height:30px; border:none; display:flex; align-items:center; justify-content:center; cursor:pointer;"><span class="material-symbols-outlined" style="font-size:20px;">my_location</span></button>';
-            container.onclick = () => map.locate({ setView: true, maxZoom: 16 });
-            return container;
+            const div = L.DomUtil.create('div', 'leaflet-bar leaflet-control-custom');
+            div.style.backgroundColor = 'white';
+            div.style.width = '32px';
+            div.style.height = '32px';
+            div.style.display = 'flex';
+            div.style.alignItems = 'center';
+            div.style.justifyContent = 'center';
+            div.style.cursor = 'pointer';
+            div.innerHTML = '<span class="material-symbols-outlined" style="font-size:22px;">my_location</span>';
+            div.onclick = () => map.locate({ setView: true, maxZoom: 16 });
+            return div;
         }
     });
     map.addControl(new LocateBtn({ position: 'topright' }));
 
-    // 3. 最下方：圖層切換 (樣式需符合 image_d1d193.png)
+    // 3. 圖層切換
     L.control.layers(baseLayers, null, { position: 'topright', collapsed: true }).addTo(map);
 
     window.App.markers.addTo(map);

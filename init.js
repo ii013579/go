@@ -3,23 +3,26 @@ import { getAuth } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-auth
 import { getFirestore } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyC-uaCnvgtYacPf_7BtwbwdDUw-WMx4d8s",
-  authDomain: "kmldata-d22fb.firebaseapp.com",
-  projectId: "kmldata-d22fb",
-  storageBucket: "kmldata-d22fb.firebasestorage.app",
-  messagingSenderId: "6673236901",
-  appId: "1:6673236901:web:5aac773cbb512a14b8de4c"
+    apiKey: "AIzaSyC-uaCnvgtYacPf_7BtwbwdDUw-WMx4d8s",
+    authDomain: "kmldata-d22fb.firebaseapp.com",
+    projectId: "kmldata-d22fb",
+    storageBucket: "kmldata-d22fb.firebasestorage.app",
+    messagingSenderId: "6673236901",
+    appId: "1:6673236901:web:5aac773cbb512a14b8de4c"
 };
 
 const app = initializeApp(firebaseConfig);
+
+// ミ本更办跑计
 window.auth = getAuth(app);
 window.db = getFirestore(app);
-window.appId = typeof __app_id !== 'undefined' ? __app_id : firebaseConfig.projectId;
+window.appId = "kmldata-d22fb";
 
 window.App = {
     map: null,
     markers: L.featureGroup(),
     geoJsonLayers: L.featureGroup(),
     allKmlFeatures: [],
-    userRole: 'guest'
+    userRole: 'guest',
+    isLoadingKml: false
 };
