@@ -15,10 +15,10 @@ const DataManager = (function () {
         unsubscribeAuth: null
     };
 
-    const _db = window.db;
-    const _auth = window.auth;
-    const _appId = window.appId;
-
+    const _db = window.db || (typeof db !== 'undefined' ? db : firebase.firestore());
+    const _auth = window.auth || (typeof auth !== 'undefined' ? auth : firebase.auth());
+    const _appId = window.appId || (typeof appId !== 'undefined' ? appId : "");
+    
     // --- 2. DOM 元素快取 (從原 auth-kml-management.js 移入) ---
     const $ = id => document.getElementById(id);
     const els = {
