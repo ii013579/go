@@ -146,15 +146,10 @@
 <script type="module" src="ui.js"></script>
 
 <script>
-    // 解決 v2.0 模組化後的 onclick 呼叫問題
-    window.googleSignIn = () => {
-        if (typeof window.login === 'function') window.login();
-        else alert("系統初始化中，請稍候...");
-    };
-    
-    window.logout = () => {
-        if (typeof window.logoutUser === 'function') window.logoutUser();
-    };
+    window.googleSignIn = () => window.login && window.login();
+    window.logout = () => window.logoutUser && window.logoutUser();
+    window.doLocate = () => window.App.map.locate({setView: true, maxZoom: 16});
+    window.doCancelLocate = () => window.cancelLocate && window.cancelLocate();
 </script>
 </body>
 </html>
