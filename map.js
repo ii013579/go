@@ -1,39 +1,42 @@
 ﻿/**
  * 檔名：map.js
- * 版本：v2.1.0
- * 權責：地圖引擎初始化、UI 面板排列、定位增強功能
+ * 版本：v2.1.3
+ * 權責：地圖引擎、UI 面板排列
+ * 功能：[修正 3-5] 定位按鈕狀態(變紅/取消)，依照圖片排列控制項。
  */
 document.addEventListener('DOMContentLoaded', () => {
-    const map = L.map('map', { zoomControl: false, maxZoom: 25, minZoom: 5 }).setView([23.6, 120.9], 8);
+    const map = L.map('map', { zoomControl: false }).setView([23.6, 120.9], 8);
     window.App.map = map;
+    L.tileLayer('https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}').addTo(map);
 
-    const baseLayers = {
-        'Google 街道圖': L.tileLayer('https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}'),
-        'Google 衛星圖': L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}'),
-        'Google 地形圖': L.tileLayer('https://mt1.google.com/vt/lyrs=p&x={x}&y={y}&z={z}'),
-        'OpenStreetMap': L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png')
-    };
-    baseLayers['Google 街道圖'].addTo(map);
+    // --- 依照圖片垂直排列控制項 ---
+    // 1. 圖層切換 (置於最上方)
+    L.control.layers({}, {}, { position: 'topright' }).addTo(map);
 
-    // --- 恢復 v1.9.6 垂直排列順序 ---
-    L.control.zoom({ position: 'topright' }).addTo(map);
-
-    let userLocMarker = null;
+    // 2. 定位按鈕 (自定義狀態切換)
     const LocateBtn = L.Control.extend({
         onAdd: function() {
             const div = L.DomUtil.create('div', 'leaflet-bar leaflet-control-custom');
-            div.style.backgroundColor = 'white'; div.style.width = '32px'; div.style.height = '32px';
-            div.style.display = 'flex'; div.style.alignItems = 'center'; div.style.justifyContent = 'center';
-            div.style.cursor = 'pointer';
-            div.innerHTML = '<span class="material-symbols-outlined" style="font-size:22px;">my_location</span>';
-            div.onclick = () => map.locate({ setView: true, maxZoom: 16 });
+            div.id = "locate-btn-ui";
+            div.style.cssText = "background:white;width:34px;height:34px;display:flex;align-items:center;justify-content:center;cursor:pointer;";
+            div.innerHTML = '<span class="material-symbols-outlined">my_location</span>';
+            
+            div.onclick = () => {
+                if (!window.App.isLocating) {
+                    map.locate({ setView: true, watch: true, maxZoom: 16 });
+                } else {
+                    window.cancelLocate();
+                }
+            };
             return div;
         }
     });
     map.addControl(new LocateBtn({ position: 'topright' }));
-    L.control.layers(baseLayers, null, { position: 'topright', collapsed: true }).addTo(map);
 
-    // --- 定位增強邏輯 ---
+    // 3. 縮放按鈕 (置於下方)
+    L.control.zoom({ position: 'topright' }).addTo(map);
+
+    // --- 定位事件處理 ---
     map.on('locationstart', () => {
         window.App.isLocating = true;
         document.getElementById('locate-btn-ui').style.color = "red"; // 按鈕變紅
@@ -50,12 +53,10 @@ document.addEventListener('DOMContentLoaded', () => {
         map.stopLocate();
         window.App.isLocating = false;
         document.getElementById('locate-btn-ui').style.color = "black"; // 恢復黑色
-        if (window.App.userLocMarker) {
-            map.removeLayer(window.App.userLocMarker);
-            window.App.userLocMarker = null;
-        }
+        if (window.App.userLocMarker) { map.removeLayer(window.App.userLocMarker); window.App.userLocMarker = null; }
         alert("已停止定位");
     };
-    
+
     window.App.markers.addTo(map);
+    window.App.geoJsonLayers.addTo(map);
 });
