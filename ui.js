@@ -89,3 +89,12 @@ if (kmlSelect) {
 }
 
 console.log("UI Module Loaded");
+
+// 綁定 HTML 按鈕
+document.addEventListener('DOMContentLoaded', () => {
+    const upBtn = document.getElementById('uploadKmlBtn'); // 假設您 HTML 有此 ID
+    if(upBtn) upBtn.onclick = () => window.triggerUpload();
+    
+    const delBtn = document.getElementById('deleteKmlBtn');
+    if(delBtn) delBtn.onclick = () => window.deleteCurrentKml();
+});

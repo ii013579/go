@@ -2,9 +2,6 @@
  * 檔名：map.js
  * 版本：v2.1.0
  * 權責：地圖引擎初始化、UI 面板排列、定位增強功能
- * 功能：
- * - 恢復 v1.9.6 右上角垂直面板 (縮放 -> 定位 -> 圖層)
- * - 處理定位中訊息顯示、藍點標記與取消定位邏輯
  */
 document.addEventListener('DOMContentLoaded', () => {
     const map = L.map('map', { zoomControl: false, maxZoom: 25, minZoom: 5 }).setView([23.6, 120.9], 8);
@@ -38,21 +35,27 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- 定位增強邏輯 ---
     map.on('locationstart', () => {
-        if (window.showMessage) window.showMessage("定位系統", "正在獲取您的目前位置...");
+        window.App.isLocating = true;
+        document.getElementById('locate-btn-ui').style.color = "red"; // 按鈕變紅
+        if (window.showMessage) window.showMessage("定位中", "正在獲取 GPS 位置...");
     });
+
     map.on('locationfound', (e) => {
-        const msg = document.getElementById('messageBoxOverlay');
-        if(msg) msg.classList.remove('visible');
-        if (userLocMarker) map.removeLayer(userLocMarker);
-        userLocMarker = L.circleMarker(e.latlng, { radius: 10, fillColor: "#007bff", color: "#fff", weight: 3, fillOpacity: 0.9 }).addTo(map);
-        userLocMarker.bindPopup("目前位置").openPopup();
+        if (window.hideMessage) window.hideMessage();
+        if (window.App.userLocMarker) map.removeLayer(window.App.userLocMarker);
+        window.App.userLocMarker = L.circleMarker(e.latlng, { radius: 10, fillColor: "#007bff", color: "#fff", weight: 3, fillOpacity: 0.9 }).addTo(map);
     });
 
     window.cancelLocate = () => {
         map.stopLocate();
-        if (userLocMarker) { map.removeLayer(userLocMarker); userLocMarker = null; }
+        window.App.isLocating = false;
+        document.getElementById('locate-btn-ui').style.color = "black"; // 恢復黑色
+        if (window.App.userLocMarker) {
+            map.removeLayer(window.App.userLocMarker);
+            window.App.userLocMarker = null;
+        }
+        alert("已停止定位");
     };
-
+    
     window.App.markers.addTo(map);
-    window.App.geoJsonLayers.addTo(map);
 });
