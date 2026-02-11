@@ -147,10 +147,10 @@
   <!-- 其他函式庫 -->
   <script src="https://unpkg.com/togeojson"></script> 
   <!-- 自定義 JS 檔案載入 -->
-<script src="firebase-init.js"></script>
-
-<script src="data-manager.js"></script>
-<script src="map-engine.js"></script>
-<script src="app-controller.js"></script>
+  <!-- 順序很重要，請確保依賴的檔案先載入 -->
+  <script src="firebase-init.js"></script>
+  <script src="map-logic.js"></script>
+  <script src="auth-kml-management.js"></script>
+  <script src="ui-interactions.js"></script>
 </body>
 </html>
