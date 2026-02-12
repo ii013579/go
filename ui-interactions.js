@@ -76,7 +76,19 @@ document.addEventListener('DOMContentLoaded', () => {
                             item.title = name;
                             item.addEventListener('click', () => {
                                 const originalLatLng = L.latLng(lat, lon);
-                                map.setView(originalLatLng, 18);
+                                
+                                // ✅ 修正 1：確保使用正確的地圖實體 (ns.map 或 window.map)
+                                const targetMap = (typeof ns !== 'undefined' && ns.map) ? ns.map : map;
+                                
+                                if (targetMap) {
+                                    // 使用 flyTo 會比 setView 更平滑，且能確保移動成功
+                                    targetMap.flyTo(originalLatLng, 18, {
+                                        animate: true,
+                                        duration: 0.5
+                                    });
+                                } else {
+                                    console.error("無法找到地圖實體，請檢查 ns.map 是否初始化。");
+                                }
                             
                                 // ✅ 清除所有 label 高亮
                                 document.querySelectorAll('.marker-label span').forEach(el =>
@@ -84,29 +96,24 @@ document.addEventListener('DOMContentLoaded', () => {
                                 );
                             
                                 // ✅ 尋找對應 label 並高亮
+                                // 修正 ID 生成邏輯，確保與 marker-label 生成時一致
                                 const labelId = `label-${lat}-${lon}`.replace(/\./g, '_');
                                 const target = document.getElementById(labelId);
                                 if (target) {
                                     target.classList.add('label-active');
                                 }
                             
-                                window.createNavButton(originalLatLng, name);
+                                // ✅ 修正導航按鈕呼叫 (確保全域可用)
+                                if (typeof window.createNavButton === 'function') {
+                                    window.createNavButton(originalLatLng, name);
+                                }
+                                
                                 searchResults.style.display = 'none';
                                 searchBox.value = '';
-                                searchContainer.classList.remove('search-active');
+                                if(searchContainer) searchContainer.classList.remove('search-active');
                                 console.log(`點擊搜尋結果: ${name}，縮放至地圖並高亮 label。`);
-                            });                            searchResults.appendChild(item);
-                        } else {
-                            console.warn("跳過非 Point 類型或無座標的 feature 進行搜尋:", f);
-                        }
-                    });
-                }
-            } else {
-                searchResults.style.display = 'none';
-                // 當搜尋結果隱藏時，移除 searchContainer 的活躍狀態類別
-                searchContainer.classList.remove('search-active');
-            }
-        });
+                            });
+
 
         // 點擊搜尋結果框外部時隱藏搜尋結果
         document.addEventListener('click', (event) => {
@@ -126,4 +133,5 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
+
 });
