@@ -76,44 +76,43 @@ document.addEventListener('DOMContentLoaded', () => {
                             item.title = name;
                             item.addEventListener('click', () => {
                                 const originalLatLng = L.latLng(lat, lon);
+                                if (window.map) {
+                                        window.map.flyTo(originalLatLng, 18, {
+                                            animate: true,
+                                            duration: 0.8
+                                        });
                                 
-                                // ✅ 修正 1：確保使用正確的地圖實體 (ns.map 或 window.map)
-                                const targetMap = (typeof ns !== 'undefined' && ns.map) ? ns.map : map;
-                                
-                                if (targetMap) {
-                                    // 使用 flyTo 會比 setView 更平滑，且能確保移動成功
-                                    targetMap.flyTo(originalLatLng, 18, {
-                                        animate: true,
-                                        duration: 0.5
-                                    });
-                                } else {
-                                    console.error("無法找到地圖實體，請檢查 ns.map 是否初始化。");
-                                }
-                            
-                                // ✅ 清除所有 label 高亮
+                                        // ✅ 自動開啟該點位的 Popup
+                                        // 搜尋會遍歷地圖上的所有圖層，找到座標相同的 marker 並打開它
+                                        window.map.eachLayer((layer) => {
+                                            if (layer instanceof L.Marker && layer.getLatLng().equals(originalLatLng)) {
+                                                layer.openPopup();
+                                            }
+                                        });
+                                    } else {
+                                        console.error("搜尋聚焦失敗：window.map 未定義。");
+                                    }                            
+                                    
+                                // 清除所有 label 高亮
                                 document.querySelectorAll('.marker-label span').forEach(el =>
                                     el.classList.remove('label-active')
                                 );
                             
-                                // ✅ 尋找對應 label 並高亮
-                                // 修正 ID 生成邏輯，確保與 marker-label 生成時一致
+                                // 尋找對應 label 並高亮
                                 const labelId = `label-${lat}-${lon}`.replace(/\./g, '_');
                                 const target = document.getElementById(labelId);
                                 if (target) {
                                     target.classList.add('label-active');
                                 }
-                            
-                                // ✅ 修正導航按鈕呼叫 (確保全域可用)
-                                if (typeof window.createNavButton === 'function') {
-                                    window.createNavButton(originalLatLng, name);
-                                }
                                 
-                                searchResults.style.display = 'none';
-                                searchBox.value = '';
-                                if(searchContainer) searchContainer.classList.remove('search-active');
-                                console.log(`點擊搜尋結果: ${name}，縮放至地圖並高亮 label。`);
-                            });
-
+                                //  導航按鈕與介面清理 
+                                if (typeof window.createNavButton === 'function') {
+                                        window.createNavButton(originalLatLng, name);
+                                    }
+                                    searchResults.style.display = 'none';
+                                    searchBox.value = '';
+                                    searchContainer.classList.remove('search-active');
+                                });
 
         // 點擊搜尋結果框外部時隱藏搜尋結果
         document.addEventListener('click', (event) => {
@@ -133,5 +132,4 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
-
 });

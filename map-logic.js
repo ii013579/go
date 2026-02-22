@@ -15,6 +15,7 @@
         currentKmlLayerId: null,
         isLoadingKml: false
     };
+    window.mapNamespace = ns;
 
     // ---------- DOMContentLoaded: 初始化地圖與控制項 ----------
     document.addEventListener('DOMContentLoaded', () => {
@@ -30,6 +31,7 @@
             maxZoom: 25,
             minZoom: 5
         }).setView([23.6, 120.9], 8);
+        window.map = ns.map;
 
         // 基本圖層定義（使用常數）
         const baseLayers = {
