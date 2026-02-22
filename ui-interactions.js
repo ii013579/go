@@ -22,6 +22,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 controls.style.display = 'none';
                 authSection.style.display = 'flex';
                 editButton.textContent = '關閉';
+                
+                if (window.mapNamespace && window.mapNamespace.allKmlFeatures.length > 0) {
+                Window.addGeoJsonLayers(window.mapNamespace.allKmlFeatures);
             }
         });
     } else {

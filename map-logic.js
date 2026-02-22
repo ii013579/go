@@ -31,8 +31,12 @@
             maxZoom: 25,
             minZoom: 5
         }).setView([23.6, 120.9], 8);
+        
         window.map = ns.map;
-
+        window.geoJsonLayers = ns.geoJsonLayers;
+        window.markers = ns.markers;
+        window.mapNamespace = ns;
+        
         // 基本圖層定義（使用常數）
         const baseLayers = {
             'Google 街道圖': L.tileLayer('https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {
