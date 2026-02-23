@@ -25,6 +25,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 if (window.mapNamespace && window.mapNamespace.allKmlFeatures.length > 0) {
                 Window.addGeoJsonLayers(window.mapNamespace.allKmlFeatures);
+                }   
             }
         });
     } else {
