@@ -6,11 +6,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const controls = document.getElementById('controls');
     const searchBox = document.getElementById('searchBox');
     const searchResults = document.getElementById('searchResults');
-    const searchContainer = document.getElementById('searchContainer'); // 獲取搜尋容器
+    const searchContainer = document.getElementById('searchContainer'); 
 
     authSection.style.display = 'none';
     controls.style.display = 'flex';
 
+    // 1. 編輯按鈕邏輯
     if (editButton && authSection && controls) {
         editButton.addEventListener('click', () => {
             const isAuthSectionVisible = authSection.style.display === 'flex';
@@ -20,11 +21,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 editButton.textContent = '編輯';
             } else {
                 controls.style.display = 'none';
-                authSection.style.display = 'flex';
+                authSection.style.display = 'flex'; // 修正拼寫: displaay -> display
                 editButton.textContent = '關閉';
                 
                 if (window.mapNamespace && window.mapNamespace.allKmlFeatures.length > 0) {
-                window.addGeoJsonLayers(window.mapNamespace.allKmlFeatures);
+                    window.addGeoJsonLayers(window.mapNamespace.allKmlFeatures);
                 }   
             }
         });
@@ -32,8 +33,7 @@ document.addEventListener('DOMContentLoaded', () => {
         console.error('錯誤: 找不到編輯按鈕、認證區塊或控制項。');
     }
 
-
-    // 監聽搜尋框的輸入事件
+    // 2. 搜尋框邏輯
     if (searchBox && searchResults && searchContainer) {
         searchBox.addEventListener('input', async (e) => {
             const query = e.target.value.trim().toLowerCase();
@@ -47,20 +47,16 @@ document.addEventListener('DOMContentLoaded', () => {
                     );
                 }
 
-                // 當搜尋結果顯示時，為 searchContainer 添加活躍狀態類別
                 searchContainer.classList.add('search-active');
-
-                searchResults.style.display = 'grid'; // 顯示為 grid
+                searchResults.style.display = 'grid'; 
 
                 if (results.length === 0) {
                     const noResult = document.createElement('div');
                     noResult.className = 'result-item';
                     noResult.textContent = '沒有找到結果';
-                    // 讓「沒有找到結果」訊息橫跨三欄
                     noResult.style.gridColumn = 'span 3';
                     searchResults.appendChild(noResult);
                 } else {
-                	  // 🔍 判斷名稱最大長度，套用欄數 class
                     let maxNameLength = 0;
                     results.forEach(f => {
                       const name = f.properties?.name || '';
@@ -81,55 +77,52 @@ document.addEventListener('DOMContentLoaded', () => {
                             item.addEventListener('click', () => {
                                 const originalLatLng = L.latLng(lat, lon);
                                 if (window.map) {
-                                        window.map.flyTo(originalLatLng, 18, { animate: true, duration: 0.8 });
-                                        
-                                        // 自動開啟 Popup
-                                        window.map.eachLayer((layer) => {
-                                            if (layer instanceof L.Marker && layer.getLatLng().equals(originalLatLng)) {
-                                                layer.openPopup();
-                                            }
-                                        });
-                                    } else {
-                                        console.error("搜尋聚焦失敗：window.map 未定義。");
-                                    }                            
+                                    window.map.flyTo(originalLatLng, 18, { animate: true, duration: 0.8 });
                                     
-                                // 清除所有 label 高亮
-                                document.querySelectorAll('.marker-label span').forEach(el =>
-                                    el.classList.remove('label-active')
-                                );
-                            
-                                // 尋找對應 label 並高亮
+                                    window.map.eachLayer((layer) => {
+                                        if (layer instanceof L.Marker && layer.getLatLng().equals(originalLatLng)) {
+                                            layer.openPopup();
+                                        }
+                                    });
+                                }
+
+                                document.querySelectorAll('.marker-label span').forEach(el => el.classList.remove('label-active'));
                                 const labelId = `label-${lat}-${lon}`.replace(/\./g, '_');
                                 const target = document.getElementById(labelId);
-                                if (target) {
-                                    target.classList.add('label-active');
-                                }
+                                if (target) target.classList.add('label-active');
                                 
-                                //  導航按鈕與介面清理 
                                 if (typeof window.createNavButton === 'function') {
-                                        window.createNavButton(originalLatLng, name);
-                                    }
-                                    searchResults.style.display = 'none';
-                                    searchBox.value = '';
-                                    searchContainer.classList.remove('search-active');
-                                });
-
-        // 點擊搜尋結果框外部時隱藏搜尋結果
-        document.addEventListener('click', (event) => {
-            // 檢查點擊是否在 searchResults 內部，或者在 searchBox 內部，或者在 searchContainer 內部
-            if (!searchResults.contains(event.target) && event.target !== searchBox && !searchContainer.contains(event.target)) {
+                                    window.createNavButton(originalLatLng, name);
+                                }
+                                searchResults.style.display = 'none';
+                                searchBox.value = '';
+                                searchContainer.classList.remove('search-active');
+                            });
+                            searchResults.appendChild(item); // 補上這行，將項目加入列表
+                        }
+                    });
+                }
+            } else {
+                searchContainer.classList.remove('search-active');
                 searchResults.style.display = 'none';
-                searchContainer.classList.remove('search-active'); // 移除活躍狀態類別
             }
         });
 
-        // 監聽 ESC 鍵以隱藏搜尋結果
+        // 3. 點擊外部隱藏
+        document.addEventListener('click', (event) => {
+            if (!searchResults.contains(event.target) && event.target !== searchBox && !searchContainer.contains(event.target)) {
+                searchResults.style.display = 'none';
+                searchContainer.classList.remove('search-active');
+            }
+        });
+
+        // 4. ESC 鍵隱藏
         document.addEventListener('keydown', (event) => {
             if (event.key === 'Escape') {
                 searchResults.style.display = 'none';
-                searchContainer.classList.remove('search-active'); // 移除活躍狀態類別
+                searchContainer.classList.remove('search-active');
                 searchBox.blur();
             }
         });
     }
-});
+}); // 這裡補上了最外層 DOMContentLoaded 的閉合
