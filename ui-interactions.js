@@ -81,11 +81,8 @@ document.addEventListener('DOMContentLoaded', () => {
                             item.addEventListener('click', () => {
                                 const originalLatLng = L.latLng(lat, lon);
                                 if (window.map) {
-                                        window.map.flyTo(originalLatLng, 18, {
-                                            animate: true,
-                                            duration: 0.8
-                                        });
-                                
+                                        window.map.flyTo(originalLatLng, 18, { animate: true, duration: 0.8 });
+                                        }
                                         // ✅ 自動開啟該點位的 Popup
                                         // 搜尋會遍歷地圖上的所有圖層，找到座標相同的 marker 並打開它
                                         window.map.eachLayer((layer) => {
