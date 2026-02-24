@@ -62,11 +62,13 @@
   };
 
   // 取得 KML collection 的 Firestore 參照（DRY）
+  const currentAppId = (typeof appId !== 'undefined') ? appId : 'kmldata-d22fb'; 
+    console.log("[系統] 目前使用的 App ID:", currentAppId);
   const getKmlCollectionRef = () =>
-    db.collection('artifacts').doc(appId).collection('public').doc('data').collection('kmlLayers');
+    db.collection('artifacts').doc(currentAppId).collection('public').doc('data').collection('kmlLayers');
   const getSyncDocRef = () =>
-    db.collection('artifacts').doc(appId).collection('public').doc('data').collection('metadata').doc('sync');
-  
+    db.collection('artifacts').doc(currentAppId).collection('public').doc('data').collection('metadata').doc('sync');
+    
   // 建立 <option> 元素的小 helper
   const createOption = (value, text) => {
     const o = document.createElement('option');
