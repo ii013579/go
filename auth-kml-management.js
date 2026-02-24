@@ -49,6 +49,8 @@
   let registrationCodeTimer = null; // 註冊碼倒數計時器
   let currentPinnedKmlId = null;    // 當前釘選的 KML ID
   let isUpdatingList = false;       // 防止清單重複更新的鎖
+  let hasAutoLoaded = false;        // 確保釘選自動載入只執行一次
+  let hasInitialAutoLoaded = false; // 防止重整時多次觸發自動載入
 
   // 角色顯示名稱（中文）
   const getRoleDisplayName = role => {
@@ -122,62 +124,46 @@
     }
   };
 
-  // 啟動時嘗試載入釘選的 KML（含舊 key 的遷移）
-  const tryLoadPinnedKmlLayerWhenReady = () => {
+  // 優化後的釘選載入邏輯
+const tryLoadPinnedKmlLayerWhenReady = () => {
+    // 【修改 1】執行鎖檢查
+    if (hasInitialAutoLoaded) return; 
+
     const select = els.kmlLayerSelect;
+    const pinnedId = localStorage.getItem('pinnedKmlId') || localStorage.getItem('pinnedKmlLayerId');
 
-    // 1) 舊 key 遷移：pinnedKmlLayerId -> pinnedKmlId
-    const oldPinnedId = localStorage.getItem('pinnedKmlLayerId');
-    if (oldPinnedId) {
-      localStorage.setItem('pinnedKmlId', oldPinnedId);
-      localStorage.removeItem('pinnedKmlLayerId');
-      console.log('已將舊的釘選狀態轉換為新格式。');
+    // 若無釘選或下拉選單尚未生成，則不動作
+    if (!pinnedId || !select) return;
+
+    // 【修改 2】檢查清單是否已經渲染完成 (如果 options 只有 1 個通常是 "請選擇")
+    if (select.options.length <= 1) {
+      console.log("⏳ 選單清單尚未就緒，延後自動載入...");
+      return; 
     }
 
-    const pinnedId = localStorage.getItem('pinnedKmlId');
-    currentPinnedKmlId = pinnedId;
-
-    // 若無釘選，清空選單並結束
-    if (!pinnedId) {
-      if (select) select.value = '';
-      updatePinButtonState();
-      if (typeof window.clearAllKmlLayers === 'function') window.clearAllKmlLayers();
-      return;
-    }
-
-    // 若找不到 select，跳過（避免例外）
-    if (!select) {
-      console.warn('找不到 kmlLayerSelect，跳過載入釘選圖層');
-      return;
-    }
-
-    // 檢查下拉選單中是否含有該釘選 ID
+    // 檢查釘選 ID 是否在目前的選項中
     const option = Array.from(select.options).find(opt => opt.value === pinnedId);
+    
     if (!option) {
-      // 若不存在，清除 localStorage 的釘選資料
+      // 只有在清單已從網路抓完(且長度>1)的情況下，找不到才刪除
+      console.warn(`📌 釘選的 ID ${pinnedId} 已不存在於資料庫，清除狀態`);
       localStorage.removeItem('pinnedKmlId');
-      currentPinnedKmlId = null;
-      console.warn(`已釘選的 KML 圖層 ID ${pinnedId} 不存在，已清除釘選狀態。`);
-      select.value = '';
-      updatePinButtonState();
-      if (typeof window.clearAllKmlLayers === 'function') window.clearAllKmlLayers();
+      localStorage.removeItem('pinnedKmlLayerId');
       return;
     }
 
-    // 設定選單值並載入（同樣避免在載入中或已載入相同 ID 時重複載入）
-    select.value = pinnedId;
-    updatePinButtonState();
-
+    // 【修改 3】執行載入並鎖定
     if (typeof window.loadKmlLayerFromFirestore === 'function') {
-      if (window.isLoadingKml) {
-        console.log("⏳ pinned 等待中：已有其他讀取進行，略過一次");
+      // 再次檢查地圖狀態，防止與其他手動操作競爭
+      if (window.mapNamespace?.isLoadingKml || window.mapNamespace?.currentKmlLayerId === pinnedId) {
         return;
       }
-      if (window.currentKmlLayerId === pinnedId) {
-        console.log(`⚠️ pinned: 已載入 ${pinnedId}，略過重複讀取`);
-        return;
-      }
-      console.log(`📌 pinned: 載入 ${pinnedId}`);
+
+      console.log(`🚀 [初始載入] 執行釘選圖層: ${pinnedId}`);
+      hasInitialAutoLoaded = true; // 關鍵：上鎖，此後不再自動觸發
+      
+      select.value = pinnedId;
+      updatePinButtonState();
       window.loadKmlLayerFromFirestore(pinnedId);
     }
   };
@@ -535,58 +521,60 @@ const updateKmlLayerSelects = async (passedLayers = null) => {
     }
   });
 
-  /**
-   * 💡 優化後的清單更新函式
-   * 邏輯：先讀取極小的 sync 文件，若時間戳沒變，直接用 localStorage
-   */
+/**
+ * 整合：時間戳比對、清單快取、以及「單次觸發」的圖釘自動載入
+ */
 async function optimizedUpdateKmlLayerSelects() {
-    // 【修改 B-1】檢查是否正在執行中，防止重複觸發競爭
-    if (isUpdatingList) {
-      console.log("⏳ 清單更新進行中，略過本次呼叫");
+  // 【修改 B-1】檢查是否正在執行中
+  if (isUpdatingList) {
+    console.log("清單更新進行中，略過本次呼叫");
+    return;
+  }
+  isUpdatingList = true; // 上鎖
+
+  const LIST_CACHE_KEY = 'kml_list_cache_data';
+  const SYNC_TIME_KEY = 'kml_list_last_sync';
+
+  try {
+    // 1. 抓取遠端「獨立時間戳記」
+    const syncSnap = await getSyncDocRef().get();
+    const serverUpdate = syncSnap.exists ? (syncSnap.data().lastUpdate || 0) : 0;
+    const localUpdate = parseInt(localStorage.getItem(SYNC_TIME_KEY) || "0");
+    const cachedData = localStorage.getItem(LIST_CACHE_KEY);
+
+    // 2. 比對時間戳：若無變動則使用快取
+    if (cachedData && serverUpdate <= localUpdate && serverUpdate !== 0) {
+      console.log("%c[清單快取命中] 伺服器資料無變動", "color: #4CAF50; font-weight: bold;");
+      await updateKmlLayerSelects(JSON.parse(cachedData));
+      
+      tryLoadPinnedKmlLayerWhenReady(); 
       return;
     }
-    isUpdatingList = true; // 上鎖
 
-    const LIST_CACHE_KEY = 'kml_list_cache_data';
-    const SYNC_TIME_KEY = 'kml_list_last_sync';
+    // 3. 若失效，執行全量讀取
+    console.log("%c[清單更新] 偵測到新資料，從 Firebase 同步", "color: #FF9800; font-weight: bold;");
+    const snapshot = await getKmlCollectionRef().get();
+    const layers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-    try {
-      // 1. 抓取遠端「獨立時間戳記」 (計費 1 次讀取)
-      const syncSnap = await getSyncDocRef().get();
-      
-      const serverUpdate = syncSnap.exists ? (syncSnap.data().lastUpdate || 0) : 0;
-      const localUpdate = parseInt(localStorage.getItem(SYNC_TIME_KEY) || "0");
-      const cachedData = localStorage.getItem(LIST_CACHE_KEY);
+    // 4. 更新本地快取
+    localStorage.setItem(LIST_CACHE_KEY, JSON.stringify(layers));
+    localStorage.setItem(SYNC_TIME_KEY, serverUpdate.toString());
 
-      // 2. 比對時間戳：如果伺服器沒更新，且本地有快取
-      if (cachedData && serverUpdate <= localUpdate && serverUpdate !== 0) {
-        console.log("%c[清單快取命中] 伺服器資料無變動，省下 N 次清單讀取", "color: #4CAF50; font-weight: bold;");
-        // 呼叫具備「延後清空」邏輯的 UI 更新函式 (修改 A)
-        await updateKmlLayerSelects(JSON.parse(cachedData));
-        return;
-      }
+    await updateKmlLayerSelects(layers);
 
-      // 3. 若失效或有更新，才執行全量清單讀取 (計費 N 次讀取)
-      console.log("%c[清單更新] 偵測到新資料，從 Firebase 同步清單", "color: #FF9800; font-weight: bold;");
-      const snapshot = await getKmlCollectionRef().get();
-      const layers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    tryLoadPinnedKmlLayerWhenReady();
 
-      // 4. 更新本地快取
-      localStorage.setItem(LIST_CACHE_KEY, JSON.stringify(layers));
-      localStorage.setItem(SYNC_TIME_KEY, serverUpdate.toString());
-
-      await updateKmlLayerSelects(layers);
-
-    } catch (err) {
-      console.error("優化清單程序出錯:", err);
-      // 發生錯誤時的保險方案：執行原本的讀取
-      const snapshot = await getKmlCollectionRef().get();
-      await updateKmlLayerSelects(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    } finally {
-      // 【修改 B-2】無論成功或失敗，務必解除鎖定
-      isUpdatingList = false;
-    }
+  } catch (err) {
+    console.error("優化清單程序出錯:", err);
+    const snapshot = await getKmlCollectionRef().get();
+    const layers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    await updateKmlLayerSelects(layers);
+    
+    tryLoadPinnedKmlLayerWhenReady();
+  } finally {
+    isUpdatingList = false;
   }
+}
 
   // Google 登入按鈕事件（處理新帳號註冊流程：需註冊碼）
   if (els.googleSignInBtn) {
