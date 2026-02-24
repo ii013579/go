@@ -77,7 +77,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             item.addEventListener('click', () => {
                                 const originalLatLng = L.latLng(lat, lon);
                                 if (window.map) {
-                                    window.map.flyTo(originalLatLng, 18, { animate: true, duration: 0.8 });
+                                    window.map.flyTo(originalLatLng, 30, { animate: true, duration: 0.8 });
                                     
                                     window.map.eachLayer((layer) => {
                                         if (layer instanceof L.Marker && layer.getLatLng().equals(originalLatLng)) {
@@ -125,4 +125,4 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
-}); // 這裡補上了最外層 DOMContentLoaded 的閉合
+});

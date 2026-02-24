@@ -448,6 +448,11 @@ body {
 }
 
 /* ---------- 地標文字標籤（Marker label） ---------- */
+/* 基礎標記層級 */
+.marker-label {
+  z-index: 500 !important; 
+}
+
 /* .marker-label span：標籤的預設樣式（陰影避免與地圖背景衝突） */
 .marker-label span {
   display: inline-block;
@@ -461,6 +466,7 @@ body {
   position: relative;
   background: none;
   text-shadow: -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff, 1px 1px 0 #fff;
+  z-index: 500;
 }
 
 /* 高亮（點擊或搜尋結果） */
@@ -472,7 +478,7 @@ body {
   padding: 3px 6px;
   border-radius: 6px;
   box-shadow: 0 0 3px rgba(0,0,0,0.2);
-  z-index: 9999 !important;
+  z-index: 2000 !important;
   position: relative;
   transform: translateX(20px);
 }
@@ -488,6 +494,7 @@ body {
   display: flex;
   justify-content: center;
   align-items: center;
+  z-index: 2100 !important;
 }
 .nav-button-content img {
   width: 40px;
@@ -497,6 +504,7 @@ body {
   border-radius: 50%;
   background-color: rgba(255, 255, 255, 0.9);
   box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+  z-index: 2100 !important;
 }
 
 /* 自定義圓點圖標樣式（小點） */
