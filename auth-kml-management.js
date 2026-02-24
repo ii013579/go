@@ -62,13 +62,22 @@
   };
 
   // 取得 KML collection 的 Firestore 參照（DRY）
-  const currentAppId = (typeof appId !== 'undefined') ? appId : 'kmldata-d22fb'; 
-    console.log("[系統] 目前使用的 App ID:", currentAppId);
+// ======= 【新增：確認 appId 來源】 =======
+  const currentAppId = (typeof appId !== 'undefined') ? appId : 'kmldata-d22fb';
+  console.log("[系統] 目前使用的 App ID 路徑:", currentAppId);
+
+  // 取得 KML collection 的 Firestore 參照
   const getKmlCollectionRef = () =>
     db.collection('artifacts').doc(currentAppId).collection('public').doc('data').collection('kmlLayers');
+
+  // 取得同步文件的參照
   const getSyncDocRef = () =>
     db.collection('artifacts').doc(currentAppId).collection('public').doc('data').collection('metadata').doc('sync');
-    
+
+  // 取得使用者文件的參照 (用於監聽角色)
+  const getUserDocRef = (uid) =>
+    db.collection('artifacts').doc(currentAppId).collection('public').doc('data').collection('users').doc(uid);
+        
   // 建立 <option> 元素的小 helper
   const createOption = (value, text) => {
     const o = document.createElement('option');
