@@ -51,6 +51,7 @@
   let isUpdatingList = false;       // 防止清單重複更新的鎖
   let hasAutoLoaded = false;        // 確保釘選自動載入只執行一次
   let hasInitialAutoLoaded = false; // 防止重整時多次觸發自動載入
+  let hasInitialMenuLoaded = false;
 
   // 角色顯示名稱（中文）
   const getRoleDisplayName = role => {
@@ -453,7 +454,7 @@ const updateKmlLayerSelects = async (passedLayers = null) => {
 // 監聽 Auth 狀態變更以更新 UI
   auth.onAuthStateChanged(async (user) => {
     if (user) {
-      // 1. 使用者登入：切換 UI 顯示
+      // 1. 使用者登入：切換基礎 UI 顯示
       if (els.loginForm) els.loginForm.style.display = 'none';
       if (els.loggedInDashboard) els.loggedInDashboard.style.display = 'block';
       if (els.userEmailDisplay) {
@@ -463,61 +464,85 @@ const updateKmlLayerSelects = async (passedLayers = null) => {
 
       // 2. 監聽使用者文件以取得即時角色變更 (onSnapshot)
       const userDocRef = db.collection('users').doc(user.uid);
+      
+      // 注意：onSnapshot 會在本地快取與伺服器回傳時各觸發一次，這常是多次讀取的元兇
       userDocRef.onSnapshot(async (doc) => {
         if (!doc.exists) {
-          console.log("用戶數據不存在，為新註冊用戶創建預設數據。");
+          console.warn("用戶數據不存在，可能為異常帳號。");
           auth.signOut();
-          window.showMessage?.('帳號資料異常', '您的帳號資料有誤或已被移除，請重新登入或聯繫管理員。');
+          window.showMessage?.('帳號資料異常', '您的帳號資料有誤，請聯繫管理員。');
           return;
         }
 
         const userData = doc.data() || {};
-        window.currentUserRole = userData.role || 'unapproved';
-        console.log("用戶角色:", window.currentUserRole);
-
+        const newRole = userData.role || 'unapproved';
+        
+        // ✨ 【核心優化】檢查角色是否真的有變動
+        const roleChanged = (window.currentUserRole !== newRole);
+        window.currentUserRole = newRole; 
+        console.log(`[身份驗證] 目前角色: ${window.currentUserRole} (變動: ${roleChanged})`);
+        
         if (els.userEmailDisplay) {
           els.userEmailDisplay.textContent = `${user.email} (${getRoleDisplayName(window.currentUserRole)})`;
         }
 
+        // 3. 根據角色調整 UI 權限與顯示狀態
         const canEdit = (window.currentUserRole === 'owner' || window.currentUserRole === 'editor');
         const isOwner = (window.currentUserRole === 'owner');
 
-        // 根據角色調整 UI 權限
-        if (els.uploadKmlSectionDashboard) els.uploadKmlSectionDashboard.style.display = canEdit ? 'flex' : 'none';
-        if (els.deleteKmlSectionDashboard) els.deleteKmlSectionDashboard.style.display = canEdit ? 'flex' : 'none';
+        const toggleDisplay = (el, show) => { if (el) el.style.display = show ? 'flex' : 'none'; };
+        const toggleBlock = (el, show) => { if (el) el.style.display = show ? 'block' : 'none'; };
+
+        toggleDisplay(els.uploadKmlSectionDashboard, canEdit);
+        toggleDisplay(els.deleteKmlSectionDashboard, canEdit);
+        toggleDisplay(els.registrationSettingsSection, isOwner);
+        toggleBlock(els.userManagementSection, isOwner);
+
         if (els.uploadKmlSubmitBtnDashboard) els.uploadKmlSubmitBtnDashboard.disabled = !canEdit;
         if (els.deleteSelectedKmlBtn) els.deleteSelectedKmlBtn.disabled = !canEdit; 
         if (els.kmlLayerSelectDashboard) els.kmlLayerSelectDashboard.disabled = !canEdit;
 
-        if (els.registrationSettingsSection) els.registrationSettingsSection.style.display = isOwner ? 'flex' : 'none';
-        if (els.userManagementSection) els.userManagementSection.style.display = isOwner ? 'block' : 'none';
-
-        if (isOwner) refreshUserList();
+        // 若是管理員，自動刷新用戶清單
+        if (isOwner && typeof refreshUserList === 'function') refreshUserList();
 
         if (window.currentUserRole === 'unapproved') {
-          window.showMessage?.('帳號審核中', '您的帳號正在等待管理員審核。');
+          window.showMessage?.('帳號審核中', '您的帳號正在等待管理員審核，暫無操作權限。');
         }
 
-        // --- 【核心優化點】 ---
-        // 不要直接用 updateKmlLayerSelects()，改用具備快取檢查的版本
-        await optimizedUpdateKmlLayerSelects();
+        // --- 【讀取次數優化攔截】 ---
+        // ✨ 只有在「網頁初次啟動」或「權限等級真的變了」才去執行資料庫清單更新
+        if (!hasInitialMenuLoaded || roleChanged) {
+          hasInitialMenuLoaded = true; // 標記為已載入，防止 onSnapshot 再次觸發時重複執行
+          console.log("%c[系統] 觸發 KML 清單更新流程", "color: #2196F3; font-weight: bold;");
+          await optimizedUpdateKmlLayerSelects();
+        } else {
+          console.log("%c[系統] 角色未變動且選單已就緒，略過重複讀取", "color: #9E9E9E;");
+        }
         
-        updatePinButtonState();
+        if (typeof updatePinButtonState === 'function') updatePinButtonState();
+
       }, (error) => {
+        // 防止登出時觸發權限錯誤的警告
         if (!auth.currentUser && error.code === 'permission-denied') return;
-        console.error("監聽角色失敗:", error);
+        console.error("監聽角色發生錯誤:", error);
       });
 
     } else {
-      // 使用者登出：恢復初始 UI
+      // 4. 使用者登出：徹底清空狀態
+      console.log("[系統] 用戶已登出，清空介面與快取");
       if (els.loginForm) els.loginForm.style.display = 'block';
       if (els.loggedInDashboard) els.loggedInDashboard.style.display = 'none';
-      if (els.userEmailDisplay) { els.userEmailDisplay.textContent = ''; els.userEmailDisplay.style.display = 'none'; }
-      window.currentUserRole = null;
+      if (els.userEmailDisplay) { 
+        els.userEmailDisplay.textContent = ''; 
+        els.userEmailDisplay.style.display = 'none'; 
+      }
       
-      // 登出時重設選單 (不消耗 Firebase)
+      window.currentUserRole = null;
+      hasInitialMenuLoaded = false; // 登出後重置鎖，下次登入才能再次載入
+      
+      // 執行清理邏輯
       if (typeof window.clearAllKmlLayers === 'function') window.clearAllKmlLayers();
-      updateKmlLayerSelects([]); 
+      if (typeof updateKmlLayerSelects === 'function') updateKmlLayerSelects([]); 
     }
   });
 
