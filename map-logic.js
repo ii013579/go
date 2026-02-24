@@ -1,6 +1,4 @@
-﻿// map-logic.js v1.9.6 - 優化版
-// 重要：此檔案保留與原本介面相同的 window API（例如 window.addGeoJsonLayers、window.loadKmlLayerFromFirestore 等）
-// 以避免破壞既有呼叫端程式。檔案內大幅重構以改善可讀性、錯誤處理、與效能（中文註解說明重要功能）。
+﻿// map-logic.js v2.01
 
 (function () {
     'use strict';
@@ -627,22 +625,21 @@
         console.info('所有 KML 圖層和相關數據已清除。');
     };
 
-// ---------- 載入 KML（其 GeoJSON）從 Firestore（具備 24h 快取優化） ----------
+// ---------- 載入 KML（具備 24h 快取與 Firebase SDK 低成本優化） ----------
     window.loadKmlLayerFromFirestore = async function (kmlId) {
         // 1. 全域鎖：避免重複讀取
         if (ns.isLoadingKml) {
-            console.info("⏳ 已有讀取程序進行中，略過本次 loadKmlLayerFromFirestore()");
+            console.info("⏳ 讀取中，略過重複請求。");
             return;
         }
 
         // 2. 基本檢查
         if (!kmlId) {
-            console.info("未提供 KML ID，不載入。");
+            console.info("未提供 KML ID。");
             window.clearAllKmlLayers();
             return;
         }
 
-        // 快取識別碼與 24 小時設定
         const CACHE_KEY = `kml_data_${kmlId}`;
         const CACHE_TIME_KEY = `kml_time_${kmlId}`;
         const EXPIRE_TIME = 24 * 60 * 60 * 1000; 
@@ -654,58 +651,63 @@
             const cachedData = localStorage.getItem(CACHE_KEY);
             const cachedTime = localStorage.getItem(CACHE_TIME_KEY);
 
-            // 3. 檢查本地快取是否存在且未過期
+            // 3. 【第一層防線】LocalStorage 快取攔截 (完全不接觸 Firebase)
             if (cachedData && cachedTime && (now - parseInt(cachedTime) < EXPIRE_TIME)) {
-                console.log(`%c[快取命中] 載入本地 24h 備份: ${kmlId}`, "color: #4CAF50; font-weight: bold;");
-                
-                // 若已經是當前圖層則不重複繪製（保留原邏輯）
-                if (ns.currentKmlLayerId === kmlId) {
+                // 若 ID 沒變且圖層已在地圖上，直接結束
+                if (ns.currentKmlLayerId === kmlId && ns.allKmlFeatures.length > 0) {
                     ns.isLoadingKml = false;
                     return;
                 }
-
+                
+                console.log(`%c[快取命中] 載入本地備份: ${kmlId}`, "color: #4CAF50; font-weight: bold;");
                 window.clearAllKmlLayers();
                 renderKmlData(JSON.parse(cachedData), kmlId);
+                ns.isLoadingKml = false; // 成功後解鎖
                 return; 
             }
 
-            // 4. 若無快取或已過期，才從 Firestore 抓取
-            console.log(`%c[網路請求] 從 Firebase 抓取最新資料: ${kmlId}`, "color: #2196F3; font-weight: bold;");
+            // 4. 【第二層防線】Firestore SDK 離線快取優先 (降低 Read Count)
+            console.log(`%c[快取失效] 嘗試同步 Firebase: ${kmlId}`, "color: #2196F3; font-weight: bold;");
             
             if (typeof db === 'undefined' || typeof appId === 'undefined') {
-                throw new Error('Firestore 或 appId 未定義，無法讀取 KML。');
+                throw new Error('Firebase 未定義。');
             }
-
-            window.clearAllKmlLayers();
 
             const docRef = db.collection('artifacts')
                 .doc(appId).collection('public')
                 .doc('data').collection('kmlLayers')
                 .doc(kmlId);
 
-            const doc = await docRef.get();
-
-            if (!doc.exists) {
-                throw new Error('找不到指定的 KML 圖層資料。');
+            let doc;
+            try {
+                // 優先強制從 SDK 內部的快取讀取 (不計費)
+                doc = await docRef.get({ source: 'cache' });
+                console.log("Firebase SDK 離線快取命中");
+            } catch (e) {
+                // 快取沒有或出錯，才真正去 Server 拿 (計費 1 次)
+                doc = await docRef.get({ source: 'server' });
+                console.log("Firebase SDK 快取失效，執行網路請求");
             }
+
+            if (!doc.exists) throw new Error('找不到圖層資料。');
 
             const kmlData = doc.data();
 
-            // 5. 存入本地快取（每個圖層獨立儲存）
+            // 5. 更新 LocalStorage
             localStorage.setItem(CACHE_KEY, JSON.stringify(kmlData));
             localStorage.setItem(CACHE_TIME_KEY, now.toString());
 
+            window.clearAllKmlLayers();
             renderKmlData(kmlData, kmlId);
 
         } catch (error) {
-            console.error("載入 KML 時出錯:", error);
-            window.showMessageCustom({
-                title: '錯誤',
-                message: `無法載入 KML 圖層: ${error.message || error}`,
-                buttonText: '確定'
-            });
+            console.error("載入出錯:", error);
+            // 只有在真正失敗時才彈窗
+            if (error.name !== 'FirebaseError') {
+                 window.showMessageCustom?.({ title: '錯誤', message: error.message, buttonText: '確定' });
+            }
         } finally {
-            ns.isLoadingKml = false; // 確保解除鎖
+            ns.isLoadingKml = false; 
         }
     };
 
