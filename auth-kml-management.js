@@ -456,7 +456,13 @@ const updateKmlLayerSelects = async (passedLayers = null) => {
 // 監聽 Auth 狀態變更以更新 UI
   auth.onAuthStateChanged(async (user) => {
     if (user) {
-      // UI 切換邏輯 (省略)...
+      // 1. 使用者登入：切換基礎 UI 顯示
+      if (els.loginForm) els.loginForm.style.display = 'none';
+      if (els.loggedInDashboard) els.loggedInDashboard.style.display = 'block';
+      if (els.userEmailDisplay) {
+        els.userEmailDisplay.textContent = `${user.email} (載入中...)`;
+        els.userEmailDisplay.style.display = 'block';
+      }
   
       // ✨ 關鍵優化：防止重複綁定監聽器
       if (unsubUserRole) return; 
@@ -496,7 +502,7 @@ const updateKmlLayerSelects = async (passedLayers = null) => {
         if (els.deleteSelectedKmlBtn) els.deleteSelectedKmlBtn.disabled = !canEdit; 
         if (els.kmlLayerSelectDashboard) els.kmlLayerSelectDashboard.disabled = !canEdit;
 
-        if (isOwner && typeof refreshUserList === 'function') refreshUserList();
+        // if (isOwner && typeof refreshUserList === 'function') refreshUserList();
 
         if (window.currentUserRole === 'unapproved') {
           window.showMessage?.('帳號審核中', '您的帳號正在等待管理員審核。');
