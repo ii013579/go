@@ -471,17 +471,16 @@ body {
 
 /* 高亮（點擊或搜尋結果） */
 .marker-label span.label-active {
-  z-index: 9999 !important; /* 最高層級 */
-  color: #007bff !important;
-  background-color: #ffffff !important; /* ✨ 關鍵：白底才能遮住下面的黑字 */
-  padding: 4px 10px !important;
-  border: 2px solid #007bff;
+  color: #007bff;
+  font-weight: bold;
+  font-size: 18px;
+  background: #fff;
+  padding: 3px 6px;
   border-radius: 6px;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-  /* 稍微位移，確保覆蓋更精準 */
-  transform: translate(15px, -10px) !important;
-  white-space: nowrap;
-  display: inline-block;
+  box-shadow: 0 0 3px rgba(0,0,0,0.2);
+  z-index: 2000 !important;
+  position: relative;
+  transform: translateX(20px);
 }
 
 /* 導航按鈕相關樣式 */
