@@ -478,7 +478,7 @@ body {
   padding: 3px 6px;
   border-radius: 6px;
   box-shadow: 0 0 3px rgba(0,0,0,0.2);
-  z-index: 2000 !important;
+  z-index: 5000 !important;
   position: relative;
   transform: translateX(20px);
 }
@@ -494,7 +494,7 @@ body {
   display: flex;
   justify-content: center;
   align-items: center;
-  z-index: 2100 !important;
+  z-index: 5000 !important;
 }
 .nav-button-content img {
   width: 40px;
@@ -504,7 +504,7 @@ body {
   border-radius: 50%;
   background-color: rgba(255, 255, 255, 0.9);
   box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-  z-index: 2100 !important;
+  z-index: 5000 !important;
 }
 
 /* 自定義圓點圖標樣式（小點） */
@@ -519,6 +519,7 @@ body {
   margin-left: -5px;
   margin-top: -5px;
   box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+  z-index: 10 !important;
 }
 
 /* ---------- 訊息框 / 模態框（Overlay） ---------- */

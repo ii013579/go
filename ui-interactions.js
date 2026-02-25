@@ -1,4 +1,4 @@
-// ui-interactions.js v2.02 - 修正語法錯誤與縮放邏輯
+// ui-interactions.js v2.03 - 同步觸發版 (移除延遲)
 document.addEventListener('DOMContentLoaded', () => {
     const editButton = document.getElementById('editButton');
     const authSection = document.getElementById('authSection');
@@ -7,10 +7,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const searchResults = document.getElementById('searchResults');
     const searchContainer = document.getElementById('searchContainer'); 
 
+    // 初始 UI 狀態
     if (authSection) authSection.style.display = 'none';
     if (controls) controls.style.display = 'flex';
 
-    // 1. 編輯按鈕邏輯
+    // 1. 編輯按鈕與認證區塊切換邏輯
     if (editButton && authSection && controls) {
         editButton.addEventListener('click', () => {
             const isAuthSectionVisible = authSection.style.display === 'flex';
@@ -23,21 +24,25 @@ document.addEventListener('DOMContentLoaded', () => {
                 authSection.style.display = 'flex';
                 editButton.textContent = '關閉';
                 
+                // 開啟編輯模式時，若有未載入的圖層則嘗試同步
                 if (window.mapNamespace && window.mapNamespace.allKmlFeatures.length > 0) {
-                    window.addGeoJsonLayers(window.mapNamespace.allKmlFeatures);
+                    if (typeof window.addGeoJsonLayers === 'function') {
+                        window.addGeoJsonLayers(window.mapNamespace.allKmlFeatures);
+                    }
                 }   
             }
         });
     }
 
-    // 2. 搜尋框邏輯
+    // 2. 搜尋功能邏輯
     if (searchBox && searchResults && searchContainer) {
-        searchBox.addEventListener('input', async (e) => {
+        searchBox.addEventListener('input', (e) => {
             const query = e.target.value.trim().toLowerCase();
             searchResults.innerHTML = '';
 
             if (query.length > 0) {
                 let results = [];
+                // 優先從全域變數取得點位資料
                 const allFeatures = window.allKmlFeatures || (window.mapNamespace ? window.mapNamespace.allKmlFeatures : []);
                 
                 if (allFeatures.length > 0) {
@@ -58,7 +63,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     noResult.style.gridColumn = 'span 3';
                     searchResults.appendChild(noResult);
                 } else {
-                    // 動態決定欄數
+                    // 根據字數調整搜尋清單欄數
                     let maxNameLength = 0;
                     results.forEach(f => {
                         const name = f.properties?.name || '';
@@ -68,51 +73,49 @@ document.addEventListener('DOMContentLoaded', () => {
                     searchResults.classList.remove('columns-2', 'columns-3');
                     searchResults.classList.add(maxNameLength > 9 ? 'columns-2' : 'columns-3');
 
-                    // 生成結果清單
+                    // 生成搜尋結果項目
                     results.forEach(f => {
                         const name = f.properties.name || '未命名';
                         if (f.geometry && f.geometry.type === 'Point' && f.geometry.coordinates) {
                             const [lon, lat] = f.geometry.coordinates;
+                            const originalLatLng = L.latLng(lat, lon);
+                            
                             const item = document.createElement('div');
                             item.className = 'result-item';
                             item.textContent = name;
                             item.title = name;
 
-                            // 點擊點位
+                            // 點擊搜尋項目
                             item.addEventListener('click', () => {
-                                const originalLatLng = L.latLng(lat, lon);
-                            
                                 if (window.map) {
-                                    // 強制跳轉並放大
+                                    // A. 立即跳轉定位
                                     window.map.setView(originalLatLng, 18);
-                            
-                                    // 延遲處理 UI 渲染，確保圖層已載入 DOM
-                                    setTimeout(() => {
-                                        // 清除舊高亮
-                                        document.querySelectorAll('.marker-label span').forEach(s => s.classList.remove('label-active'));
-                            
-                                        window.map.eachLayer((layer) => {
-                                            if (layer instanceof L.Marker) {
-                                                const layerLatLng = layer.getLatLng();
-                                                if (layerLatLng.distanceTo(originalLatLng) < 1) { 
-                                                    if (layer.setZIndexOffset) layer.setZIndexOffset(10000);
-                                                    layer.openPopup();
-                                                    
-                                                    const iconInner = layer.getElement();
-                                                    if (iconInner) {
-                                                        const span = iconInner.querySelector('.marker-label span');
-                                                        if (span) span.classList.add('label-active');
-                                                    }
-                            
-                                                    if (typeof window.createNavButton === 'function') {
-                                                        window.createNavButton(originalLatLng, name);
-                                                    }
+
+                                    // B. 同步尋找地圖上的 Marker 並觸發
+                                    window.map.eachLayer((layer) => {
+                                        if (layer instanceof L.Marker) {
+                                            const layerLatLng = layer.getLatLng();
+                                            // 座標比對
+                                            if (layerLatLng.distanceTo(originalLatLng) < 1) {
+                                                // 1. 提升層級
+                                                if (layer.setZIndexOffset) layer.setZIndexOffset(10000);
+                                                
+                                                // 2. 模擬點擊（這會直接觸發產生導航按鈕與開啟 Popup）
+                                                layer.fire('click');
+
+                                                // 3. 處理藍字高亮樣式
+                                                document.querySelectorAll('.marker-label span').forEach(s => s.classList.remove('label-active'));
+                                                const iconInner = layer.getElement();
+                                                if (iconInner) {
+                                                    const span = iconInner.querySelector('.marker-label span');
+                                                    if (span) span.classList.add('label-active');
                                                 }
                                             }
-                                        });
-                                    }, 150); 
+                                        }
+                                    });
                                 }
-                            
+
+                                // 關閉搜尋介面
                                 searchResults.style.display = 'none';
                                 searchBox.value = '';
                                 searchContainer.classList.remove('search-active');
@@ -127,15 +130,15 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
 
-        // 3. 點擊外部隱藏
+        // 3. 點擊搜尋框以外區域隱藏結果
         document.addEventListener('click', (event) => {
-            if (!searchContainer.contains(event.target) && event.target !== searchBox) {
+            if (!searchContainer.contains(event.target)) {
                 searchResults.style.display = 'none';
                 searchContainer.classList.remove('search-active');
             }
         });
 
-        // 4. ESC 鍵隱藏
+        // 4. 按下 Escape 鍵隱藏
         document.addEventListener('keydown', (event) => {
             if (event.key === 'Escape') {
                 searchResults.style.display = 'none';
