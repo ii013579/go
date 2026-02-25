@@ -36,7 +36,7 @@ body {
 }
 
 /* ---------- 編輯按鈕 ---------- */
-#editButton {
+#editButton, #refreshUsersBtn {
   position: absolute;
   top: 50%;
   right: 15px;
@@ -650,6 +650,20 @@ body {
 #addUserSection h4 { margin-top: 0; margin-bottom: 5px; font-size: 18px; color: #555; }
 
 /* ---------- 使用者列表（表格式） ---------- */
+.mgmt-header {
+    display: flex;
+    justify-content: space-between; /* 關鍵：文字在左、按鈕在右 */
+    align-items: center;
+    padding: 5px 5px 15px 5px;
+    position: relative; /* 讓子元素定位參考 */
+}
+
+.mgmt-title {
+    font-weight: bold;
+    color: #333;
+    font-size: 16px;
+}
+
 #userList { font-size: 14px; }
 .user-list-header {
   display: grid;
