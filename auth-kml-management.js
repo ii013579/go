@@ -52,6 +52,8 @@
   let hasAutoLoaded = false;        // 確保釘選自動載入只執行一次
   let hasInitialAutoLoaded = false; // 防止重整時多次觸發自動載入
   let hasInitialMenuLoaded = false;
+  let authSnapshotBound = false;    // 防止重複綁定監聽器
+  let unsubUserRole = null;         // 存放取消監聽函式，防止重複掛載
 
   // 角色顯示名稱（中文）
   const getRoleDisplayName = role => {
@@ -452,7 +454,7 @@ const updateKmlLayerSelects = async (passedLayers = null) => {
   };
 
 // 監聽 Auth 狀態變更以更新 UI
-  auth.onAuthStateChanged(async (user) => {
+auth.onAuthStateChanged(async (user) => {
     if (user) {
       // 1. 使用者登入：切換基礎 UI 顯示
       if (els.loginForm) els.loginForm.style.display = 'none';
@@ -462,22 +464,23 @@ const updateKmlLayerSelects = async (passedLayers = null) => {
         els.userEmailDisplay.style.display = 'block';
       }
 
-      // 2. 監聽使用者文件以取得即時角色變更 (onSnapshot)
+      // 2. ✨【防重複讀取關鍵】檢查是否已經在監聽角色變更
+      if (unsubUserRole) return; 
+
       const userDocRef = db.collection('users').doc(user.uid);
       
-      // 注意：onSnapshot 會在本地快取與伺服器回傳時各觸發一次，這常是多次讀取的元兇
-      userDocRef.onSnapshot(async (doc) => {
+      // 注意：onSnapshot 會在本地快取與伺服器回傳時各觸發一次
+      unsubUserRole = userDocRef.onSnapshot(async (doc) => {
         if (!doc.exists) {
-          console.warn("用戶數據不存在，可能為異常帳號。");
+          console.warn("用戶數據不存在");
           auth.signOut();
-          window.showMessage?.('帳號資料異常', '您的帳號資料有誤，請聯繫管理員。');
           return;
         }
 
         const userData = doc.data() || {};
         const newRole = userData.role || 'unapproved';
         
-        // ✨ 【核心優化】檢查角色是否真的有變動
+        // ✨ 檢查角色是否真的有變動
         const roleChanged = (window.currentUserRole !== newRole);
         window.currentUserRole = newRole; 
         console.log(`[身份驗證] 目前角色: ${window.currentUserRole} (變動: ${roleChanged})`);
@@ -502,34 +505,38 @@ const updateKmlLayerSelects = async (passedLayers = null) => {
         if (els.deleteSelectedKmlBtn) els.deleteSelectedKmlBtn.disabled = !canEdit; 
         if (els.kmlLayerSelectDashboard) els.kmlLayerSelectDashboard.disabled = !canEdit;
 
-        // 若是管理員，自動刷新用戶清單
         if (isOwner && typeof refreshUserList === 'function') refreshUserList();
 
         if (window.currentUserRole === 'unapproved') {
-          window.showMessage?.('帳號審核中', '您的帳號正在等待管理員審核，暫無操作權限。');
+          window.showMessage?.('帳號審核中', '您的帳號正在等待管理員審核。');
         }
 
         // --- 【讀取次數優化攔截】 ---
-        // ✨ 只有在「網頁初次啟動」或「權限等級真的變了」才去執行資料庫清單更新
+        // ✨ 只有在「網頁初次啟動」或「角色等級變更」才執行資料庫讀取
         if (!hasInitialMenuLoaded || roleChanged) {
-          hasInitialMenuLoaded = true; // 標記為已載入，防止 onSnapshot 再次觸發時重複執行
-          console.log("%c[系統] 觸發 KML 清單更新流程", "color: #2196F3; font-weight: bold;");
+          // ⚠️ 必須在 await 之前先鎖定標記，防止兩次回呼同時進入
+          hasInitialMenuLoaded = true; 
+          console.log("%c[系統] 觸發 KML 清單讀取流程", "color: #2196F3; font-weight: bold;");
           await optimizedUpdateKmlLayerSelects();
         } else {
-          console.log("%c[系統] 角色未變動且選單已就緒，略過重複讀取", "color: #9E9E9E;");
+          console.log("%c[系統] 攔截重複觸發，維持現有數據", "color: #9E9E9E;");
         }
         
         if (typeof updatePinButtonState === 'function') updatePinButtonState();
 
       }, (error) => {
-        // 防止登出時觸發權限錯誤的警告
         if (!auth.currentUser && error.code === 'permission-denied') return;
         console.error("監聽角色發生錯誤:", error);
       });
 
     } else {
-      // 4. 使用者登出：徹底清空狀態
-      console.log("[系統] 用戶已登出，清空介面與快取");
+      // 4. 使用者登出：徹底清空狀態並取消監聽
+      console.log("[系統] 用戶已登出，清空狀態");
+      if (unsubUserRole) {
+        unsubUserRole(); // 停止 Firestore 監聽
+        unsubUserRole = null;
+      }
+      
       if (els.loginForm) els.loginForm.style.display = 'block';
       if (els.loggedInDashboard) els.loggedInDashboard.style.display = 'none';
       if (els.userEmailDisplay) { 
@@ -538,9 +545,8 @@ const updateKmlLayerSelects = async (passedLayers = null) => {
       }
       
       window.currentUserRole = null;
-      hasInitialMenuLoaded = false; // 登出後重置鎖，下次登入才能再次載入
+      hasInitialMenuLoaded = false; // 登出後重設鎖
       
-      // 執行清理邏輯
       if (typeof window.clearAllKmlLayers === 'function') window.clearAllKmlLayers();
       if (typeof updateKmlLayerSelects === 'function') updateKmlLayerSelects([]); 
     }
