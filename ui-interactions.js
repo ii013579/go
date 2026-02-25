@@ -77,13 +77,13 @@ document.addEventListener('DOMContentLoaded', () => {
                             item.addEventListener('click', () => {
                                 const originalLatLng = L.latLng(lat, lon);
                                 if (window.map) {
-                                    window.map.flyTo(originalLatLng, 18, { animate: true, duration: 0.8 });
+                                    window.map.setView(originalLatLng, 18);
                                     
                                         window.map.eachLayer((layer) => {
                                         if (layer instanceof L.Marker && layer.getLatLng().equals(originalLatLng)) {
-                                           layer.openPopup();
                                            if (layer.setZIndexOffset) layer.setZIndexOffset(2000);
-                                        }
+                                           Layer.openPopup();
+                                       }
                                     });
                                 }
 
