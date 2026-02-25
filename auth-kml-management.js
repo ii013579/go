@@ -454,36 +454,27 @@ const updateKmlLayerSelects = async (passedLayers = null) => {
   };
 
 // 監聽 Auth 狀態變更以更新 UI
-auth.onAuthStateChanged(async (user) => {
+  auth.onAuthStateChanged(async (user) => {
     if (user) {
-      // 1. 使用者登入：切換基礎 UI 顯示
-      if (els.loginForm) els.loginForm.style.display = 'none';
-      if (els.loggedInDashboard) els.loggedInDashboard.style.display = 'block';
-      if (els.userEmailDisplay) {
-        els.userEmailDisplay.textContent = `${user.email} (載入中...)`;
-        els.userEmailDisplay.style.display = 'block';
-      }
-
-      // 2. ✨【防重複讀取關鍵】檢查是否已經在監聽角色變更
+      // UI 切換邏輯 (省略)...
+  
+      // ✨ 關鍵優化：防止重複綁定監聽器
       if (unsubUserRole) return; 
-
+  
       const userDocRef = db.collection('users').doc(user.uid);
-      
-      // 注意：onSnapshot 會在本地快取與伺服器回傳時各觸發一次
       unsubUserRole = userDocRef.onSnapshot(async (doc) => {
         if (!doc.exists) {
-          console.warn("用戶數據不存在");
           auth.signOut();
           return;
         }
-
+  
         const userData = doc.data() || {};
         const newRole = userData.role || 'unapproved';
-        
-        // ✨ 檢查角色是否真的有變動
         const roleChanged = (window.currentUserRole !== newRole);
-        window.currentUserRole = newRole; 
-        console.log(`[身份驗證] 目前角色: ${window.currentUserRole} (變動: ${roleChanged})`);
+        
+        // 先更新角色狀態
+        window.currentUserRole = newRole;
+             console.log(`[身份驗證] 目前角色: ${window.currentUserRole} (變動: ${roleChanged})`);
         
         if (els.userEmailDisplay) {
           els.userEmailDisplay.textContent = `${user.email} (${getRoleDisplayName(window.currentUserRole)})`;
@@ -512,40 +503,24 @@ auth.onAuthStateChanged(async (user) => {
         }
 
         // --- 【讀取次數優化攔截】 ---
-        // ✨ 只有在「網頁初次啟動」或「角色等級變更」才執行資料庫讀取
         if (!hasInitialMenuLoaded || roleChanged) {
-          // ⚠️ 必須在 await 之前先鎖定標記，防止兩次回呼同時進入
-          hasInitialMenuLoaded = true; 
-          console.log("%c[系統] 觸發 KML 清單讀取流程", "color: #2196F3; font-weight: bold;");
-          await optimizedUpdateKmlLayerSelects();
-        } else {
-          console.log("%c[系統] 攔截重複觸發，維持現有數據", "color: #9E9E9E;");
-        }
+                // 在 await 之前就先鎖定，防止伺服器端與本地快取端同時衝進來
+                hasInitialMenuLoaded = true; 
+                console.log(`[Firebase] 觸發清單讀取 (原因: ${roleChanged ? '角色變動' : '初始載入'})`);
+                await optimizedUpdateKmlLayerSelects();
+              }
+            }, (error) => {
+              console.error("監聽角色失敗:", error);
+            });
         
-        if (typeof updatePinButtonState === 'function') updatePinButtonState();
-
-      }, (error) => {
-        if (!auth.currentUser && error.code === 'permission-denied') return;
-        console.error("監聽角色發生錯誤:", error);
-      });
-
-    } else {
-      // 4. 使用者登出：徹底清空狀態並取消監聽
-      console.log("[系統] 用戶已登出，清空狀態");
-      if (unsubUserRole) {
-        unsubUserRole(); // 停止 Firestore 監聽
-        unsubUserRole = null;
-      }
-      
-      if (els.loginForm) els.loginForm.style.display = 'block';
-      if (els.loggedInDashboard) els.loggedInDashboard.style.display = 'none';
-      if (els.userEmailDisplay) { 
-        els.userEmailDisplay.textContent = ''; 
-        els.userEmailDisplay.style.display = 'none'; 
-      }
-      
-      window.currentUserRole = null;
-      hasInitialMenuLoaded = false; // 登出後重設鎖
+          } else {
+            // 登出時：務必解除監聽並重設 flag
+            if (unsubUserRole) {
+              unsubUserRole();
+              unsubUserRole = null;
+            }
+            hasInitialMenuLoaded = false;
+            window.currentUserRole = null;
       
       if (typeof window.clearAllKmlLayers === 'function') window.clearAllKmlLayers();
       if (typeof updateKmlLayerSelects === 'function') updateKmlLayerSelects([]); 

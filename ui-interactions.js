@@ -75,39 +75,52 @@ document.addEventListener('DOMContentLoaded', () => {
                             item.textContent = name;
                             item.title = name;
                             item.addEventListener('click', () => {
+                                const [lon, lat] = f.geometry.coordinates;
                                 const originalLatLng = L.latLng(lat, lon);
+                                const name = f.properties.name || "未命名點位";
+                            
                                 if (window.map) {
+                                    // 1. 強制放大到 18 倍（以前最穩定的方式）
                                     window.map.setView(originalLatLng, 18);
-                                    
+                            
+                                    // 2. ✨ 關鍵：使用 setTimeout 延遲 100 毫秒
+                                    // 確保地圖 view 設定完成後，Markers 已經出現在 DOM 中
+                                    setTimeout(() => {
+                                        // 清除舊的高亮
+                                        document.querySelectorAll('.marker-label span').forEach(s => s.classList.remove('label-active'));
+                            
                                         window.map.eachLayer((layer) => {
-                                        if (layer instanceof L.Marker && layer.getLatLng().equals(originalLatLng)) {
-                                           if (layer.setZIndexOffset) layer.setZIndexOffset(2000);
-                                           Layer.openPopup();
-                                       }
-                                    });
+                                            if (layer instanceof L.Marker) {
+                                                const layerLatLng = layer.getLatLng();
+                                                // 判斷距離，找出被點擊的那個點
+                                                if (layerLatLng.distanceTo(originalLatLng) < 1) { 
+                                                    // A. 提升 z-index
+                                                    if (layer.setZIndexOffset) layer.setZIndexOffset(10000);
+                                                    
+                                                    // B. 打開彈窗
+                                                    layer.openPopup();
+                                                    
+                                                    // C. 加上高亮藍字
+                                                    const iconInner = layer.getElement();
+                                                    if (iconInner) {
+                                                        const span = iconInner.querySelector('.marker-label span');
+                                                        if (span) span.classList.add('label-active');
+                                                    }
+                            
+                                                    // D. 產生導航按鈕
+                                                    if (typeof window.createNavButton === 'function') {
+                                                        window.createNavButton(originalLatLng, name);
+                                                    }
+                                                }
+                                            }
+                                        });
+                                    }, 100); // 100ms 剛好是肉眼感覺不到但程式能反應的時間
                                 }
-
-                                document.querySelectorAll('.marker-label span').forEach(el => el.classList.remove('label-active'));
-                                const labelId = `label-${lat}-${lon}`.replace(/\./g, '_');
-                                const target = document.getElementById(labelId);
-                                if (target) target.classList.add('label-active');
-                                
-                                if (typeof window.createNavButton === 'function') {
-                                    window.createNavButton(originalLatLng, name);
-                                }
+                            
                                 searchResults.style.display = 'none';
                                 searchBox.value = '';
                                 searchContainer.classList.remove('search-active');
                             });
-                            searchResults.appendChild(item); // 補上這行，將項目加入列表
-                        }
-                    });
-                }
-            } else {
-                searchContainer.classList.remove('search-active');
-                searchResults.style.display = 'none';
-            }
-        });
 
         // 3. 點擊外部隱藏
         document.addEventListener('click', (event) => {
