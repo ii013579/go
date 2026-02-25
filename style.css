@@ -450,7 +450,7 @@ body {
 /* ---------- 地標文字標籤（Marker label） ---------- */
 /* 基礎標記層級 */
 .marker-label {
-  z-index: 500 !important; 
+  z-index: 100 !important; 
 }
 
 /* .marker-label span：標籤的預設樣式（陰影避免與地圖背景衝突） */
