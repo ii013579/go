@@ -1,4 +1,4 @@
-// ui-interactions.js v2.03 - 同步觸發版 (移除延遲)
+// ui-interactions.js v2.01
 document.addEventListener('DOMContentLoaded', () => {
     const editButton = document.getElementById('editButton');
     const authSection = document.getElementById('authSection');

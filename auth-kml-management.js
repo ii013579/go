@@ -1,4 +1,4 @@
-// auth-kml-management.js v2.02
+// auth-kml-management.js v2.01
 
 (function () {
   'use strict';
@@ -287,22 +287,13 @@ const updateKmlLayerSelects = async (passedLayers = null) => {
   }
 
   // 重新整理使用者列表（管理員頁面）
-const refreshUserList = async () => {
+  const refreshUserList = async () => {
     const container = els.userListDiv;
-    const refreshBtn = els.refreshUsersBtn; // "更新" 按鈕
-
     if (!container) {
       console.error('找不到使用者列表容器 (#userList)');
       return;
     }
-
-    // --- 1. 視覺回饋：開始載入 ---
-    if (refreshBtn) {
-      refreshBtn.disabled = true;
-      refreshBtn.textContent = '載入中...';
-    }
-
-    // 移除現有卡片（保留標題欄）
+    // 移除現有卡片
     container.querySelectorAll('.user-card').forEach(c => c.remove());
 
     try {
@@ -310,11 +301,7 @@ const refreshUserList = async () => {
       const snapshot = await usersRef.get();
 
       if (snapshot.empty) {
-        const p = document.createElement('p');
-        p.className = 'user-card';
-        p.style.justifyContent = 'center';
-        p.textContent = '目前沒有註冊用戶。';
-        container.appendChild(p);
+        container.innerHTML = '<p>目前沒有註冊用戶。</p>';
         return;
       }
 
@@ -327,11 +314,11 @@ const refreshUserList = async () => {
         usersData.push({ id: uid, ...user });
       });
 
-      // 按角色預設排序（unapproved, user, editor, owner）
+      // 按角色排序（unapproved, user, editor, owner）
       const roleOrder = { 'unapproved': 1, 'user': 2, 'editor': 3, 'owner': 4 };
       usersData.sort((a, b) => (roleOrder[a.role] || 99) - (roleOrder[b.role] || 99));
 
-      // --- 2. 產生每一位使用者的卡片 ---
+      // 產生每一位使用者的卡片
       usersData.forEach(user => {
         const uid = user.id;
         const emailName = user.email ? user.email.split('@')[0] : 'N/A';
@@ -360,241 +347,191 @@ const refreshUserList = async () => {
         container.appendChild(userCard);
       });
 
-      // --- 3. 綁定事件 (變更角色/刪除/排序) ---
-      bindUserActionEvents(container);
+      // 為角色下拉與按鈕綁定事件
+      container.querySelectorAll('.user-role-select').forEach(select => {
+        const changeButton = select.closest('.user-card').querySelector('.change-role-btn');
+        select.addEventListener('change', () => {
+          changeButton.disabled = (select.value === select.dataset.originalValue);
+        });
+
+        changeButton.addEventListener('click', async () => {
+          const userCard = changeButton.closest('.user-card');
+          const uidToUpdate = userCard.dataset.uid;
+          const nicknameToUpdate = userCard.dataset.nickname;
+          const newRole = select.value;
+
+          const confirmUpdate = await window.showConfirmationModal(
+            '確認變更角色',
+            `確定要將用戶 ${nicknameToUpdate} (${uidToUpdate.substring(0,6)}...) 的角色變更為 ${getRoleDisplayName(newRole)} 嗎？`
+          );
+
+          if (!confirmUpdate) {
+            select.value = select.dataset.originalValue;
+            changeButton.disabled = true;
+            return;
+          }
+
+          try {
+            await db.collection('users').doc(uidToUpdate).update({ role: newRole });
+            window.showMessage?.('成功', `用戶 ${nicknameToUpdate} 的角色已更新為 ${getRoleDisplayName(newRole)}。`);
+            select.dataset.originalValue = newRole;
+            changeButton.disabled = true;
+          } catch (error) {
+            window.showMessage?.('錯誤', `更新角色失敗: ${error.message}`);
+            select.value = select.dataset.originalValue;
+            changeButton.disabled = true;
+          }
+        });
+      });
+
+      // 綁定刪除按鈕事件
+      container.querySelectorAll('.delete-user-btn').forEach(button => {
+        button.addEventListener('click', async () => {
+          const userCard = button.closest('.user-card');
+          const uidToDelete = userCard.dataset.uid;
+          const nicknameToDelete = userCard.dataset.nickname;
+
+          const confirmDelete = await window.showConfirmationModal(
+            '確認刪除用戶',
+            `確定要刪除用戶 ${nicknameToDelete} (${uidToDelete.substring(0,6)}...) 嗎？此操作不可逆！`
+          );
+
+          if (!confirmDelete) return;
+
+          try {
+            await db.collection('users').doc(uidToDelete).delete();
+            window.showMessage?.('成功', `用戶 ${nicknameToDelete} 已刪除。`);
+            userCard.remove();
+          } catch (error) {
+            window.showMessage?.('錯誤', `刪除失敗: ${error.message}`);
+          }
+        });
+      });
+
+      // 可點擊的表頭排序（如果有 .user-list-header）
+      let currentSortKey = 'role';
+      let sortAsc = true;
+
+      document.querySelectorAll('.user-list-header .sortable').forEach(header => {
+        header.addEventListener('click', () => {
+          const key = header.dataset.key;
+          if (currentSortKey === key) sortAsc = !sortAsc;
+          else { currentSortKey = key; sortAsc = true; }
+          sortUserList(currentSortKey, sortAsc);
+          updateSortIndicators();
+        });
+      });
+
+      // 排序函式
+      function sortUserList(key, asc = true) {
+        const cards = Array.from(document.querySelectorAll('#userList .user-card'));
+        const containerEl = document.getElementById('userList');
+        const sorted = cards.sort((a, b) => {
+          const getValue = (el) => {
+            if (key === 'email') return el.querySelector('.user-email')?.textContent?.toLowerCase() || '';
+            if (key === 'nickname') return el.querySelector('.user-nickname')?.textContent?.toLowerCase() || '';
+            if (key === 'role') return el.querySelector('.user-role-select')?.value || '';
+            return '';
+          };
+          const aVal = getValue(a), bVal = getValue(b);
+          return asc ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+        });
+        sorted.forEach(card => containerEl.appendChild(card));
+      }
+
+      // 更新排序指示器
+      function updateSortIndicators() {
+        document.querySelectorAll('.user-list-header .sortable').forEach(header => {
+          header.classList.remove('sort-asc', 'sort-desc');
+          if (header.dataset.key === currentSortKey) header.classList.add(sortAsc ? 'sort-asc' : 'sort-desc');
+        });
+      }
 
     } catch (error) {
-      container.innerHTML = `<p style="color: red; padding: 10px;">載入失敗: ${error.message}</p>`;
+      els.userListDiv.innerHTML = `<p style="color: red;">載入用戶列表失敗: ${error.message}</p>`;
       console.error("載入用戶列表時出錯:", error);
-    } finally {
-      // --- 4. 視覺回饋：載入結束 ---
-      if (refreshBtn) {
-        refreshBtn.disabled = false;
-        refreshBtn.textContent = '更新';
-      }
     }
   };
 
-  /**
-   * 輔助函式：將事件綁定邏輯抽離，讓程式碼更整潔
-   */
-  function bindUserActionEvents(container) {
-    // A. 角色下拉與變更按鈕
-    container.querySelectorAll('.user-role-select').forEach(select => {
-      const changeButton = select.closest('.user-card').querySelector('.change-role-btn');
-      select.addEventListener('change', () => {
-        changeButton.disabled = (select.value === select.dataset.originalValue);
-      });
-
-      changeButton.addEventListener('click', async () => {
-        const userCard = changeButton.closest('.user-card');
-        const uidToUpdate = userCard.dataset.uid;
-        const nicknameToUpdate = userCard.dataset.nickname;
-        const newRole = select.value;
-
-        const confirmUpdate = await window.showConfirmationModal(
-          '確認變更角色',
-          `確定要將用戶 ${nicknameToUpdate} 的角色變更為 ${getRoleDisplayName(newRole)} 嗎？`
-        );
-
-        if (!confirmUpdate) {
-          select.value = select.dataset.originalValue;
-          changeButton.disabled = true;
+// 監聽 Auth 狀態變更以更新 UI
+  auth.onAuthStateChanged(async (user) => {
+    if (user) {
+      // 1. 使用者登入：切換基礎 UI 顯示
+      if (els.loginForm) els.loginForm.style.display = 'none';
+      if (els.loggedInDashboard) els.loggedInDashboard.style.display = 'block';
+      if (els.userEmailDisplay) {
+        els.userEmailDisplay.textContent = `${user.email} (載入中...)`;
+        els.userEmailDisplay.style.display = 'block';
+      }
+  
+      // ✨ 關鍵優化：防止重複綁定監聽器
+      if (unsubUserRole) return; 
+  
+      const userDocRef = db.collection('users').doc(user.uid);
+      unsubUserRole = userDocRef.onSnapshot(async (doc) => {
+        if (!doc.exists) {
+          auth.signOut();
           return;
         }
-
-        try {
-          await db.collection('users').doc(uidToUpdate).update({ role: newRole });
-          window.showMessage?.('成功', `角色已更新為 ${getRoleDisplayName(newRole)}。`);
-          select.dataset.originalValue = newRole;
-          changeButton.disabled = true;
-        } catch (error) {
-          window.showMessage?.('錯誤', `更新失敗: ${error.message}`);
-          select.value = select.dataset.originalValue;
-          changeButton.disabled = true;
-        }
-      });
-    });
-
-    // B. 刪除按鈕
-    container.querySelectorAll('.delete-user-btn').forEach(button => {
-      button.addEventListener('click', async () => {
-        const userCard = button.closest('.user-card');
-        const uidToDelete = userCard.dataset.uid;
-        const nicknameToDelete = userCard.dataset.nickname;
-
-        const confirmDelete = await window.showConfirmationModal(
-          '確認刪除用戶',
-          `確定要刪除用戶 ${nicknameToDelete} 嗎？此操作不可逆！`
-        );
-
-        if (!confirmDelete) return;
-
-        try {
-          await db.collection('users').doc(uidToDelete).delete();
-          window.showMessage?.('成功', `用戶 ${nicknameToDelete} 已刪除。`);
-          userCard.remove();
-        } catch (error) {
-          window.showMessage?.('錯誤', `刪除失敗: ${error.message}`);
-        }
-      });
-    });
-
-    // C. 表頭排序功能 (僅在第一次渲染時綁定一次即可，或每次重繪檢查)
-    setupSortHeaders();
-  }
-
-  function setupSortHeaders() {
-    // 取得所有具備 sortable 的表頭
-    document.querySelectorAll('.user-list-header .sortable').forEach(header => {
-      // 移除舊的點擊事件以避免重複綁定
-      const newHeader = header.cloneNode(true);
-      header.parentNode.replaceChild(newHeader, header);
-
-      newHeader.addEventListener('click', () => {
-        const key = newHeader.dataset.key;
-        // 這裡可以使用全域狀態或閉包變數管理排序方向
-        window._userSortState = window._userSortState || { key: 'role', asc: true };
+  
+        const userData = doc.data() || {};
+        const newRole = userData.role || 'unapproved';
+        const roleChanged = (window.currentUserRole !== newRole);
         
-        if (window._userSortState.key === key) {
-            window._userSortState.asc = !window._userSortState.asc;
-        } else {
-            window._userSortState.key = key;
-            window._userSortState.asc = true;
-        }
+        // 先更新角色狀態
+        window.currentUserRole = newRole;
+             console.log(`[身份驗證] 目前角色: ${window.currentUserRole} (變動: ${roleChanged})`);
         
-        doSortUserList(window._userSortState.key, window._userSortState.asc);
-      });
-    });
-  }
-
-  function doSortUserList(key, asc) {
-    const cards = Array.from(document.querySelectorAll('#userList .user-card'));
-    const containerEl = document.getElementById('userList');
-    
-    const sorted = cards.sort((a, b) => {
-      const getValue = (el) => {
-        if (key === 'email') return el.querySelector('.user-email')?.textContent?.toLowerCase() || '';
-        if (key === 'nickname') return el.querySelector('.user-nickname')?.textContent?.toLowerCase() || '';
-        if (key === 'role') return el.querySelector('.user-role-select')?.value || '';
-        return '';
-      };
-      const aVal = getValue(a), bVal = getValue(b);
-      return asc ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
-    });
-    
-    sorted.forEach(card => containerEl.appendChild(card));
-  }
-
-// 監聽 Auth 狀態變更以更新 UI
-auth.onAuthStateChanged(async (user) => {
-    console.log("[Auth] 狀態變更:", user ? "已登入: " + user.email : "未登入");
-
-    if (user) {
-        // --- 1. 使用者登入：優先切換基礎 UI 顯示 (不等待資料讀取) ---
-        if (els.loginForm) els.loginForm.style.display = 'none';
-        if (els.loggedInDashboard) els.loggedInDashboard.style.display = 'block';
         if (els.userEmailDisplay) {
-            els.userEmailDisplay.textContent = `${user.email} (驗證中...)`;
-            els.userEmailDisplay.style.display = 'block';
+          els.userEmailDisplay.textContent = `${user.email} (${getRoleDisplayName(window.currentUserRole)})`;
         }
 
-        // ✨ 關鍵優化：防止重複綁定監聽器 (如果已經有 unsubUserRole 就不再執行後面)
-        if (unsubUserRole) return; 
+        // 3. 根據角色調整 UI 權限與顯示狀態
+        const canEdit = (window.currentUserRole === 'owner' || window.currentUserRole === 'editor');
+        const isOwner = (window.currentUserRole === 'owner');
 
-        const userDocRef = db.collection('users').doc(user.uid);
-        
-        // --- 2. 監聽角色權限變動 ---
-        unsubUserRole = userDocRef.onSnapshot(async (doc) => {
-            if (!doc.exists) {
-                console.error("找不到使用者資料，強制登出");
-                auth.signOut();
-                return;
-            }
+        const toggleDisplay = (el, show) => { if (el) el.style.display = show ? 'flex' : 'none'; };
+        const toggleBlock = (el, show) => { if (el) el.style.display = show ? 'block' : 'none'; };
 
-            const userData = doc.data() || {};
-            const newRole = userData.role || 'unapproved';
-            
-            // 檢查角色是否有變動
-            const roleChanged = (window.currentUserRole !== newRole);
-            
-            // 更新全域角色狀態
-            window.currentUserRole = newRole;
-            console.log(`[身份驗證] 目前角色: ${window.currentUserRole} (變動: ${roleChanged})`);
-            
-            // 更新 UI 上的身份顯示名稱
-            if (els.userEmailDisplay) {
-                const roleName = typeof getRoleDisplayName === 'function' ? getRoleDisplayName(newRole) : newRole;
-                els.userEmailDisplay.textContent = `${user.email} (${roleName})`;
-            }
+        toggleDisplay(els.uploadKmlSectionDashboard, canEdit);
+        toggleDisplay(els.deleteKmlSectionDashboard, canEdit);
+        toggleDisplay(els.registrationSettingsSection, isOwner);
+        toggleBlock(els.userManagementSection, isOwner);
 
-            // --- 3. 根據角色權限調整 UI 控制項 ---
-            const canEdit = (newRole === 'owner' || newRole === 'editor');
-            const isOwner = (newRole === 'owner');
+        if (els.uploadKmlSubmitBtnDashboard) els.uploadKmlSubmitBtnDashboard.disabled = !canEdit;
+        if (els.deleteSelectedKmlBtn) els.deleteSelectedKmlBtn.disabled = !canEdit; 
+        if (els.kmlLayerSelectDashboard) els.kmlLayerSelectDashboard.disabled = !canEdit;
 
-            const toggleDisplay = (el, show) => { if (el) el.style.display = show ? 'flex' : 'none'; };
-            const toggleBlock = (el, show) => { if (el) el.style.display = show ? 'block' : 'none'; };
+        if (isOwner && typeof refreshUserList === 'function') refreshUserList();
 
-            toggleDisplay(els.uploadKmlSectionDashboard, canEdit);
-            toggleDisplay(els.deleteKmlSectionDashboard, canEdit);
-            toggleDisplay(els.registrationSettingsSection, isOwner);
-            toggleBlock(els.userManagementSection, isOwner);
+        if (window.currentUserRole === 'unapproved') {
+          window.showMessage?.('帳號審核中', '您的帳號正在等待管理員審核。');
+        }
 
-            if (els.uploadKmlSubmitBtnDashboard) els.uploadKmlSubmitBtnDashboard.disabled = !canEdit;
-            if (els.deleteSelectedKmlBtn) els.deleteSelectedKmlBtn.disabled = !canEdit; 
-            if (els.kmlLayerSelectDashboard) els.kmlLayerSelectDashboard.disabled = !canEdit;
-
-            // ❌ [優化] 已移除自動觸發的 refreshUserList()，管理員需手動點擊才讀取，減少讀取次數。
-
-            if (newRole === 'unapproved') {
-                window.showMessage?.('帳號審核中', '您的帳號正在等待管理員審核。');
-            }
-
-            // --- 4. 【讀取次數優化攔截】 ---
-            // 只有在初始載入，或者角色從 unapproved 變更為正式角色時，才觸發清單讀取
-            if (!hasInitialMenuLoaded || roleChanged) {
-                hasInitialMenuLoaded = true; // 立即鎖定防止重複衝進來
+        // --- 【讀取次數優化攔截】 ---
+        if (!hasInitialMenuLoaded || roleChanged) {
+                // 在 await 之前就先鎖定，防止伺服器端與本地快取端同時衝進來
+                hasInitialMenuLoaded = true; 
                 console.log(`[Firebase] 觸發清單讀取 (原因: ${roleChanged ? '角色變動' : '初始載入'})`);
-                
-                if (typeof optimizedUpdateKmlLayerSelects === 'function') {
-                    await optimizedUpdateKmlLayerSelects();
-                }
+                await optimizedUpdateKmlLayerSelects();
+              }
+            }, (error) => {
+              console.error("監聽角色失敗:", error);
+            });
+        
+          } else {
+            // 登出時：務必解除監聽並重設 flag
+            if (unsubUserRole) {
+              unsubUserRole();
+              unsubUserRole = null;
             }
-        }, (error) => {
-            console.error("監聽角色失敗:", error);
-        });
-
-    } else {
-        // --- 5. 使用者登出：重置狀態並恢復 UI ---
-        console.log("[Auth] 執行登出程序");
-        
-        if (unsubUserRole) {
-            unsubUserRole();
-            unsubUserRole = null;
-        }
-        
-        hasInitialMenuLoaded = false;
-        window.currentUserRole = null;
-
-        // 恢復登入前介面
-        if (els.loginForm) els.loginForm.style.display = 'block';
-        if (els.loggedInDashboard) els.loggedInDashboard.style.display = 'none';
-        if (els.userEmailDisplay) {
-            els.userEmailDisplay.style.display = 'none';
-            els.userEmailDisplay.textContent = '';
-        }
-
-        // 清除地圖上的所有資料
-        if (typeof window.clearAllKmlLayers === 'function') {
-            window.clearAllKmlLayers();
-        }
-        
-        // 清空下拉選單
-        if (typeof updateKmlLayerSelects === 'function') {
-            updateKmlLayerSelects([]); 
-        }
+            hasInitialMenuLoaded = false;
+            window.currentUserRole = null;
+      
+      if (typeof window.clearAllKmlLayers === 'function') window.clearAllKmlLayers();
+      if (typeof updateKmlLayerSelects === 'function') updateKmlLayerSelects([]); 
     }
-});
+  });
 
 /**
  * 整合：時間戳比對、清單快取、以及「單次觸發」的圖釘自動載入
@@ -618,7 +555,7 @@ async function optimizedUpdateKmlLayerSelects() {
     const cachedData = localStorage.getItem(LIST_CACHE_KEY);
 
     // 2. 比對時間戳：若無變動則使用快取
-    if (cachedData && serverUpdate <= localUpdate) {
+    if (cachedData && serverUpdate <= localUpdate && serverUpdate !== 0) {
       console.log("%c[清單快取命中] 伺服器資料無變動", "color: #4CAF50; font-weight: bold;");
       await updateKmlLayerSelects(JSON.parse(cachedData));
       
@@ -1073,21 +1010,5 @@ async function optimizedUpdateKmlLayerSelects() {
     console.error('找不到 id 為 "pinButton" 的圖釘按鈕，釘選功能無法啟用。');
   }
 
-// 1. 確保 DOM 載入完成
-  document.addEventListener('DOMContentLoaded', () => {
-    
-    // 2. 綁定「更新使用者列表」按鈕點擊事件
-    if (els.refreshUsersBtn) {
-      els.refreshUsersBtn.addEventListener('click', refreshUserList);
-      console.log("[系統初始化] 使用者管理按鈕監聽已就緒");
-    }
-
-    // 3. 綁定登入/登出等其他靜態按鈕 (如果有需要)
-    if (els.googleSignInBtn) {
-      els.googleSignInBtn.addEventListener('click', () => {
-         // 登入邏輯...
-      });
-    }
-  });
   // IIFE 結束
 })();

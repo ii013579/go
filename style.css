@@ -4,7 +4,7 @@
    - 註解均為中文，段落以用途分類，盡量保留原始設計與行為
    ========================================================================== */
 
-/* ---------- 全局與��本佈局 ---------- */
+/* ---------- 全局與  本佈局 ---------- */
 html, body {
   margin: 0;
   padding: 0;
@@ -650,47 +650,6 @@ body {
 #addUserSection h4 { margin-top: 0; margin-bottom: 5px; font-size: 18px; color: #555; }
 
 /* ---------- 使用者列表（表格式） ---------- */
-.mgmt-header {
-    display: flex;
-    justify-content: space-between; /* 關鍵：將內容推向兩端 */
-    align-items: center;           /* 垂直居中 */
-    padding: 5px 10px 15px 5px;   /* 留一點下邊距給下方的表格 */
-    position: relative;
-}
-
-.mgmt-title {
-    font-weight: bold;
-    color: #333;
-    font-size: 16px;
-}
-
-#refreshUsersBtn {
-    position: absolute;        /* 關鍵：脫離排版，獨立定位 */
-    right: 15px;               /* 靠右對齊，留 15px 邊距 */
-    top: 50%;                  /* 垂直置中 */
-    transform: translateY(-50%); /* 修正垂直置中的偏差 */
-    background-color: #f0f0f0;
-    color: #333;
-    padding: 6px 15px;
-    border: none;
-    border-radius: 8px;
-    font-size: 14px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.15);
-    z-index: 5;
-}
-
-#refreshUsersBtn:hover {
-    background-color: #e0e0e0;
-    box-shadow: 0 3px 6px rgba(0,0,0,0.2);
-}
-
-#refreshUsersBtn:active {
-    transform: translateY(1px);
-}
-
 #userList { font-size: 14px; }
 .user-list-header {
   display: grid;
