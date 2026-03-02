@@ -665,6 +665,10 @@ body {
 }
 
 #refreshUsersBtn {
+    position: absolute;        /* 關鍵：脫離排版，獨立定位 */
+    right: 15px;               /* 靠右對齊，留 15px 邊距 */
+    top: 50%;                  /* 垂直置中 */
+    transform: translateY(-50%); /* 修正垂直置中的偏差 */
     background-color: #f0f0f0;
     color: #333;
     padding: 6px 15px;
@@ -675,6 +679,7 @@ body {
     cursor: pointer;
     transition: all 0.2s ease;
     box-shadow: 0 2px 4px rgba(0,0,0,0.15);
+    z-index: 5;
 }
 
 #refreshUsersBtn:hover {
