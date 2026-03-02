@@ -659,6 +659,7 @@
             // 3. 快取失效：從 Firestore 讀取 (計費 1 次)
             console.log(`%c[網路讀取] 快取不存在或已失效，下載圖層: ${kmlId}`, "color: #f44336;");
             const doc = await db.collection('kmlLayers').doc(kmlId).get();
+              console.log(`%c🔥 [Firestore Read] 讀取特定圖層內容: ${kmlId}`, "color: white; background: red; padding: 2px 5px;");
             
             if (!doc.exists) {
                 throw new Error('資料庫中找不到該圖層，可能已被刪除。');

@@ -551,6 +551,7 @@ async function optimizedUpdateKmlLayerSelects() {
   try {
     // 2. 獲取雲端最新時間戳記 (此為整網頁必備的 1 次讀取)
     const syncSnap = await getSyncDocRef().get();
+      console.log("%c🔥 [Firestore Read] 讀取 metadata/sync", "color: white; background: red; padding: 2px 5px;");
     const serverUpdate = syncSnap.exists ? (syncSnap.data().lastUpdate || 0) : 0;
     const localUpdate = parseInt(localStorage.getItem(SYNC_TIME_KEY) || "0");
     const cachedList = localStorage.getItem(LIST_CACHE_KEY);
@@ -584,6 +585,7 @@ async function optimizedUpdateKmlLayerSelects() {
 
     // B. 抓取最新的 KML 清單 (讀取 1 次)
     const snapshot = await getKmlCollectionRef().get();
+      console.log("%c🔥 [Firestore Read] 讀取 kmlLayers 集合 (全量)", "color: white; background: red; padding: 2px 5px;");
     const layers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
     // C. 寫入新快取
