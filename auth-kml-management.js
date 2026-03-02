@@ -601,8 +601,9 @@ auth.onAuthStateChanged(async (user) => {
     if (els.loginForm) els.loginForm.style.display = 'block';
     if (els.loggedInDashboard) els.loggedInDashboard.style.display = 'none';
     if (els.userEmailDisplay) els.userEmailDisplay.style.display = 'none';
-  }
-});
+    }
+  });
+}
 
 /**
  * 核心邏輯：整合時間戳比對、清單快取、以及圖層內容(Pinned)快取
