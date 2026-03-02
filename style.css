@@ -682,6 +682,15 @@ body {
   z-index: 1003; /* 確保在標題之上 */
 }
 
+#refreshUsersBtn:hover {
+    background-color: #e0e0e0;
+    box-shadow: 0 3px 6px rgba(0,0,0,0.2);
+}
+
+#refreshUsersBtn:active {
+    transform: translateY(1px);
+}
+
 #userList { font-size: 14px; }
 .user-list-header {
   display: grid;
