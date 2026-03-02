@@ -650,36 +650,31 @@ body {
 #addUserSection h4 { margin-top: 0; margin-bottom: 5px; font-size: 18px; color: #555; }
 
 /* ---------- 使用者列表（表格式） ---------- */
-.user-mgmt-header {
+.mgmt-header {
     display: flex;
-    justify-content: space-between; /* 文字在左，按鈕在右 */
-    align-items: center;            /* 垂直置中 */
-    margin-bottom: 10px;            /* 與下方列表保持間距 */
-    padding: 5px;
+    justify-content: space-between; /* 關鍵：將內容推向兩端 */
+    align-items: center;           /* 垂直居中 */
+    padding: 5px 10px 15px 5px;   /* 留一點下邊距給下方的表格 */
+    position: relative;
 }
 
 .mgmt-title {
     font-weight: bold;
-    font-size: 16px;
     color: #333;
+    font-size: 16px;
 }
 
 #refreshUsersBtn {
-  position: absolute;
-  top: 50%;
-  right: 15px;
-  transform: translateY(-50%);
-  background-color: #f0f0f0;
-  color: #333;
-  padding: 8px 15px;
-  border: none;
-  border-radius: 8px;
-  font-size: 16px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background-color 0.3s, transform 0.2s, box-shadow 0.2s;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-  z-index: 1003; /* 確保在標題之上 */
+    background-color: #f0f0f0;
+    color: #333;
+    padding: 6px 15px;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.15);
 }
 
 #refreshUsersBtn:hover {
