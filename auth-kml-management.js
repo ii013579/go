@@ -495,7 +495,6 @@ const refreshUserList = async () => {
           header.classList.remove('sort-asc', 'sort-desc');
           if (header.dataset.key === currentSortKey) header.classList.add(sortAsc ? 'sort-asc' : 'sort-desc');
         });
-      }
 
     } catch (error) {
       els.userListDiv.innerHTML = `<p style="color: red;">載入用戶列表失敗: ${error.message}</p>`;
