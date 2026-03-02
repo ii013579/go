@@ -472,62 +472,63 @@ auth.onAuthStateChanged(async (user) => {
 
     const userDocRef = db.collection('users').doc(user.uid);
     unsubUserRole = userDocRef.onSnapshot(async (doc) => {
-      if (!doc.exists) {
-        console.warn("使用者文件不存在，執行登出");
-        auth.signOut();
-        return;
-      }
-
-      const userData = doc.data() || {};
-      const newRole = userData.role || 'unapproved';
-      const roleChanged = (window.currentUserRole !== newRole);
-      
-      // 更新全域角色狀態
-      window.currentUserRole = newRole;
-      console.log(`[身份驗證] 目前角色: ${window.currentUserRole} (變動: ${roleChanged})`);
-      
-      if (els.userEmailDisplay) {
-        els.userEmailDisplay.textContent = `${user.email} (${getRoleDisplayName(window.currentUserRole)})`;
-      }
-
-      // 2. 根據角色調整 UI 權限與顯示狀態
-      const canEdit = (window.currentUserRole === 'owner' || window.currentUserRole === 'editor');
-      const isOwner = (window.currentUserRole === 'owner');
-
-      const toggleDisplay = (el, show) => { if (el) el.style.display = show ? 'flex' : 'none'; };
-      const toggleBlock = (el, show) => { if (el) el.style.display = show ? 'block' : 'none'; };
-
-      // 顯示/隱藏管理區塊
-      toggleDisplay(els.uploadKmlSectionDashboard, canEdit);
-      toggleDisplay(els.deleteKmlSectionDashboard, canEdit);
-      toggleDisplay(els.registrationSettingsSection, isOwner);
-      toggleBlock(els.userManagementSection, isOwner);
-
-      // 設定按鈕與選單可用性
-      if (els.uploadKmlSubmitBtnDashboard) els.uploadKmlSubmitBtnDashboard.disabled = !canEdit;
-      if (els.deleteSelectedKmlBtn) els.deleteSelectedKmlBtn.disabled = !canEdit; 
-      if (els.kmlLayerSelectDashboard) els.kmlLayerSelectDashboard.disabled = !canEdit;
-
-      // 3. 觸發使用者清單讀取 (內部已整合 SessionStorage 快取)
-      if (isOwner && typeof refreshUserList === 'function') {
-        refreshUserList();
-      }
-
-      if (window.currentUserRole === 'unapproved') {
-        window.showMessage?.('帳號審核中', '您的帳號正在等待管理員審核。');
-      }
-
-      // 4. --- 【KML 清單讀取優化攔截】 ---
-      // 只有在「初始載入」或「角色權限改變」時才嘗試更新選單
-      if (!hasInitialMenuLoaded || roleChanged) {
-        // 在 await 之前就先鎖定，防止伺服器端與本地快取端同時衝進來
-        hasInitialMenuLoaded = true; 
-        console.log(`[Firebase] 啟動 KML 優化同步程序 (原因: ${roleChanged ? '角色變動' : '初始載入'})`);
-        
-        // 呼叫會比對 metadata/sync 時間戳的優化函式
-        if (typeof optimizedUpdateKmlLayerSelects === 'function') {
-          await optimizedUpdateKmlLayerSelects();
+      try {
+        if (!doc.exists) {
+          console.warn("使用者文件不存在，執行登出");
+          auth.signOut();
+          return;
         }
+
+        const userData = doc.data() || {};
+        const newRole = userData.role || 'unapproved';
+        const roleChanged = (window.currentUserRole !== newRole);
+        
+        // 更新全域角色狀態
+        window.currentUserRole = newRole;
+        console.log(`[身份驗證] 目前角色: ${window.currentUserRole} (變動: ${roleChanged})`);
+        
+        if (els.userEmailDisplay) {
+          els.userEmailDisplay.textContent = `${user.email} (${getRoleDisplayName(window.currentUserRole)})`;
+        }
+
+        // 2. 根據角色調整 UI 權限與顯示狀態
+        const canEdit = (window.currentUserRole === 'owner' || window.currentUserRole === 'editor');
+        const isOwner = (window.currentUserRole === 'owner');
+
+        const toggleDisplay = (el, show) => { if (el) el.style.display = show ? 'flex' : 'none'; };
+        const toggleBlock = (el, show) => { if (el) el.style.display = show ? 'block' : 'none'; };
+
+        // 顯示/隱藏管理區塊
+        toggleDisplay(els.uploadKmlSectionDashboard, canEdit);
+        toggleDisplay(els.deleteKmlSectionDashboard, canEdit);
+        toggleDisplay(els.registrationSettingsSection, isOwner);
+        toggleBlock(els.userManagementSection, isOwner);
+
+        // 設定按鈕與選單可用性
+        if (els.uploadKmlSubmitBtnDashboard) els.uploadKmlSubmitBtnDashboard.disabled = !canEdit;
+        if (els.deleteSelectedKmlBtn) els.deleteSelectedKmlBtn.disabled = !canEdit; 
+        if (els.kmlLayerSelectDashboard) els.kmlLayerSelectDashboard.disabled = !canEdit;
+
+        // 3. 觸發使用者清單讀取
+        if (isOwner && typeof refreshUserList === 'function') {
+          refreshUserList();
+        }
+
+        if (window.currentUserRole === 'unapproved') {
+          window.showMessage?.('帳號審核中', '您的帳號正在等待管理員審核。');
+        }
+
+        // 4. KML 清單讀取優化攔截
+        if (!hasInitialMenuLoaded || roleChanged) {
+          hasInitialMenuLoaded = true; 
+          console.log(`[Firebase] 啟動 KML 優化同步程序 (原因: ${roleChanged ? '角色變動' : '初始載入'})`);
+          
+          if (typeof optimizedUpdateKmlLayerSelects === 'function') {
+            await optimizedUpdateKmlLayerSelects();
+          }
+        }
+      } catch (err) {
+        console.error("處理用戶快照時出錯:", err);
       }
     }, (error) => {
       console.error("監聽角色失敗:", error);
@@ -554,9 +555,8 @@ auth.onAuthStateChanged(async (user) => {
     if (els.loginForm) els.loginForm.style.display = 'block';
     if (els.loggedInDashboard) els.loggedInDashboard.style.display = 'none';
     if (els.userEmailDisplay) els.userEmailDisplay.style.display = 'none';
-    }
-  });
-}
+  }
+});
 
 /**
  * 核心邏輯：整合時間戳比對、清單快取、以及圖層內容(Pinned)快取
