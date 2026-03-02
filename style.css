@@ -36,7 +36,7 @@ body {
 }
 
 /* ---------- 編輯按鈕 ---------- */
-#editButton, #refreshUsersBtn {
+#editButton {
   position: absolute;
   top: 50%;
   right: 15px;
@@ -664,6 +664,23 @@ body {
     color: #333;
 }
 
+#refreshUsersBtn {
+  position: absolute;
+  top: 50%;
+  right: 15px;
+  transform: translateY(-50%);
+  background-color: #f0f0f0;
+  color: #333;
+  padding: 8px 15px;
+  border: none;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.3s, transform 0.2s, box-shadow 0.2s;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+  z-index: 1003; /* 確保在標題之上 */
+}
 
 #userList { font-size: 14px; }
 .user-list-header {
