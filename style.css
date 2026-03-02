@@ -36,7 +36,7 @@ body {
 }
 
 /* ---------- 編輯按鈕 ---------- */
-#editButton {
+#editButton, #refreshUsersBtn {
   position: absolute;
   top: 50%;
   right: 15px;
@@ -664,10 +664,6 @@ body {
     color: #333;
 }
 
-#refreshUsersBtn {
-    margin: 0;
-    padding: 6px 12px;
-}
 
 #userList { font-size: 14px; }
 .user-list-header {
