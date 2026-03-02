@@ -625,91 +625,79 @@
         console.info('所有 KML 圖層和相關數據已清除。');
     };
 
-// ---------- 載入 KML（具備 24h 快取與 Firebase SDK 低成本優化） ----------
-    window.loadKmlLayerFromFirestore = async function (kmlId) {
-        // 1. 全域鎖：避免重複讀取
+    /**
+     * 從 Firestore 載入圖層內容，並實作數據層快取優化
+     * @param {string} kmlId - 要載入的圖層 ID
+     */
+    window.loadKmlLayerFromFirestore = async function(kmlId) {
+        const ns = window.mapNamespace; // 取得 map-logic.js 定義的命名空間
+        
+        // 1. 防呆與狀態檢查
+        if (!kmlId) return;
         if (ns.isLoadingKml) {
-            console.info("⏳ 讀取中，略過重複請求。");
+            console.log("圖層正在載入中，請稍候...");
             return;
         }
-
-        // 2. 基本檢查
-        if (!kmlId) {
-            console.info("未提供 KML ID。");
-            window.clearAllKmlLayers();
-            return;
-        }
-
-        const CACHE_KEY = `kml_data_${kmlId}`;
-        const CACHE_TIME_KEY = `kml_time_${kmlId}`;
-        const EXPIRE_TIME = 24 * 60 * 60 * 1000; 
-
-        ns.isLoadingKml = true;
-
+        ns.isLoadingKml = true; // 上鎖
+    
+        const CONTENT_CACHE_KEY = `kml_data_${kmlId}`;
+    
         try {
-            const now = Date.now();
-            const cachedData = localStorage.getItem(CACHE_KEY);
-            const cachedTime = localStorage.getItem(CACHE_TIME_KEY);
-
-            // 3. 【第一層防線】LocalStorage 快取攔截 (完全不接觸 Firebase)
-            if (cachedData && cachedTime && (now - parseInt(cachedTime) < EXPIRE_TIME)) {
-                // 若 ID 沒變且圖層已在地圖上，直接結束
-                if (ns.currentKmlLayerId === kmlId && ns.allKmlFeatures.length > 0) {
-                    ns.isLoadingKml = false;
-                    return;
-                }
-                
-                console.log(`%c[快取命中] 載入本地備份: ${kmlId}`, "color: #4CAF50; font-weight: bold;");
-                window.clearAllKmlLayers();
-                renderKmlData(JSON.parse(cachedData), kmlId);
-                ns.isLoadingKml = false; // 成功後解鎖
-                return; 
-            }
-
-            // 4. 【第二層防線】Firestore SDK 離線快取優先 (降低 Read Count)
-            console.log(`%c[快取失效] 嘗試同步 Firebase: ${kmlId}`, "color: #2196F3; font-weight: bold;");
+            // 2. 數據層優化：嘗試從本地快取讀取 GeoJSON 內容
+            const cachedContent = localStorage.getItem(CONTENT_CACHE_KEY);
             
-            if (typeof db === 'undefined' || typeof appId === 'undefined') {
-                throw new Error('Firebase 未定義。');
+            if (cachedContent) {
+                console.log(`%c[數據快取命中] 成功從本地載入圖層: ${kmlId}`, "color: #2196F3; font-weight: bold;");
+                const kmlData = JSON.parse(cachedContent);
+                
+                // 直接進入渲染流程 (省下 1 次 Firestore 讀取)
+                clearExistingLayers(ns);
+                renderKmlData(kmlData, kmlId);
+                return;
             }
-
-            const docRef = db.collection('artifacts')
-                .doc(appId).collection('public')
-                .doc('data').collection('kmlLayers')
-                .doc(kmlId);
-
-            let doc;
-            try {
-                // 優先強制從 SDK 內部的快取讀取 (不計費)
-                doc = await docRef.get({ source: 'cache' });
-                console.log("Firebase SDK 離線快取命中");
-            } catch (e) {
-                // 快取沒有或出錯，才真正去 Server 拿 (計費 1 次)
-                doc = await docRef.get({ source: 'server' });
-                console.log("Firebase SDK 快取失效，執行網路請求");
+    
+            // 3. 快取失效：從 Firestore 讀取 (計費 1 次)
+            console.log(`%c[網路讀取] 快取不存在或已失效，下載圖層: ${kmlId}`, "color: #f44336;");
+            const doc = await db.collection('kmlLayers').doc(kmlId).get();
+            
+            if (!doc.exists) {
+                throw new Error('資料庫中找不到該圖層，可能已被刪除。');
             }
-
-            if (!doc.exists) throw new Error('找不到圖層資料。');
-
+    
             const kmlData = doc.data();
-
-            // 5. 更新 LocalStorage
-            localStorage.setItem(CACHE_KEY, JSON.stringify(kmlData));
-            localStorage.setItem(CACHE_TIME_KEY, now.toString());
-
-            window.clearAllKmlLayers();
-            renderKmlData(kmlData, kmlId);
-
-        } catch (error) {
-            console.error("載入出錯:", error);
-            // 只有在真正失敗時才彈窗
-            if (error.name !== 'FirebaseError') {
-                 window.showMessageCustom?.({ title: '錯誤', message: error.message, buttonText: '確定' });
+    
+            // 4. 更新本地快取 (供下次重整使用)
+            try {
+                localStorage.setItem(CONTENT_CACHE_KEY, JSON.stringify(kmlData));
+            } catch (e) {
+                // 如果 GeoJSON 太大超過 LocalStorage 5MB 限制
+                console.warn("LocalStorage 空間不足，無法快取此圖層內容。");
             }
+    
+            // 5. 執行渲染
+            clearExistingLayers(ns);
+            renderKmlData(kmlData, kmlId);
+    
+        } catch (error) {
+            console.error("載入圖層失敗:", error);
+            // 若有自訂訊息工具則顯示
+            window.showMessageCustom?.({ 
+                title: '載入失敗', 
+                message: error.message, 
+                buttonText: '確定' 
+            });
         } finally {
-            ns.isLoadingKml = false; 
+            ns.isLoadingKml = false; // 解鎖
         }
     };
+    
+    /**
+     * 輔助函式：清理地圖上現有的所有圖層與標記
+     */
+    function clearExistingLayers(ns) {
+        if (ns.geoJsonLayers) ns.geoJsonLayers.clearLayers();
+        if (ns.markers) ns.markers.clearLayers();
+    }
 
     // 抽離出的渲染邏輯（確保快取與網路共用同一套顯示流程）
     function renderKmlData(kmlData, kmlId) {

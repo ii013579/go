@@ -534,54 +534,72 @@ const updateKmlLayerSelects = async (passedLayers = null) => {
   });
 
 /**
- * 整合：時間戳比對、清單快取、以及「單次觸發」的圖釘自動載入
+ * 核心邏輯：整合時間戳比對、清單快取、以及圖層內容(Pinned)快取
+ * 達成目標：若雲端未更新，整網頁後 Firestore 讀取次數降至最低
  */
 async function optimizedUpdateKmlLayerSelects() {
-  // 【修改 B-1】檢查是否正在執行中
+  // 1. 防止重複執行鎖定
   if (isUpdatingList) {
     console.log("清單更新進行中，略過本次呼叫");
     return;
   }
-  isUpdatingList = true; // 上鎖
+  isUpdatingList = true;
 
   const LIST_CACHE_KEY = 'kml_list_cache_data';
   const SYNC_TIME_KEY = 'kml_list_last_sync';
 
   try {
-    // 1. 抓取遠端「獨立時間戳記」
+    // 2. 獲取雲端最新時間戳記 (此為整網頁必備的 1 次讀取)
     const syncSnap = await getSyncDocRef().get();
     const serverUpdate = syncSnap.exists ? (syncSnap.data().lastUpdate || 0) : 0;
     const localUpdate = parseInt(localStorage.getItem(SYNC_TIME_KEY) || "0");
-    const cachedData = localStorage.getItem(LIST_CACHE_KEY);
+    const cachedList = localStorage.getItem(LIST_CACHE_KEY);
 
-    // 2. 比對時間戳：若無變動則使用快取
-    if (cachedData && serverUpdate <= localUpdate && serverUpdate !== 0) {
-      console.log("%c[清單快取命中] 伺服器資料無變動", "color: #4CAF50; font-weight: bold;");
-      await updateKmlLayerSelects(JSON.parse(cachedData));
+    // 3. 判斷是否完全使用快取 (時間戳相同 且 本地有資料)
+    const isCacheValid = (cachedList && serverUpdate <= localUpdate && serverUpdate !== 0);
+
+    if (isCacheValid) {
+      console.log("%c[核心快取模式] 伺服器資料無變動，使用快取清單與圖層", "color: #4CAF50; font-weight: bold;");
       
-      tryLoadPinnedKmlLayerWhenReady(); 
-      return;
+      // 直接解析快取並渲染 UI
+      const layers = JSON.parse(cachedList);
+      await updateKmlLayerSelects(layers);
+
+      /** * 重要：此時 loadKmlLayerFromFirestore 內部的快取判斷會發揮作用
+       * 因為時間戳沒變，我們不需要清除 kml_data_xxx，Pinned 圖層將從快取載入
+       */
+      tryLoadPinnedKmlLayerWhenReady();
+      return; 
     }
 
-    // 3. 若失效，執行全量讀取
-    console.log("%c[清單更新] 偵測到新資料，從 Firebase 同步", "color: #FF9800; font-weight: bold;");
+    // 4. 若時間戳不同：執行「全量更新」並「清理過期圖層」
+    console.log("%c[同步模式] 偵測到雲端更新，開始重新抓取資料", "color: #FF9800; font-weight: bold;");
+
+    // A. 清除所有舊的圖層內容快取 (避免 Pinned 抓到舊版 GeoJSON)
+    Object.keys(localStorage).forEach(key => {
+      if (key.startsWith('kml_data_')) {
+        localStorage.removeItem(key);
+      }
+    });
+
+    // B. 抓取最新的 KML 清單 (讀取 1 次)
     const snapshot = await getKmlCollectionRef().get();
     const layers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-    // 4. 更新本地快取
+    // C. 寫入新快取
     localStorage.setItem(LIST_CACHE_KEY, JSON.stringify(layers));
     localStorage.setItem(SYNC_TIME_KEY, serverUpdate.toString());
 
+    // D. 更新 UI 並嘗試載入釘選 (此時會因快取已清而從 Firestore 下載最新圖層)
     await updateKmlLayerSelects(layers);
-
     tryLoadPinnedKmlLayerWhenReady();
 
   } catch (err) {
     console.error("優化清單程序出錯:", err);
+    // 降級處理：出錯時嘗試進行一次標準讀取確保功能正常
     const snapshot = await getKmlCollectionRef().get();
     const layers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     await updateKmlLayerSelects(layers);
-    
     tryLoadPinnedKmlLayerWhenReady();
   } finally {
     isUpdatingList = false;
