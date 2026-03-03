@@ -745,7 +745,7 @@ if (els.uploadKmlSubmitBtnDashboard) {
 }
 
 /**
- * [新功能] Excel 讀取與欄位映射
+ * 處理 Excel 檔案讀取
  */
 async function handleExcelUpload(file) {
     const reader = new FileReader();
@@ -758,10 +758,15 @@ async function handleExcelUpload(file) {
 
             if (jsonData.length === 0) throw new Error("Excel 檔案內容為空。");
 
-            // 1. 彈出欄位選擇器
+            // 1. 取得標題並要求使用者選擇欄位
             const headers = Object.keys(jsonData[0]);
             const mapping = await showColumnMappingModal(headers);
-            if (!mapping) return; // 使用者取消
+            
+            // 如果使用者取消或未選齊欄位
+            if (!mapping || !mapping.lng || !mapping.lat || !mapping.name) {
+                console.log("使用者取消上傳或欄位未選齊");
+                return; 
+            }
 
             // 2. 轉換為 GeoJSON
             const features = jsonData.map((row, index) => {
@@ -778,9 +783,11 @@ async function handleExcelUpload(file) {
                 };
             }).filter(f => f !== null);
 
-            if (features.length === 0) throw new Error("找不到有效的經緯度座標。");
+            if (features.length === 0) throw new Error("所選欄位中找不到有效的座標數據。");
 
             const geojson = { type: "FeatureCollection", features: features };
+            
+            // 呼叫您現有的統一寫入函式
             await processAndUploadGeoJson(file.name, geojson);
 
         } catch (err) {
@@ -791,40 +798,47 @@ async function handleExcelUpload(file) {
 }
 
 /**
- * [新功能] 欄位映射 Modal
+ * 欄位映射對話框
  */
 async function showColumnMappingModal(headers) {
-    const optionsHtml = headers.map(h => `<option value="${h}">${h}</option>`).join('');
-    
-    // 自動偵測關鍵字
-    const auto = (keys, targets) => keys.find(k => targets.some(t => k.toLowerCase().includes(t))) || keys[0];
+    // 建立選項，第一項為空白提示
+    const optionsHtml = `<option value="">-- 請選擇欄位 --</option>` + 
+                        headers.map(h => `<option value="${h}">${h}</option>`).join('');
 
     const content = `
-        <div style="text-align: left; font-size: 14px;">
-            <p>請對應 Excel 欄位：</p>
+        <div id="mapping-container" style="text-align: left; font-size: 14px; line-height: 1.8;">
             <div style="margin-bottom: 10px;">
-                <label>📍 點名欄位</label>
-                <select id="map_name" class="swal2-select" style="display:flex; width:100%">${optionsHtml}</select>
+                <label>📍 <b>點名欄位：</b></label><br>
+                <select id="map_name" class="swal2-select" style="width:100%; height:35px;">${optionsHtml}</select>
             </div>
             <div style="margin-bottom: 10px;">
-                <label>🌐 經度 (Longitude)</label>
-                <select id="map_lng" class="swal2-select" style="display:flex; width:100%">${optionsHtml}</select>
+                <label>🌐 <b>經度 (Longitude)：</b></label><br>
+                <select id="map_lng" class="swal2-select" style="width:100%; height:35px;">${optionsHtml}</select>
             </div>
             <div style="margin-bottom: 10px;">
-                <label>🌐 緯度 (Latitude)</label>
-                <select id="map_lat" class="swal2-select" style="display:flex; width:100%">${optionsHtml}</select>
+                <label>🌐 <b>緯度 (Latitude)：</b></label><br>
+                <select id="map_lat" class="swal2-select" style="width:100%; height:35px;">${optionsHtml}</select>
             </div>
         </div>
     `;
 
-    const confirmed = await window.showConfirmationModal('Excel 匯入配置', content);
-    if (!confirmed) return null;
+    // 呼叫原本的確認視窗
+    const confirmed = await window.showConfirmationModal('Excel 欄位配置', content);
+    
+    if (confirmed) {
+        // ✨ 重要：在按下「是」之後立即抓取 DOM 元素的值
+        const nameVal = document.getElementById('map_name')?.value;
+        const lngVal = document.getElementById('map_lng')?.value;
+        const latVal = document.getElementById('map_lat')?.value;
 
-    return {
-        name: document.getElementById('map_name').value,
-        lng: document.getElementById('map_lng').value,
-        lat: document.getElementById('map_lat').value
-    };
+        if (!nameVal || !lngVal || !latVal) {
+            window.showMessage?.('提示', '請務必選齊所有必要欄位。');
+            return null;
+        }
+
+        return { name: nameVal, lng: lngVal, lat: latVal };
+    }
+    return null;
 }
 
 /**
