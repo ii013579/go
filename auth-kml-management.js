@@ -775,12 +775,13 @@ async function optimizedUpdateKmlLayerSelects() {
           // ======= 【核心優化：觸發全域同步與清理快取】 =======
           const targetKmlId = kmlLayerDocRef.id;
           const now = Date.now();
+          const lastUpdateTimeText = new Date(now).toLocaleString('zh-TW');
 
           // 2. 更新全域同步戳記 (讓其他使用者知道有更新)
           await db.collection('artifacts').doc(appId)
             .collection('public').doc('data')
             .collection('metadata').doc('sync')
-            .set({ lastUpdate: now }, { merge: true });
+            .set({ lastUpdate: now, lastUpdateTime: lastUpdateTimeText}, { merge: true });
 
           // 3. 清理自己的本地快取 (確保選單與內容立即更新)
           localStorage.removeItem('kml_list_cache_data'); // 清單快取
@@ -833,12 +834,13 @@ async function optimizedUpdateKmlLayerSelects() {
 
         // ======= 【核心優化：觸發全域同步】 =======
         const now = Date.now();
+        const dateText = new Date(now).toLocaleString('zh-TW');
 
         // 2. 更新全域同步戳記 (通知所有使用者移除此選單項)
         await db.collection('artifacts').doc(appId)
           .collection('public').doc('data')
           .collection('metadata').doc('sync')
-          .set({ lastUpdate: now }, { merge: true });
+          .set({ lastUpdate: now, lastUpdateTime: dateText}, { merge: true });
 
         // 3. 清理自己的本地快取
         localStorage.removeItem('kml_list_cache_data');
