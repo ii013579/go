@@ -299,148 +299,100 @@ const tryLoadPinnedKmlLayerWhenReady = () => {
  */
 const refreshUserList = async () => {
   const container = els.userListDiv;
-  if (!container) {
-    console.error('找不到使用者列表容器 (#userList)');
-    return;
-  }
+  if (!container) return;
 
   const USER_CACHE_KEY = 'owner_user_list_cache';
 
   try {
-    // --- 1. Session 快取檢查 ---
+    // 1. 優先檢查 Session 快取
     const cachedData = sessionStorage.getItem(USER_CACHE_KEY);
     if (cachedData) {
-      console.log("%c[Owner 快取命中] 從 SessionStorage 載入", "color: #9C27B0; font-weight: bold;");
+      console.log("%c[Cache] 命中快取", "color: #9C27B0;");
       const usersData = JSON.parse(cachedData);
       renderUserCards(usersData);
-      bindUserManagementEvents(); // 重要：快取路徑也需要綁定事件
+      bindUserManagementEvents(); // 綁定事件
       return;
     }
 
-    // --- 2. Firestore 雲端抓取 ---
-    console.log("%c🔥 [Firestore Read] 正在抓取使用者清單", "color: white; background: #E91E63; padding: 2px 5px;");
+    // 2. 抓取 Firestore 資料
+    console.log("🔥 [Firestore] 抓取最新名單...");
     const snapshot = await db.collection('users').get();
-
-    if (snapshot.empty) {
-      container.innerHTML = '<p>目前沒有註冊用戶。</p>';
-      return;
-    }
-
     const usersData = [];
     snapshot.forEach(doc => {
-      const user = doc.data() || {};
       if (auth.currentUser && doc.id === auth.currentUser.uid) return;
-      usersData.push({ id: doc.id, ...user });
+      usersData.push({ id: doc.id, ...doc.data() });
     });
 
-    // 存入快取
     sessionStorage.setItem(USER_CACHE_KEY, JSON.stringify(usersData));
-
-    // --- 3. 渲染與綁定 ---
     renderUserCards(usersData);
     bindUserManagementEvents();
 
   } catch (error) {
-    container.innerHTML = `<p style="color: red;">載入用戶列表失敗: ${error.message}</p>`;
-    console.error("載入用戶列表時出錯:", error);
+    container.innerHTML = `<p style="color: red;">載入失敗: ${error.message}</p>`;
   }
 
-  /**
-   * 內部函式：純 DOM 渲染
-   */
-  function renderUserCards(usersData) {
-    container.innerHTML = ''; // 清空容器
-
-    // 角色排序
+  // --- 內部輔助：渲染 DOM ---
+  function renderUserCards(data) {
+    container.innerHTML = '';
     const roleOrder = { 'unapproved': 1, 'user': 2, 'editor': 3, 'owner': 4 };
-    usersData.sort((a, b) => (roleOrder[a.role] || 99) - (roleOrder[b.role] || 99));
+    data.sort((a, b) => (roleOrder[a.role] || 99) - (roleOrder[b.role] || 99));
 
-    usersData.forEach(user => {
-      const uid = user.id;
-      const emailName = user.email ? user.email.split('@')[0] : 'N/A';
-      const userCard = document.createElement('div');
-      userCard.className = 'user-card';
-      userCard.dataset.nickname = user.name || 'N/A';
-      userCard.dataset.uid = uid;
-
-      userCard.innerHTML = `
-          <div class="user-email">${emailName}</div>
-          <div class="user-nickname">${user.name || 'N/A'}</div>
-          <div class="user-role-controls">
-            <select data-uid="${uid}" data-original-value="${user.role || 'unapproved'}" class="user-role-select">
-              <option value="unapproved" ${user.role === 'unapproved' ? 'selected' : ''}>未審核</option>
-              <option value="user" ${user.role === 'user' ? 'selected' : ''}>一般</option>
-              <option value="editor" ${user.role === 'editor' ? 'selected' : ''}>編輯者</option>
-              <option value="owner" ${user.role === 'owner' ? 'selected' : ''} ${window.currentUserRole !== 'owner' ? 'disabled' : ''}>擁有者</option>
-            </select>
-          </div>
-          <div class="user-actions">
-            <button class="change-role-btn" data-uid="${uid}" disabled>變</button>
-            <button class="delete-user-btn action-buttons delete-btn" data-uid="${uid}">刪</button>
-          </div>
-        `;
-      container.appendChild(userCard);
+    data.forEach(user => {
+      const card = document.createElement('div');
+      card.className = 'user-card';
+      card.dataset.uid = user.id;
+      card.innerHTML = `
+        <div class="user-email">${user.email?.split('@')[0] || 'N/A'}</div>
+        <div class="user-nickname">${user.name || 'N/A'}</div>
+        <div class="user-role-controls">
+          <select class="user-role-select" data-original-value="${user.role || 'unapproved'}">
+            <option value="unapproved" ${user.role === 'unapproved' ? 'selected' : ''}>未審核</option>
+            <option value="user" ${user.role === 'user' ? 'selected' : ''}>一般</option>
+            <option value="editor" ${user.role === 'editor' ? 'selected' : ''}>編輯者</option>
+            <option value="owner" ${user.role === 'owner' ? 'selected' : ''} ${window.currentUserRole !== 'owner' ? 'disabled' : ''}>擁有者</option>
+          </select>
+        </div>
+        <div class="user-actions">
+          <button class="change-role-btn" disabled>變</button>
+          <button class="delete-user-btn action-buttons delete-btn">刪</button>
+        </div>`;
+      container.appendChild(card);
     });
   }
 
-  /**
-   * 內部函式：為動態產生的元素綁定事件
-   */
+  // --- 內部輔助：綁定事件 ---
   function bindUserManagementEvents() {
-    // 角色變更事件
-    container.querySelectorAll('.user-role-select').forEach(select => {
-      const changeButton = select.closest('.user-card').querySelector('.change-role-btn');
-      
-      select.addEventListener('change', () => {
-        changeButton.disabled = (select.value === select.dataset.originalValue);
-      });
+    container.querySelectorAll('.user-card').forEach(card => {
+      const select = card.querySelector('.user-role-select');
+      const changeBtn = card.querySelector('.change-role-btn');
+      const deleteBtn = card.querySelector('.delete-user-btn');
+      const uid = card.dataset.uid;
 
-      changeButton.addEventListener('click', async () => {
-        const userCard = changeButton.closest('.user-card');
-        const uidToUpdate = userCard.dataset.uid;
-        const newRole = select.value;
+      select.onchange = () => { changeBtn.disabled = (select.value === select.dataset.originalValue); };
 
-        const confirmUpdate = await window.showConfirmationModal(
-          '確認變更角色',
-          `確定要變更角色嗎？`
-        );
-
-        if (!confirmUpdate) {
-          select.value = select.dataset.originalValue;
-          changeButton.disabled = true;
-          return;
-        }
-
+      changeBtn.onclick = async () => {
+        if (!await window.showConfirmationModal?.('確認', '確定變更角色？')) return;
         try {
-          await db.collection('users').doc(uidToUpdate).update({ role: newRole });
-          window.showMessage?.('成功', `角色已更新。`);
-          select.dataset.originalValue = newRole;
-          changeButton.disabled = true;
-          // 更新快取防止重整後跳回舊狀態
-          updateLocalCache(uidToUpdate, { role: newRole });
-        } catch (err) {
-          window.showMessage?.('錯誤', err.message);
-        }
-      });
-    });
+          await db.collection('users').doc(uid).update({ role: select.value });
+          select.dataset.originalValue = select.value;
+          changeBtn.disabled = true;
+          window.showMessage?.('成功', '角色已更新');
+        } catch (e) { window.showMessage?.('錯誤', e.message); }
+      };
 
-    // 刪除事件
-    container.querySelectorAll('.delete-user-btn').forEach(button => {
-      button.addEventListener('click', async () => {
-        const userCard = button.closest('.user-card');
-        const uidToDelete = userCard.dataset.uid;
-        if (!(await window.showConfirmationModal('確認刪除', '確定要刪除用戶嗎？'))) return;
-
+      deleteBtn.onclick = async () => {
+        if (!await window.showConfirmationModal?.('警告', '確定刪除用戶？')) return;
         try {
-          await db.collection('users').doc(uidToDelete).delete();
-          userCard.remove();
-          updateLocalCache(uidToDelete, null); // 從快取移除
-        } catch (err) {
-          window.showMessage?.('錯誤', err.message);
-        }
-      });
+          await db.collection('users').doc(uid).delete();
+          card.remove();
+          // 更新快取
+          const list = JSON.parse(sessionStorage.getItem(USER_CACHE_KEY) || '[]');
+          sessionStorage.setItem(USER_CACHE_KEY, JSON.stringify(list.filter(u => u.id !== uid)));
+        } catch (e) { window.showMessage?.('錯誤', e.message); }
+      };
     });
   }
+};
 
   // 輔助功能：當單一用戶變動時，更新 SessionStorage 快取
   function updateLocalCache(uid, newData) {
