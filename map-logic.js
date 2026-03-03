@@ -626,68 +626,80 @@
     };
 
     /**
-     * 從 Firestore 載入圖層內容，並實作數據層快取優化
-     * @param {string} kmlId - 要載入的圖層 ID
+     * 從 Firestore 載入特定的 KML 圖層資料 (GeoJSON 格式)
+     * 路徑對應：artifacts / kmldata-d22fb / public / data / kmlLayers / {kmlId}
      */
     window.loadKmlLayerFromFirestore = async function(kmlId) {
         const ns = window.mapNamespace; // 取得 map-logic.js 定義的命名空間
+        const APP_ID = 'kmldata-d22fb'; // 根據 Firebase 控制台確定的路徑 ID
         
         // 1. 防呆與狀態檢查
         if (!kmlId) return;
         if (ns.isLoadingKml) {
-            console.log("圖層正在載入中，請稍候...");
+            console.log("⏳ 圖層正在載入中，請稍候...");
             return;
         }
-        ns.isLoadingKml = true; // 上鎖
+        ns.isLoadingKml = true; // 上鎖，防止連點重複觸發
     
         const CONTENT_CACHE_KEY = `kml_data_${kmlId}`;
     
         try {
-            // 2. 數據層優化：嘗試從本地快取讀取 GeoJSON 內容
-            const cachedJSON = localStorage.getItem(CONTENT_CACHE_KEY);
-                if (cachedJSON) {
-                    const cached = JSON.parse(cachedJSON);
-                    // ✨ 增加簡單的時間檢查 (例如快取超過 24 小時則重新抓取)
-                    const isFresh = (Date.now() - (cached.timestamp || 0)) < 86400000; 
-                    
-                    if (isFresh) {
-                        console.log(`%c[快取命中] 載入: ${kmlId}`, "color: #2196F3;");
-                        clearExistingLayers(ns);
-                        renderKmlData(cached.data, kmlId);
-                        return;
-                    }
-                }   
-            // 3. 從 Firestore 讀取
-                console.log(`%c[網路讀取] 下載中...`, "color: #f44336;");
-                const doc = await db.collection('kmlLayers').doc(kmlId).get();
+            // 2. 數據層優化：嘗試從本地 LocalStorage 讀取
+            const cachedContent = localStorage.getItem(CONTENT_CACHE_KEY);
+            
+            if (cachedContent) {
+                console.log(`%c[數據快取命中] 載入圖層: ${kmlId}`, "color: #2196F3; font-weight: bold;");
+                const kmlData = JSON.parse(cachedContent);
                 
-                if (!doc.exists) throw new Error('圖層不存在或已被刪除。');
+                // 直接執行清理與渲染流程
+                if (typeof clearExistingLayers === 'function') clearExistingLayers(ns);
+                if (typeof renderKmlData === 'function') renderKmlData(kmlData, kmlId);
+                return;
+            }
+    
+            // 3. 快取失效：從正確的嵌套路徑下載圖層
+            console.log(`%c[網路讀取] 開始下載圖層資料: ${kmlId}`, "color: #f44336;");
             
-                const kmlData = doc.data();
-                    
-            // 4. 存入快取並記錄時間戳
-                try {
-                    localStorage.setItem(CONTENT_CACHE_KEY, JSON.stringify({
-                        data: kmlData,
-                        timestamp: Date.now()
-                    }));
-                } catch (e) {
-                    console.warn("快取寫入失敗 (可能是資料太大)");
-                }
+            // ✨ 關鍵修正：依照 artifacts 嵌套結構進行路徑定位
+            const doc = await db.collection('artifacts').doc(APP_ID)
+                                .collection('public').doc('data')
+                                .collection('kmlLayers').doc(kmlId).get();
             
-                clearExistingLayers(ns);
-                renderKmlData(kmlData, kmlId);
+            console.log(`%c🔥 [Firestore Read] 成功下載特定圖層內容`, "color: white; background: red; padding: 2px 5px;");
+    
+            if (!doc.exists) {
+                // 提供完整錯誤路徑以便 Debug
+                console.error("❌ 找不到文件於路徑: ", `artifacts/${APP_ID}/public/data/kmlLayers/${kmlId}`);
+                throw new Error('資料庫中找不到該圖層，可能已被刪除。');
+            }
+    
+            const kmlData = doc.data();
+    
+            // 4. 更新本地快取 (供下次使用)
+            try {
+                localStorage.setItem(CONTENT_CACHE_KEY, JSON.stringify(kmlData));
+            } catch (e) {
+                // 若 GeoJSON 超過 LocalStorage 5MB 限制
+                console.warn("⚠️ LocalStorage 空間不足，無法快取此圖層內容。");
+            }
+    
+            // 5. 執行渲染
+            if (typeof clearExistingLayers === 'function') clearExistingLayers(ns);
+            if (typeof renderKmlData === 'function') renderKmlData(kmlData, kmlId);
+    
+        } catch (error) {
+            console.error("❌ 載入圖層失敗:", error);
             
-            } catch (error) {
-	           console.error("載入圖層失敗:", error);
-            // 若有自訂訊息工具則顯示
-            window.showMessageCustom?.({ 
-                title: '載入失敗', 
-                message: error.message, 
-                buttonText: '確定' 
-            });
+            // 顯示自訂訊息視窗
+            if (window.showMessageCustom) {
+                window.showMessageCustom({ 
+                    title: '載入失敗', 
+                    message: error.message, 
+                    buttonText: '確定' 
+                });
+            }
         } finally {
-            ns.isLoadingKml = false; // 解鎖
+            ns.isLoadingKml = false; // 解鎖狀態
         }
     };
     
