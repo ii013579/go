@@ -392,7 +392,6 @@ const refreshUserList = async () => {
       };
     });
   }
-};
 
   // 輔助功能：當單一用戶變動時，更新 SessionStorage 快取
   function updateLocalCache(uid, newData) {
