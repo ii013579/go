@@ -644,43 +644,42 @@
     
         try {
             // 2. 數據層優化：嘗試從本地快取讀取 GeoJSON 內容
-            const cachedContent = localStorage.getItem(CONTENT_CACHE_KEY);
-            
-            if (cachedContent) {
-                console.log(`%c[數據快取命中] 成功從本地載入圖層: ${kmlId}`, "color: #2196F3; font-weight: bold;");
-                const kmlData = JSON.parse(cachedContent);
+            const cachedJSON = localStorage.getItem(CONTENT_CACHE_KEY);
+                if (cachedJSON) {
+                    const cached = JSON.parse(cachedJSON);
+                    // ✨ 增加簡單的時間檢查 (例如快取超過 24 小時則重新抓取)
+                    const isFresh = (Date.now() - (cached.timestamp || 0)) < 86400000; 
+                    
+                    if (isFresh) {
+                        console.log(`%c[快取命中] 載入: ${kmlId}`, "color: #2196F3;");
+                        clearExistingLayers(ns);
+                        renderKmlData(cached.data, kmlId);
+                        return;
+                    }
+                }   
+            // 3. 從 Firestore 讀取
+                console.log(`%c[網路讀取] 下載中...`, "color: #f44336;");
+                const doc = await db.collection('kmlLayers').doc(kmlId).get();
                 
-                // 直接進入渲染流程 (省下 1 次 Firestore 讀取)
+                if (!doc.exists) throw new Error('圖層不存在或已被刪除。');
+            
+                const kmlData = doc.data();
+                    
+            // 4. 存入快取並記錄時間戳
+                try {
+                    localStorage.setItem(CONTENT_CACHE_KEY, JSON.stringify({
+                        data: kmlData,
+                        timestamp: Date.now()
+                    }));
+                } catch (e) {
+                    console.warn("快取寫入失敗 (可能是資料太大)");
+                }
+            
                 clearExistingLayers(ns);
                 renderKmlData(kmlData, kmlId);
-                return;
-            }
-    
-            // 3. 快取失效：從 Firestore 讀取 (計費 1 次)
-            console.log(`%c[網路讀取] 快取不存在或已失效，下載圖層: ${kmlId}`, "color: #f44336;");
-            const doc = await db.collection('kmlLayers').doc(kmlId).get();
-              console.log(`%c🔥 [Firestore Read] 讀取特定圖層內容: ${kmlId}`, "color: white; background: red; padding: 2px 5px;");
             
-            if (!doc.exists) {
-                throw new Error('資料庫中找不到該圖層，可能已被刪除。');
-            }
-    
-            const kmlData = doc.data();
-    
-            // 4. 更新本地快取 (供下次重整使用)
-            try {
-                localStorage.setItem(CONTENT_CACHE_KEY, JSON.stringify(kmlData));
-            } catch (e) {
-                // 如果 GeoJSON 太大超過 LocalStorage 5MB 限制
-                console.warn("LocalStorage 空間不足，無法快取此圖層內容。");
-            }
-    
-            // 5. 執行渲染
-            clearExistingLayers(ns);
-            renderKmlData(kmlData, kmlId);
-    
-        } catch (error) {
-            console.error("載入圖層失敗:", error);
+            } catch (error) {
+	           console.error("載入圖層失敗:", error);
             // 若有自訂訊息工具則顯示
             window.showMessageCustom?.({ 
                 title: '載入失敗', 
