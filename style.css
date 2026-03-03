@@ -9,10 +9,9 @@ html, body {
   margin: 0;
   padding: 0;
   height: 100%;
-  font-family: 'Inter', sans-serif;
-  color: #333;
-  background-color: #f0f2f5;
+  overflow: hidden; /* 防止整個 body 產生彈簧捲動，讓內部分別捲動 */
 }
+
 body {
   display: flex;
   flex-direction: column;
@@ -22,17 +21,52 @@ body {
 /* ---------- 標題區域（頂部條） ---------- */
 /* #title：標題列，包含漸層背景、陰影與圓角 */
 #title {
+  flex: 0 0 auto;
   text-align: center;
-  padding: 12px;
-  font-size: 24px;
+  padding: 10px;
+  font-size: 20px; /* 手機版建議 20px，比原本 24px 更省空間 */
   font-weight: 700;
   background: linear-gradient(135deg, #6dd5ed, #2193b0);
   color: #fff;
-  box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.15);
   border-bottom-left-radius: 12px;
   border-bottom-right-radius: 12px;
+  z-index: 1001;
+}
+
+/* ---------- 地圖容器 ---------- */
+#map {
+  flex: 1;               /* 填滿剩餘所有垂直空間 */
+  min-height: 0;         /* 關鍵：允許地圖被 Flexbox 縮小到剩餘空間 */
+  margin: 10px;          /* 手機版縮小邊距，增加可視面積 */
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  background-color: #e5e3df; /* 地圖載入前的底色 */
+}
+
+/* ---------- 控制面板（Controls） ---------- */
+#controls {
+  flex: 0 0 auto;        /* 關鍵：固定高度不被地圖壓縮 */
+  padding: 12px 15px;
+  background: #fff;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
   position: relative;
-  z-index: 1001; /* 確保在其他內容之上 */
+  z-index: 1000;
+
+  /* ✨ 核心修正：解決搜尋結果推走地圖的問題 */
+  max-height: 40vh;      /* 控制面板最多佔螢幕高度的 40% */
+  overflow-y: auto;      /* 內容太多時內部捲動 */
+  -webkit-overflow-scrolling: touch; /* iOS 捲動平滑化 */
+}
+
+/* KML 控制項（預設由 JS 控制顯示） */
+#kmlControls {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 /* ---------- 編輯按鈕 ---------- */
@@ -237,24 +271,7 @@ body {
   flex-shrink: 0;
 }
 
-/* ---------- 控制面板（Controls） ---------- */
-#controls {
-  padding: 15px;
-  background: #fff;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  position: relative; /* 為了 searchResults 的絕對定位 */
-  z-index: 1000;
-}
 
-/* KML 控制項（預設由 JS 控制顯示） */
-#kmlControls {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
 
 /* ---------- 統一輸入框樣式 ---------- */
 #kmlInput, #searchBox, #kmlLayerSelect, #kmlLayerSelectDashboard,
@@ -369,13 +386,14 @@ body {
 #searchResults.columns-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 #searchResults.columns-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
 
-/* ---------- 地圖容器 ---------- */
-#map {
-  flex-grow: 1;
-  border-radius: 12px;
-  overflow: hidden;
-  margin: 15px;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+/* 確保輸入框與下拉選單在手機上夠大好點擊 */
+select, input {
+  font-size: 16px !important; /* 防止 iOS 點擊時畫面縮放，16px 是門檻值 */
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid #ddd;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 /* ---------- Leaflet 控制項（位置/樣式微調） ---------- */
