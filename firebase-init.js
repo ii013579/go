@@ -1,4 +1,4 @@
-// firebase-init.js v1.9.6
+// firebase-init.js v2.01
 
 // Firebase 配置 (請替換為您自己的 Firebase 專案配置)
 const firebaseConfig = {

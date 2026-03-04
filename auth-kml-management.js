@@ -1,4 +1,4 @@
-﻿// auth-kml-management.js v2.01
+// auth-kml-management.js v2.01
 
 (function () {
   'use strict';
@@ -702,219 +702,113 @@ async function optimizedUpdateKmlLayerSelects() {
     });
   }
 
-// ======= 上傳處理 (支援 KML 與 Excel) =======
-if (els.uploadKmlSubmitBtnDashboard) {
+// 上傳 KML 處理
+  if (els.uploadKmlSubmitBtnDashboard) {
     els.uploadKmlSubmitBtnDashboard.addEventListener('click', async () => {
-        const file = els.hiddenKmlFileInput?.files?.[0];
-        if (!file) {
-            window.showMessage?.('提示', '請先選擇檔案 (KML 或 XLSX)。');
-            return;
-        }
+      const file = els.hiddenKmlFileInput?.files?.[0];
+      if (!file) {
+        window.showMessage?.('提示', '請先選擇 KML 檔案。');
+        return;
+      }
+      if (!auth.currentUser || (window.currentUserRole !== 'owner' && window.currentUserRole !== 'editor')) {
+        window.showMessage?.('錯誤', '您沒有權限上傳 KML。');
+        return;
+      }
 
-        // 權限檢查
-        if (!auth.currentUser || (window.currentUserRole !== 'owner' && window.currentUserRole !== 'editor')) {
-            window.showMessage?.('錯誤', '您沒有權限上傳。');
-            return;
-        }
-
-        const fileName = file.name;
-        const isExcel = fileName.toLowerCase().endsWith('.xlsx') || fileName.toLowerCase().endsWith('.xls');
-
-        if (isExcel) {
-            // --- 處理 Excel 流程 ---
-            handleExcelUpload(file);
-        } else {
-            // --- 處理 KML 流程 ---
-            const reader = new FileReader();
-            reader.onload = async () => {
-                try {
-                    const kmlString = reader.result;
-                    const parser = new DOMParser();
-                    const kmlDoc = parser.parseFromString(kmlString, 'text/xml');
-                    if (kmlDoc.getElementsByTagName('parsererror').length > 0) throw new Error("KML XML 解析錯誤。");
-                    
-                    const geojson = toGeoJSON.kml(kmlDoc);
-                    await processAndUploadGeoJson(fileName, geojson);
-                } catch (e) {
-                    window.showMessage?.('錯誤', e.message);
-                }
-            };
-            reader.readAsText(file);
-        }
-    });
-}
-
-/**
- * 處理 Excel 檔案讀取
- */
-async function handleExcelUpload(file) {
-    const reader = new FileReader();
-    reader.onload = async (e) => {
+      const reader = new FileReader();
+      reader.onload = async () => {
         try {
-            const data = new Uint8Array(e.target.result);
-            const workbook = XLSX.read(data, { type: 'array' });
-            const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-            const jsonData = XLSX.utils.sheet_to_json(firstSheet);
+          const kmlString = reader.result;
+          const parser = new DOMParser();
+          const kmlDoc = parser.parseFromString(kmlString, 'text/xml');
 
-            if (jsonData.length === 0) throw new Error("Excel 檔案內容為空。");
+          if (kmlDoc.getElementsByTagName('parsererror').length > 0) {
+            throw new Error(`KML XML 解析錯誤。`);
+          }
 
-            // 1. 取得標題並要求使用者選擇欄位
-            const headers = Object.keys(jsonData[0]);
-            const mapping = await showColumnMappingModal(headers);
-            
-            // 如果使用者取消或未選齊欄位
-            if (!mapping || !mapping.lng || !mapping.lat || !mapping.name) {
-                console.log("使用者取消上傳或欄位未選齊");
-                return; 
-            }
+          const geojson = toGeoJSON.kml(kmlDoc);
+          const parsedFeatures = geojson.features || [];
 
-            // 2. 轉換為 GeoJSON
-            const features = jsonData.map((row, index) => {
-                const lng = parseFloat(row[mapping.lng]);
-                const lat = parseFloat(row[mapping.lat]);
-                const name = String(row[mapping.name] || `點 ${index + 1}`);
+          if (parsedFeatures.length === 0) {
+            window.showMessage?.('KML 載入', '檔案中沒有找到地理要素。');
+            return;
+          }
 
-                if (isNaN(lng) || isNaN(lat)) return null;
+          const fileName = file.name;
+          const kmlLayersCollectionRef = getKmlCollectionRef();
 
-                return {
-                    type: "Feature",
-                    geometry: { type: "Point", coordinates: [lng, lat] },
-                    properties: { name: name }
-                };
-            }).filter(f => f !== null);
+          // 檢查覆蓋邏輯
+          const existingKmlQuery = await kmlLayersCollectionRef.where('name', '==', fileName).get();
+          let kmlLayerDocRef;
+          let isOverwriting = false;
 
-            if (features.length === 0) throw new Error("所選欄位中找不到有效的座標數據。");
-
-            const geojson = { type: "FeatureCollection", features: features };
-            
-            // 呼叫您現有的統一寫入函式
-            await processAndUploadGeoJson(file.name, geojson);
-
-        } catch (err) {
-            window.showMessage?.('錯誤', err.message);
-        }
-    };
-    reader.readAsArrayBuffer(file);
-}
-
-/**
- * 欄位映射對話框
- */
-async function showColumnMappingModal(headers) {
-    // 建立選項，第一項為空白提示
-    const optionsHtml = `<option value="">-- 請選擇欄位 --</option>` + 
-                        headers.map(h => `<option value="${h}">${h}</option>`).join('');
-
-    const content = `
-        <div id="mapping-container" style="text-align: left; font-size: 14px; line-height: 1.8;">
-            <div style="margin-bottom: 10px;">
-                <label>📍 <b>點名欄位：</b></label><br>
-                <select id="map_name" class="swal2-select" style="width:100%; height:35px;">${optionsHtml}</select>
-            </div>
-            <div style="margin-bottom: 10px;">
-                <label>🌐 <b>經度 (Longitude)：</b></label><br>
-                <select id="map_lng" class="swal2-select" style="width:100%; height:35px;">${optionsHtml}</select>
-            </div>
-            <div style="margin-bottom: 10px;">
-                <label>🌐 <b>緯度 (Latitude)：</b></label><br>
-                <select id="map_lat" class="swal2-select" style="width:100%; height:35px;">${optionsHtml}</select>
-            </div>
-        </div>
-    `;
-
-    // 呼叫原本的確認視窗
-    const confirmed = await window.showConfirmationModal('Excel 欄位配置', content);
-    
-    if (confirmed) {
-        // ✨ 重要：在按下「是」之後立即抓取 DOM 元素的值
-        const nameVal = document.getElementById('map_name')?.value;
-        const lngVal = document.getElementById('map_lng')?.value;
-        const latVal = document.getElementById('map_lat')?.value;
-
-        if (!nameVal || !lngVal || !latVal) {
-            window.showMessage?.('提示', '請務必選齊所有必要欄位。');
-            return null;
-        }
-
-        return { name: nameVal, lng: lngVal, lat: latVal };
-    }
-    return null;
-}
-
-/**
- * [核心優化] 統一寫入 Firestore、覆蓋檢查、同步、清理快取
- */
-async function processAndUploadGeoJson(fileName, geojson) {
-    try {
-        const kmlLayersCollectionRef = getKmlCollectionRef();
-        
-        // --- 覆蓋邏輯檢查 ---
-        const existingKmlQuery = await kmlLayersCollectionRef.where('name', '==', fileName).get();
-        let kmlLayerDocRef;
-
-        if (!existingKmlQuery.empty) {
+          if (!existingKmlQuery.empty) {
             const confirmOverwrite = await window.showConfirmationModal(
-                '覆蓋檔案', `確定要覆蓋 "${fileName}" 嗎？`
+              '覆蓋 KML 檔案',
+              `確定要覆蓋 "${fileName}" 嗎？`
             );
             if (!confirmOverwrite) return;
 
             kmlLayerDocRef = existingKmlQuery.docs[0].ref;
+            isOverwriting = true;
 
-            // 清理舊結構 features 子集合
+            // 清理舊子集合 (相容舊結構)
             const oldFeaturesSnapshot = await kmlLayerDocRef.collection('features').get();
             if (!oldFeaturesSnapshot.empty) {
-                const deleteBatch = db.batch();
-                oldFeaturesSnapshot.forEach(d => deleteBatch.delete(d.ref));
-                await deleteBatch.commit();
+              const deleteBatch = db.batch();
+              oldFeaturesSnapshot.forEach(d => deleteBatch.delete(d.ref));
+              await deleteBatch.commit();
             }
-        } else {
+          } else {
             kmlLayerDocRef = kmlLayersCollectionRef.doc();
-        }
+          }
 
-        // 1. 寫入主資料
-        await kmlLayerDocRef.set({
+          // 1. 寫入 KML 主資料 (大檔案)
+          await kmlLayerDocRef.set({
             name: fileName,
             uploadTime: firebase.firestore.FieldValue.serverTimestamp(),
             uploadedBy: auth.currentUser.email || auth.currentUser.uid,
             uploadedByRole: window.currentUserRole,
             geojson: JSON.stringify(geojson)
-        }, { merge: true });
+          }, { merge: true });
 
-        // 2. 觸發全域同步 (含文字戳記)
-        const targetKmlId = kmlLayerDocRef.id;
-        const now = Date.now();
-        const lastUpdateTimeText = new Date(now).toLocaleString('zh-TW');
+          // ======= 【核心優化：觸發全域同步與清理快取】 =======
+          const targetKmlId = kmlLayerDocRef.id;
+          const now = Date.now();
+          const lastUpdateTimeText = new Date(now).toLocaleString('zh-TW');
 
-        await db.collection('artifacts').doc(appId)
+          // 2. 更新全域同步戳記 (讓其他使用者知道有更新)
+          await db.collection('artifacts').doc(appId)
             .collection('public').doc('data')
             .collection('metadata').doc('sync')
-            .set({ 
-                lastUpdate: now, 
-                lastUpdateTime: lastUpdateTimeText 
-            }, { merge: true });
+            .set({ lastUpdate: now, lastUpdateTime: lastUpdateTimeText}, { merge: true });
 
-        // 3. 清理本地快取
-        localStorage.removeItem('kml_list_cache_data');
-        localStorage.removeItem('kml_list_last_sync');
-        localStorage.removeItem(`kml_data_${targetKmlId}`);
-        localStorage.removeItem(`kml_time_${targetKmlId}`);
+          // 3. 清理自己的本地快取 (確保選單與內容立即更新)
+          localStorage.removeItem('kml_list_cache_data'); // 清單快取
+          localStorage.removeItem('kml_list_last_sync');  // 清單時間戳
+          localStorage.removeItem(`kml_data_${targetKmlId}`); // 該圖層內容快取
+          localStorage.removeItem(`kml_time_${targetKmlId}`); // 該圖層內容時間戳
 
-        console.log(`%c[同步成功] ${fileName} 已寫入並觸發全域更新`, "color: #4CAF50; font-weight: bold;");
+          console.log(`%c[同步成功] 已更新全域時間戳並清理本地快取`, "color: #4CAF50; font-weight: bold;");
+          // ===============================================
 
-        window.showMessage?.('成功', `檔案 "${fileName}" 已處理完成。`);
+          window.showMessage?.('成功', `KML "${fileName}" 已上傳/覆蓋成功。`);
 
-        // 重設 UI
-        if (els.hiddenKmlFileInput) els.hiddenKmlFileInput.value = '';
-        if (els.selectedKmlFileNameDashboard) els.selectedKmlFileNameDashboard.textContent = '尚未選擇檔案';
-        
-        await optimizedUpdateKmlLayerSelects(); 
-        updatePinButtonState();
+          if (els.hiddenKmlFileInput) els.hiddenKmlFileInput.value = '';
+          if (els.selectedKmlFileNameDashboard) els.selectedKmlFileNameDashboard.textContent = '尚未選擇檔案';
+          
+          // 重新載入選單 (這會因為上面清除了快取而從 Firebase 抓取最新清單)
+          await optimizedUpdateKmlLayerSelects(); 
+          updatePinButtonState();
 
-    } catch (error) {
-        console.error("處理失敗:", error);
-        window.showMessage?.('錯誤', error.message);
-    }
-}
+        } catch (error) {
+          console.error("上傳出錯:", error);
+          window.showMessage?.('錯誤', error.message);
+        }
+      };
+      reader.readAsText(file);
+    });
+  }
   
   // 刪除所選 KML
   if (els.deleteSelectedKmlBtn) {
@@ -940,13 +834,13 @@ async function processAndUploadGeoJson(fileName, geojson) {
 
         // ======= 【核心優化：觸發全域同步】 =======
         const now = Date.now();
-        const lastUpdateTimeText = new Date(now).toLocaleString('zh-TW');
+        const dateText = new Date(now).toLocaleString('zh-TW');
 
         // 2. 更新全域同步戳記 (通知所有使用者移除此選單項)
         await db.collection('artifacts').doc(appId)
           .collection('public').doc('data')
           .collection('metadata').doc('sync')
-          .set({ lastUpdate: now, lastUpdateTime: lastUpdateTimeText}, { merge: true });
+          .set({ lastUpdate: now, lastUpdateTime: dateText}, { merge: true });
 
         // 3. 清理自己的本地快取
         localStorage.removeItem('kml_list_cache_data');
