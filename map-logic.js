@@ -360,7 +360,7 @@
         ns.navButtons.clearLayers();
     
         // 展點面積與地圖一樣大，padding: 0.5 確保邊緣不裁切
-        const canvasRenderer = L.canvas({ padding: 0.5 });
+        const canvasRenderer = L.canvas({ padding: 0.1, tolerance: 5 });
     
         geojsonFeatures.forEach(feature => {
             const type = feature?.geometry?.type;
@@ -376,7 +376,7 @@
                 // A. 紅點 (Canvas 渲染)
                 const dot = L.circleMarker(latlng, {
                     renderer: canvasRenderer,
-                    radius: 5,           // 符合您原本 .custom-dot-icon 的大小感
+                    radius: 8,           // 符合您原本 .custom-dot-icon 的大小感
                     fillColor: "#e74c3c", // 符合您原本紅點顏色
                     fillOpacity: 1,
                     stroke: false,       // 修正：不需要外框

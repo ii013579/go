@@ -767,3 +767,16 @@ body {
   .leaflet-pane.leaflet-overlay-pane { z-index: 500 !important; }
   .leaflet-pane.leaflet-marker-pane { z-index: 600 !important; }
 }
+
+/* ---------- Canvas 容器 ---------- */
+/* 強制取消 Leaflet Canvas 容器的任何邊框與輪廓 */
+.leaflet-canvas-container canvas {
+    outline: none !important;
+    border: none !important;
+    background: transparent !important;
+}
+
+/* 避免在行動裝置上點擊畫布產生灰色半透明背景 */
+canvas {
+    -webkit-tap-highlight-color: transparent;
+}
