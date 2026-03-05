@@ -1,4 +1,4 @@
-// ui-interactions.js v2.01
+// ui-interactions.js v2.03
 document.addEventListener('DOMContentLoaded', () => {
     const editButton = document.getElementById('editButton');
     const authSection = document.getElementById('authSection');
@@ -85,37 +85,38 @@ document.addEventListener('DOMContentLoaded', () => {
                             item.textContent = name;
                             item.title = name;
 
-                            // 點擊搜尋項目
+                            // 點擊搜尋項目 (v2.02 Canvas 相容版)
                             item.addEventListener('click', () => {
                                 if (window.map) {
                                     // A. 立即跳轉定位
                                     window.map.setView(originalLatLng, 18);
-
-                                    // B. 同步尋找地圖上的 Marker 並觸發
+                            
+                                    // B. 同步尋找地圖上的 Canvas Layer (CircleMarker)
                                     window.map.eachLayer((layer) => {
-                                        if (layer instanceof L.Marker) {
+                                        // 在 Canvas 模式下，點位是 L.CircleMarker 而非 L.Marker
+                                        if (layer instanceof L.CircleMarker || layer instanceof L.Marker) {
                                             const layerLatLng = layer.getLatLng();
-                                            // 座標比對
+                                            
+                                            // 使用距離比對座標 (1公尺內視為同一個點)
                                             if (layerLatLng.distanceTo(originalLatLng) < 1) {
-                                                // 1. 提升層級
-                                                if (layer.setZIndexOffset) layer.setZIndexOffset(10000);
                                                 
-                                                // 2. 模擬點擊（這會直接觸發產生導航按鈕與開啟 Popup）
+                                                // 1. 模擬點擊：這會觸發我們在 addGeoJsonLayers 中寫好的高亮與導航按鈕邏輯
                                                 layer.fire('click');
-
-                                                // 3. 處理藍字高亮樣式
-                                                document.querySelectorAll('.marker-label span').forEach(s => s.classList.remove('label-active'));
-                                                const iconInner = layer.getElement();
-                                                if (iconInner) {
-                                                    const span = iconInner.querySelector('.marker-label span');
-                                                    if (span) span.classList.add('label-active');
+                            
+                                                // 2. 處理 Canvas 高亮 (直接改樣式，不再操作 DOM span)
+                                                if (layer.setStyle) {
+                                                    layer.setStyle({
+                                                        color: '#ffff00', // 黃色邊框
+                                                        weight: 5,        // 邊框加粗
+                                                        radius: 12        // 點位放大
+                                                    });
                                                 }
                                             }
                                         }
                                     });
                                 }
-
-                                // 關閉搜尋介面
+                            
+                                // 關閉搜尋介面 (保持原樣)
                                 searchResults.style.display = 'none';
                                 searchBox.value = '';
                                 searchContainer.classList.remove('search-active');

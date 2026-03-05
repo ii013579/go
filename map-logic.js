@@ -1,4 +1,4 @@
-﻿// map-logic.js v2.01
+﻿// map-logic.js v2.03
 
 (function () {
     'use strict';
@@ -24,11 +24,13 @@
 
         // 初始化地圖
         ns.map = L.map('map', {
+        	  preferCanvas: true,
             attributionControl: true,
             zoomControl: false,
             maxZoom: 25,
             minZoom: 5
         }).setView([23.6, 120.9], 8);
+
         
         window.map = ns.map;
         window.geoJsonLayers = ns.geoJsonLayers;
@@ -348,191 +350,108 @@
         });
     });
 
-    // ---------- 公開方法：添加 GeoJSON 圖層（支援 Point, LineString, Polygon） ----------
-    // 重要功能：會把新的 features 加入地圖，並以點、線、面分開處理以提升渲染控制與互動性
+    // ---------- 公開方法：添加 GeoJSON 圖層（v2.02 Canvas 優化版） ----------
     window.addGeoJsonLayers = function (geojsonFeatures = []) {
         if (!ns.map) {
             console.error("地圖尚未初始化。");
             return;
         }
-
-        // 清除舊圖層（確保畫面唯一）
+    
+        // 清除舊圖層
         ns.geoJsonLayers.clearLayers();
         ns.markers.clearLayers();
         ns.navButtons.clearLayers();
-
-        const linePolygonFeatures = [];
-        const pointFeatures = [];
-
+    
+        // 強制設定 Canvas 渲染器，這能確保點位即使很多也不卡頓
+        const canvasRenderer = L.canvas({ padding: 0.5 });
+    
         geojsonFeatures.forEach(feature => {
             const type = feature?.geometry?.type;
+            const coords = feature?.geometry?.coordinates;
+            if (!coords) return;
+    
+            // --- 處理點位 (Point) ---
             if (type === 'Point') {
-                pointFeatures.push(feature);
-            } else if (type === 'LineString' || type === 'Polygon') {
-                linePolygonFeatures.push(feature);
-            }
-        });
-
-        // 處理線與多邊形（單一 L.geoJSON 以加速）
-        if (linePolygonFeatures.length > 0) {
-            L.geoJSON(linePolygonFeatures, {
-                onEachFeature: function (feature, layer) {
-                    // 多邊形放底層顯示
-                    try { layer.bringToBack(); } catch (e) { /* 忽略 */ }
-
-                    // 若為 Polygon，新增 centroid 標籤（顯示名稱）
-                    if (feature.geometry.type === 'Polygon' && feature.properties?.name) {
-                        // 使用改良過的 centroid 計算（面積加權）
-                        const outerRing = feature.geometry.coordinates[0] || [];
-                        const centroidCoord = window.getPolygonCentroid(outerRing);
-                        if (centroidCoord) {
-                            const centerLatLng = L.latLng(centroidCoord[1], centroidCoord[0]);
-                            const polygonLabelIcon = L.divIcon({
-                                className: 'marker-label',
-                                html: `<span>${feature.properties.name}</span>`,
-                                iconSize: [null, null],
-                                iconAnchor: [0, 0]
-                            });
-                            L.marker(centerLatLng, {
-                                icon: polygonLabelIcon,
-                                interactive: false,
-                                zIndexOffset: 1000
-                            }).addTo(ns.geoJsonLayers);
-                        }
-                    }
-
-                    // 點擊後建立導航按鈕（LineString 以中點、Polygon 以中心）
-                    layer.on('click', function (e) {
-                        L.DomEvent.stopPropagation(e);
-                        const featureName = feature.properties?.name || '未命名地圖要素';
-
-                        let centerPoint = null;
-                        if (feature.geometry.type === 'Polygon') {
-                            const outer = feature.geometry.coordinates[0] || [];
-                            centerPoint = window.getPolygonCentroid(outer);
-                        } else if (feature.geometry.type === 'LineString') {
-                            centerPoint = window.getLineStringMidpoint(feature.geometry.coordinates);
-                        }
-
-                        if (centerPoint) {
-                            const centerLatLng = L.latLng(centerPoint[1], centerPoint[0]);
-                            window.createNavButton(centerLatLng, featureName);
-                        }
+                const latlng = L.latLng(coords[1], coords[0]);
+                
+                // 使用 CircleMarker 進行 Canvas 渲染
+                const dot = L.circleMarker(latlng, {
+                    renderer: canvasRenderer,
+                    radius: 8,
+                    fillColor: "#ff4444",
+                    color: "#000",
+                    weight: 1,
+                    fillOpacity: 0.9,
+                    interactive: true
+                });
+    
+                // ✨ 核心優化：掛載 properties 方便搜尋與未來編輯
+                dot.featureProperties = feature.properties || {};
+                // 同時保留座標資訊方便搜尋比對
+                dot.originalCoords = coords;
+    
+                // 1. 手指鼠標實現
+                dot.on('mouseover', () => ns.map.getContainer().style.cursor = 'pointer');
+                dot.on('mouseout', () => ns.map.getContainer().style.cursor = '');
+    
+                // 2. 點擊事件：產生導航按鈕 + 高亮效果
+                dot.on('click', (e) => {
+                    L.DomEvent.stopPropagation(e);
+                    
+                    // 取消所有點的高亮，恢復原樣
+                    ns.markers.eachLayer(layer => {
+                        if (layer.setStyle) layer.setStyle({ color: '#000', weight: 1, radius: 8 });
                     });
-                },
-                style: function (feature) {
-                    if (!feature || !feature.geometry) return {};
-                    if (feature.geometry.type === 'LineString') {
-                        return { color: '#FF0000', weight: 3, opacity: 0.8 };
-                    } else if (feature.geometry.type === 'Polygon') {
+    
+                    // 高亮當前點
+                    dot.setStyle({ color: '#ffff00', weight: 3, radius: 10 });
+    
+                    const name = dot.featureProperties.name || '未命名';
+                    if (typeof window.createNavButton === 'function') {
+                        window.createNavButton(latlng, name);
+                    }
+                });
+    
+                ns.markers.addLayer(dot);
+            } 
+            
+            // --- 處理線與多邊形 (LineString / Polygon) ---
+            else if (type === 'LineString' || type === 'Polygon') {
+                const layer = L.geoJSON(feature, {
+                    renderer: canvasRenderer, // 同樣使用 Canvas
+                    style: function () {
+                        if (type === 'LineString') return { color: '#FF0000', weight: 3, opacity: 0.8 };
                         return { color: '#0000FF', weight: 2, opacity: 0.6, fillOpacity: 0.3 };
                     }
-                    return {};
-                }
-            }).addTo(ns.geoJsonLayers);
-        }
-
-        // 處理點圖層（為每個點建立 dot + label）
-        pointFeatures.forEach(f => {
-            const coords = f?.geometry?.coordinates;
-            if (!coords) return;
-            const [lon, lat] = coords;
-            const latlng = L.latLng(lat, lon);
-            const name = f.properties ? (f.properties.name || '未命名') : '未命名';
-
-            // 為了避免 id 衝突，組合與編碼產生 labelId
-            const labelId = `label-${String(lat)}-${String(lon)}`.replace(/\./g, '_').replace(/\s+/g, '_');
-
-            const dotIcon = L.divIcon({
-                className: 'custom-dot-icon',
-                iconSize: [16, 16],
-                iconAnchor: [8, 8]
-            });
-
-            const dot = L.marker(latlng, {
-                icon: dotIcon,
-                interactive: true
-            });
-
-            const label = L.marker(latlng, {
-                icon: L.divIcon({
-                    className: 'marker-label',
-                    html: `<span id="${labelId}">${name}</span>`,
-                    iconSize: [null, null],
-                    iconAnchor: [0, 0]
-                }),
-                interactive: false,
-                zIndexOffset: 1000
-            });
-
-            dot.on('click', (e) => {
-                L.DomEvent.stopPropagation(e);
-                // 取消其他標籤的高亮
-                document.querySelectorAll('.marker-label span.label-active').forEach(el => {
-                    el.classList.remove('label-active');
                 });
-                const target = document.getElementById(labelId);
-                if (target) {
-                    target.classList.add('label-active');
-                }
-                if (typeof window.createNavButton === 'function') {
-                    window.createNavButton(latlng, name);
-                }
-            });
-
-            ns.markers.addLayer(dot);
-            ns.markers.addLayer(label);
+    
+                // 點擊線/面產生導航
+                layer.on('click', function (e) {
+                    L.DomEvent.stopPropagation(e);
+                    const featureName = feature.properties?.name || '未命名地圖要素';
+                    let centerPoint = null;
+    
+                    if (type === 'Polygon') {
+                        const outer = feature.geometry.coordinates[0] || [];
+                        centerPoint = window.getPolygonCentroid(outer);
+                    } else {
+                        centerPoint = window.getLineStringMidpoint(feature.geometry.coordinates);
+                    }
+    
+                    if (centerPoint) {
+                        const centerLatLng = L.latLng(centerPoint[1], centerPoint[0]);
+                        window.createNavButton(centerLatLng, featureName);
+                    }
+                });
+    
+                ns.geoJsonLayers.addLayer(layer);
+            }
         });
-
-        console.info(`已添加 ${geojsonFeatures.length} 個 GeoJSON features 到地圖 (${pointFeatures.length} 點, ${linePolygonFeatures.length} 線/多邊形)。`);
-        window.allKmlFeatures = geojsonFeatures;
+    
+        console.info(`v2.02 Canvas 渲染完成：${geojsonFeatures.length} 個要素。`);
         ns.allKmlFeatures = geojsonFeatures;
     };
-
-    // ---------- 公開方法：建立導航按鈕（點擊後開啟 Google Maps） ----------
-    window.createNavButton = function (latlng, name) {
-        if (!ns.map) {
-            console.error("地圖尚未初始化。");
-            return;
-        }
-
-        // 清除現有的導航按鈕（單一導航目標）
-        ns.navButtons.clearLayers();
-
-        const googleMapsUrl = `https://maps.google.com/?q=${latlng.lat},${latlng.lng}`;
-        const buttonHtml = `
-            <div class="nav-button-content">
-                <img src="https://i0.wp.com/canadasafetycouncil.org/wp-content/uploads/2018/08/offroad.png" alt="導航" />
-            </div>
-        `;
-        const buttonIcon = L.divIcon({
-            className: 'nav-button-icon',
-            html: buttonHtml,
-            iconSize: [50, 50],
-            iconAnchor: [25, 25]
-        });
-
-        const navMarker = L.marker(latlng, {
-            icon: buttonIcon,
-            zIndexOffset: 2000,
-            interactive: true
-        }).addTo(ns.navButtons);
-
-        navMarker.on('click', function (e) {
-            L.DomEvent.stopPropagation(e);
-            window.open(googleMapsUrl, '_blank');
-        });
-
-        // 平滑移動地圖中心到目標（duration 可視 Leaflet 版本而有差異）
-        try {
-            ns.map.panTo(latlng, { duration: 0.5 });
-        } catch (e) {
-            ns.map.setView(latlng);
-        }
-
-        console.info(`已為 ${name} 在 ${latlng.lat}, ${latlng.lng} 創建導航按鈕。`);
-    };
-
+    
     // ---------- 輔助函式：多邊形質心（面積加權） ----------
     // 備註：輸入為 polygon 的外環點陣列（[ [lon,lat], ... ]），回傳 [lon, lat]
     // 若計算失敗則回傳座標平均值作為 fallback
