@@ -485,16 +485,7 @@ body {
 
 /* 導航按鈕相關樣式 */
 .nav-button-icon {
-  transform: translate(-50%, -50%);
-  pointer-events: auto;
-  background: none;
-  border: none;
-  box-shadow: none;
-  padding: 0;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 5000 !important;
+    z-index: 9999 !important;
 }
 .nav-button-content img {
   width: 40px;
@@ -509,17 +500,7 @@ body {
 
 /* 自定義圓點圖標樣式（小點） */
 .custom-dot-icon {
-  background-color: #e74c3c;
-  border: 2px solid #fff;
-  border-radius: 50%;
-  width: 5px;
-  height: 5px;
-  pointer-events: auto;
-  display: block;
-  margin-left: -5px;
-  margin-top: -5px;
-  box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-  z-index: 10 !important;
+    display: none !important;
 }
 
 /* ---------- 訊息框 / 模態框（Overlay） ---------- */
@@ -771,9 +752,8 @@ body {
 /* ---------- Canvas 容器 ---------- */
 /* 強制取消 Leaflet Canvas 容器的任何邊框與輪廓 */
 .leaflet-canvas-container canvas {
+    filter: drop-shadow(0 2px 3px rgba(0,0,0,0.2));
     outline: none !important;
-    border: none !important;
-    background: transparent !important;
 }
 
 /* 避免在行動裝置上點擊畫布產生灰色半透明背景 */
