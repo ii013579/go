@@ -352,17 +352,14 @@
 
     // ---------- 公開方法：添加 GeoJSON 圖層（v2.02 Canvas 優化版） ----------
     window.addGeoJsonLayers = function (geojsonFeatures = []) {
-        if (!ns.map) {
-            console.error("地圖尚未初始化。");
-            return;
-        }
+        if (!ns.map) return;
     
         // 清除舊圖層
         ns.geoJsonLayers.clearLayers();
         ns.markers.clearLayers();
         ns.navButtons.clearLayers();
     
-        // 強制設定 Canvas 渲染器，這能確保點位即使很多也不卡頓
+        // 關鍵修正：Canvas 展點面積應與地圖一樣大 (padding: 0.5 確保邊緣點不被切掉)
         const canvasRenderer = L.canvas({ padding: 0.5 });
     
         geojsonFeatures.forEach(feature => {
@@ -370,43 +367,35 @@
             const coords = feature?.geometry?.coordinates;
             if (!coords) return;
     
-            // --- 處理點位 (Point) ---
             if (type === 'Point') {
                 const latlng = L.latLng(coords[1], coords[0]);
-                
-                // 使用 CircleMarker 進行 Canvas 渲染
+                const name = feature.properties?.name || '未命名';
+    
+                // 1. 建立紅點 (Canvas)
                 const dot = L.circleMarker(latlng, {
                     renderer: canvasRenderer,
                     radius: 8,
                     fillColor: "#ff4444",
-                    color: "#000",
-                    weight: 1,
                     fillOpacity: 0.9,
+                    color: "transparent", // 修正：不需要外框
+                    weight: 0,            // 修正：外框寬度為 0
                     interactive: true
                 });
     
-                // ✨ 核心優化：掛載 properties 方便搜尋與未來編輯
-                dot.featureProperties = feature.properties || {};
-                // 同時保留座標資訊方便搜尋比對
-                dot.originalCoords = coords;
+                // 2. 重新實現標籤 (使用 Tooltip 模擬原本的 label)
+                // 這是 Canvas 模式下顯示文字最不卡頓的方法
+                dot.bindTooltip(name, {
+                    permanent: true,     // 修正：標籤始終顯示
+                    direction: 'right',
+                    className: 'canvas-marker-label', // 需在 CSS 設定樣式
+                    offset: [10, 0]
+                });
     
-                // 1. 手指鼠標實現
-                dot.on('mouseover', () => ns.map.getContainer().style.cursor = 'pointer');
-                dot.on('mouseout', () => ns.map.getContainer().style.cursor = '');
-    
-                // 2. 點擊事件：產生導航按鈕 + 高亮效果
+                // 點擊事件
                 dot.on('click', (e) => {
                     L.DomEvent.stopPropagation(e);
                     
-                    // 取消所有點的高亮，恢復原樣
-                    ns.markers.eachLayer(layer => {
-                        if (layer.setStyle) layer.setStyle({ color: '#000', weight: 1, radius: 8 });
-                    });
-    
-                    // 高亮當前點
-                    dot.setStyle({ color: '#ffff00', weight: 3, radius: 10 });
-    
-                    const name = dot.featureProperties.name || '未命名';
+                    // 修正：點擊後紅點不需要變色或外框，直接產生導航按鈕
                     if (typeof window.createNavButton === 'function') {
                         window.createNavButton(latlng, name);
                     }
@@ -415,41 +404,79 @@
                 ns.markers.addLayer(dot);
             } 
             
-            // --- 處理線與多邊形 (LineString / Polygon) ---
+            // 線段與多邊形處理 (同樣使用 canvasRenderer)
             else if (type === 'LineString' || type === 'Polygon') {
                 const layer = L.geoJSON(feature, {
-                    renderer: canvasRenderer, // 同樣使用 Canvas
-                    style: function () {
-                        if (type === 'LineString') return { color: '#FF0000', weight: 3, opacity: 0.8 };
-                        return { color: '#0000FF', weight: 2, opacity: 0.6, fillOpacity: 0.3 };
-                    }
-                });
+                    renderer: canvasRenderer,
+                    style: { color: '#FF0000', weight: 3 }
+                }).addTo(ns.geoJsonLayers);
     
-                // 點擊線/面產生導航
                 layer.on('click', function (e) {
                     L.DomEvent.stopPropagation(e);
-                    const featureName = feature.properties?.name || '未命名地圖要素';
-                    let centerPoint = null;
-    
-                    if (type === 'Polygon') {
-                        const outer = feature.geometry.coordinates[0] || [];
-                        centerPoint = window.getPolygonCentroid(outer);
-                    } else {
-                        centerPoint = window.getLineStringMidpoint(feature.geometry.coordinates);
-                    }
-    
+                    let centerPoint = (type === 'Polygon') 
+                        ? window.getPolygonCentroid(feature.geometry.coordinates[0])
+                        : window.getLineStringMidpoint(feature.geometry.coordinates);
+                    
                     if (centerPoint) {
-                        const centerLatLng = L.latLng(centerPoint[1], centerPoint[0]);
-                        window.createNavButton(centerLatLng, featureName);
+                        window.createNavButton(L.latLng(centerPoint[1], centerPoint[0]), feature.properties?.name);
                     }
                 });
-    
-                ns.geoJsonLayers.addLayer(layer);
             }
         });
     
-        console.info(`v2.02 Canvas 渲染完成：${geojsonFeatures.length} 個要素。`);
         ns.allKmlFeatures = geojsonFeatures;
+    };
+    
+    // ---------- 公開方法：建立導航按鈕（v2.02 Canvas 相容版） ----------
+    window.createNavButton = function (latlng, name) {
+        if (!ns.map) {
+            console.error("地圖尚未初始化。");
+            return;
+        }
+
+        // 1. 清除現有的導航按鈕（確保畫面上同時只有一個導航目標）
+        ns.navButtons.clearLayers();
+
+        // 2. 修正 Google Maps URL 格式（修正原本 0{latlng...} 的錯誤）
+        const googleMapsUrl = `https://www.google.com/maps/search/?api=1&query=${latlng.lat},${latlng.lng}`;
+        
+        // 3. 建立按鈕 HTML
+        const buttonHtml = `
+            <div class="nav-button-content">
+                <img src="https://i0.wp.com/canadasafetycouncil.org/wp-content/uploads/2018/08/offroad.png" alt="導航" style="width:50px; height:50px;" />
+            </div>
+        `;
+
+        // 4. 定義圖標
+        const buttonIcon = L.divIcon({
+            className: 'nav-button-icon',
+            html: buttonHtml,
+            iconSize: [50, 50],
+            iconAnchor: [25, 25] // 居中對齊紅點
+        });
+
+        // 5. 建立 Marker
+        // 注意：導航按鈕必須使用 L.marker (DOM)，不可使用 CircleMarker，否則圖示無法顯示
+        const navMarker = L.marker(latlng, {
+            icon: buttonIcon,
+            zIndexOffset: 3000, // 確保在所有紅點之上
+            interactive: true
+        }).addTo(ns.navButtons);
+
+        // 6. 導航跳轉事件
+        navMarker.on('click', function (e) {
+            L.DomEvent.stopPropagation(e);
+            window.open(googleMapsUrl, '_blank');
+        });
+
+        // 7. 地圖自動對焦到該位置
+        try {
+            ns.map.panTo(latlng, { animate: true, duration: 0.5 });
+        } catch (e) {
+            ns.map.setView(latlng);
+        }
+
+        console.info(`已為 ${name} 創建導航圖示 (${latlng.lat}, ${latlng.lng})`);
     };
     
     // ---------- 輔助函式：多邊形質心（面積加權） ----------
