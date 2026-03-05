@@ -359,7 +359,7 @@
         ns.markers.clearLayers();
         ns.navButtons.clearLayers();
     
-        // 關鍵修正：Canvas 展點面積應與地圖一樣大 (padding: 0.5 確保邊緣點不被切掉)
+        // 展點面積與地圖一樣大，padding: 0.5 確保邊緣不裁切
         const canvasRenderer = L.canvas({ padding: 0.5 });
     
         geojsonFeatures.forEach(feature => {
@@ -370,39 +370,50 @@
             if (type === 'Point') {
                 const latlng = L.latLng(coords[1], coords[0]);
                 const name = feature.properties?.name || '未命名';
+                // 產生唯一 ID 給 label，以便搜尋或點擊時變藍色
+                const labelId = `label-${String(coords[1])}-${String(coords[0])}`.replace(/\./g, '_');
     
-                // 1. 建立紅點 (Canvas)
+                // A. 紅點 (Canvas 渲染)
                 const dot = L.circleMarker(latlng, {
                     renderer: canvasRenderer,
-                    radius: 8,
-                    fillColor: "#ff4444",
-                    fillOpacity: 0.9,
-                    color: "transparent", // 修正：不需要外框
-                    weight: 0,            // 修正：外框寬度為 0
+                    radius: 5,           // 符合您原本 .custom-dot-icon 的大小感
+                    fillColor: "#e74c3c", // 符合您原本紅點顏色
+                    fillOpacity: 1,
+                    stroke: false,       // 修正：不需要外框
                     interactive: true
                 });
     
-                // 2. 重新實現標籤 (使用 Tooltip 模擬原本的 label)
-                // 這是 Canvas 模式下顯示文字最不卡頓的方法
-                dot.bindTooltip(name, {
-                    permanent: true,     // 修正：標籤始終顯示
-                    direction: 'right',
-                    className: 'canvas-marker-label', // 需在 CSS 設定樣式
-                    offset: [10, 0]
+                // B. 標籤 (DOM 渲染，套用您原本的 .marker-label)
+                // 標籤設為 interactive: false 以免擋住紅點點擊
+                const label = L.marker(latlng, {
+                    icon: L.divIcon({
+                        className: 'marker-label',
+                        html: `<span id="${labelId}">${name}</span>`,
+                        iconSize: [null, null],
+                        iconAnchor: [0, 0]
+                    }),
+                    interactive: false,
+                    zIndexOffset: 500
                 });
     
-                // 點擊事件
+                // 點擊紅點事件
                 dot.on('click', (e) => {
                     L.DomEvent.stopPropagation(e);
                     
-                    // 修正：點擊後紅點不需要變色或外框，直接產生導航按鈕
+                    // 1. 處理 CSS 藍字高亮 (label-active)
+                    document.querySelectorAll('.marker-label span').forEach(s => s.classList.remove('label-active'));
+                    const targetSpan = document.getElementById(labelId);
+                    if (targetSpan) targetSpan.classList.add('label-active');
+    
+                    // 2. 產生導航按鈕
                     if (typeof window.createNavButton === 'function') {
                         window.createNavButton(latlng, name);
                     }
                 });
     
                 ns.markers.addLayer(dot);
-            } 
+                ns.markers.addLayer(label);
+            }
             
             // 線段與多邊形處理 (同樣使用 canvasRenderer)
             else if (type === 'LineString' || type === 'Polygon') {
@@ -438,13 +449,13 @@
         ns.navButtons.clearLayers();
 
         // 2. 修正 Google Maps URL 格式（修正原本 0{latlng...} 的錯誤）
-        const googleMapsUrl = `https://www.google.com/maps/search/?api=1&query=${latlng.lat},${latlng.lng}`;
+        const googleMapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${latlng.lat},${latlng.lng}`;
         
         // 3. 建立按鈕 HTML
         const buttonHtml = `
-            <div class="nav-button-content">
-                <img src="https://i0.wp.com/canadasafetycouncil.org/wp-content/uploads/2018/08/offroad.png" alt="導航" style="width:50px; height:50px;" />
-            </div>
+           <div class="nav-button-content">
+               <img src="https://i0.wp.com/canadasafetycouncil.org/wp-content/uploads/2018/08/offroad.png" alt="導航" />
+           </div>
         `;
 
         // 4. 定義圖標
@@ -459,7 +470,7 @@
         // 注意：導航按鈕必須使用 L.marker (DOM)，不可使用 CircleMarker，否則圖示無法顯示
         const navMarker = L.marker(latlng, {
             icon: buttonIcon,
-            zIndexOffset: 3000, // 確保在所有紅點之上
+            zIndexOffset: 5000, // 確保在所有紅點之上
             interactive: true
         }).addTo(ns.navButtons);
 
