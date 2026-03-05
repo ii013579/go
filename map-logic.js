@@ -351,6 +351,7 @@
     });
 
     // ---------- 公開方法：添加 GeoJSON 圖層（v2.02 Canvas 優化版） ----------
+   
     window.addGeoJsonLayers = function (geojsonFeatures = []) {
         if (!ns.map) return;
     
@@ -359,32 +360,55 @@
         ns.markers.clearLayers();
         ns.navButtons.clearLayers();
     
-        // 展點面積與地圖一樣大，padding: 0.5 確保邊緣不裁切
-        const canvasRenderer = L.canvas({ padding: 0.1, tolerance: 5 });
+        // 定義「舊版尺寸」樣式
+        const originalStyle = {
+            radius: 8,           // 修正：對應舊版 iconSize [16, 16] 的半徑
+            fillColor: "#e74c3c", // 舊版紅點顏色
+            fillOpacity: 1,
+            color: "#ffffff",
+            weight: 2,
+            opacity: 1,
+            interactive: true
+        };
+    
+        const canvasRenderer = L.canvas({ padding: 0.1 });
     
         geojsonFeatures.forEach(feature => {
-            const type = feature?.geometry?.type;
-            const coords = feature?.geometry?.coordinates;
-            if (!coords) return;
-    
-            if (type === 'Point') {
+            if (feature?.geometry?.type === 'Point') {
+                const coords = feature.geometry.coordinates;
                 const latlng = L.latLng(coords[1], coords[0]);
                 const name = feature.properties?.name || '未命名';
-                // 產生唯一 ID 給 label，以便搜尋或點擊時變藍色
                 const labelId = `label-${String(coords[1])}-${String(coords[0])}`.replace(/\./g, '_');
     
-                // A. 紅點 (Canvas 渲染)
+                // 建立 Canvas 紅點 (使用舊版尺寸)
                 const dot = L.circleMarker(latlng, {
                     renderer: canvasRenderer,
-                    radius: 8,           // 符合您原本 .custom-dot-icon 的大小感
-                    fillColor: "#e74c3c", // 符合您原本紅點顏色
-                    fillOpacity: 1,
-                    stroke: false,       // 修正：不需要外框
-                    interactive: true
+                    ...originalStyle
                 });
     
-                // B. 標籤 (DOM 渲染，套用您原本的 .marker-label)
-                // 標籤設為 interactive: false 以免擋住紅點點擊
+                // 點擊事件：包含重置邏輯
+                dot.on('click', (e) => {
+                    L.DomEvent.stopPropagation(e);
+                    
+                    // 恢復所有點到舊版尺寸 (radius: 8)
+                    ns.markers.eachLayer(layer => {
+                        if (layer instanceof L.CircleMarker) layer.setStyle(originalStyle);
+                    });
+    
+                    // 取消所有文字藍色高亮
+                    document.querySelectorAll('.marker-label span').forEach(s => s.classList.remove('label-active'));
+    
+                    // 觸發目前文字高亮
+                    const targetSpan = document.getElementById(labelId);
+                    if (targetSpan) targetSpan.classList.add('label-active');
+    
+                    // 產生導航按鈕
+                    window.createNavButton(latlng, name);
+                });
+    
+                ns.markers.addLayer(dot);
+    
+                // 標籤部分 (維持舊版 CSS 渲染)
                 const label = L.marker(latlng, {
                     icon: L.divIcon({
                         className: 'marker-label',
@@ -395,25 +419,29 @@
                     interactive: false,
                     zIndexOffset: 500
                 });
-    
-                // 點擊紅點事件
-                dot.on('click', (e) => {
-                    L.DomEvent.stopPropagation(e);
-                    
-                    // 1. 處理 CSS 藍字高亮 (label-active)
-                    document.querySelectorAll('.marker-label span').forEach(s => s.classList.remove('label-active'));
-                    const targetSpan = document.getElementById(labelId);
-                    if (targetSpan) targetSpan.classList.add('label-active');
-    
-                    // 2. 產生導航按鈕
-                    if (typeof window.createNavButton === 'function') {
-                        window.createNavButton(latlng, name);
-                    }
-                });
-    
-                ns.markers.addLayer(dot);
                 ns.markers.addLayer(label);
             }
+        });
+    
+        // 點擊空白處回復舊版尺寸
+        ns.map.off('click').on('click', () => {
+            ns.markers.eachLayer(layer => {
+                if (layer instanceof L.CircleMarker) layer.setStyle(originalStyle);
+            });
+            document.querySelectorAll('.marker-label span').forEach(s => s.classList.remove('label-active'));
+            ns.navButtons.clearLayers();
+        });
+    };
+
+    // 點擊空白處回復舊版尺寸
+    ns.map.off('click').on('click', () => {
+        ns.markers.eachLayer(layer => {
+            if (layer instanceof L.CircleMarker) layer.setStyle(originalStyle);
+        });
+        document.querySelectorAll('.marker-label span').forEach(s => s.classList.remove('label-active'));
+        ns.navButtons.clearLayers();
+    });
+};
             
             // 線段與多邊形處理 (同樣使用 canvasRenderer)
             else if (type === 'LineString' || type === 'Polygon') {
