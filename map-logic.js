@@ -451,30 +451,7 @@
     
         ns.allKmlFeatures = geojsonFeatures;
     };
-            
-            // 線段與多邊形處理 (同樣使用 canvasRenderer)
-            else if (type === 'LineString' || type === 'Polygon') {
-                const layer = L.geoJSON(feature, {
-                    renderer: canvasRenderer,
-                    style: { color: '#FF0000', weight: 3 }
-                }).addTo(ns.geoJsonLayers);
-    
-                layer.on('click', function (e) {
-                    L.DomEvent.stopPropagation(e);
-                    let centerPoint = (type === 'Polygon') 
-                        ? window.getPolygonCentroid(feature.geometry.coordinates[0])
-                        : window.getLineStringMidpoint(feature.geometry.coordinates);
-                    
-                    if (centerPoint) {
-                        window.createNavButton(L.latLng(centerPoint[1], centerPoint[0]), feature.properties?.name);
-                    }
-                });
-            }
-        });
-    
-        ns.allKmlFeatures = geojsonFeatures;
-    };
-    
+       
     // ---------- 公開方法：建立導航按鈕（v2.02 Canvas 相容版） ----------
     window.createNavButton = function (latlng, name) {
         if (!ns.map) {
