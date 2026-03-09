@@ -350,8 +350,7 @@
         });
     });
 
-    // ---------- 公開方法：添加 GeoJSON 圖層（v2.02 Canvas 優化版） ----------
-   
+    // ---------- 公開方法：添加 GeoJSON 圖層（v2.03 修正版） ----------
     window.addGeoJsonLayers = function (geojsonFeatures = []) {
         if (!ns.map) return;
     
@@ -360,13 +359,13 @@
         ns.markers.clearLayers();
         ns.navButtons.clearLayers();
     
-        // 定義「舊版尺寸」樣式
+        // 定義「紅點白框」樣式 (同步自舊版 CSS)
         const originalStyle = {
-            radius: 8,           // 修正：對應舊版 iconSize [16, 16] 的半徑
-            fillColor: "#e74c3c", // 舊版紅點顏色
+            radius: 8,           // 半徑 8 (對應 iconSize [16,16])
+            fillColor: "#e74c3c", // 紅色填充
             fillOpacity: 1,
-            color: "#ffffff",
-            weight: 2,
+            color: "#ffffff",    // 白色外框
+            weight: 2,           // 外框寬度 2px
             opacity: 1,
             interactive: true
         };
@@ -374,41 +373,41 @@
         const canvasRenderer = L.canvas({ padding: 0.1 });
     
         geojsonFeatures.forEach(feature => {
-            if (feature?.geometry?.type === 'Point') {
-                const coords = feature.geometry.coordinates;
+            const type = feature?.geometry?.type;
+            const coords = feature?.geometry?.coordinates;
+            if (!type || !coords) return;
+    
+            // 處理點位 (Point)
+            if (type === 'Point') {
                 const latlng = L.latLng(coords[1], coords[0]);
                 const name = feature.properties?.name || '未命名';
                 const labelId = `label-${String(coords[1])}-${String(coords[0])}`.replace(/\./g, '_');
     
-                // 建立 Canvas 紅點 (使用舊版尺寸)
+                // 建立帶白框的紅點 (Canvas)
                 const dot = L.circleMarker(latlng, {
                     renderer: canvasRenderer,
                     ...originalStyle
                 });
     
-                // 點擊事件：包含重置邏輯
                 dot.on('click', (e) => {
                     L.DomEvent.stopPropagation(e);
                     
-                    // 恢復所有點到舊版尺寸 (radius: 8)
+                    // 重置所有點回「紅點白框」
                     ns.markers.eachLayer(layer => {
                         if (layer instanceof L.CircleMarker) layer.setStyle(originalStyle);
                     });
     
-                    // 取消所有文字藍色高亮
+                    // 高亮處理
                     document.querySelectorAll('.marker-label span').forEach(s => s.classList.remove('label-active'));
-    
-                    // 觸發目前文字高亮
                     const targetSpan = document.getElementById(labelId);
                     if (targetSpan) targetSpan.classList.add('label-active');
     
-                    // 產生導航按鈕
                     window.createNavButton(latlng, name);
                 });
     
                 ns.markers.addLayer(dot);
     
-                // 標籤部分 (維持舊版 CSS 渲染)
+                // 標籤處理 (DOM)
                 const label = L.marker(latlng, {
                     icon: L.divIcon({
                         className: 'marker-label',
@@ -421,9 +420,27 @@
                 });
                 ns.markers.addLayer(label);
             }
+            // 處理線段與多邊形 (修正原本掉在函式外的邏輯)
+            else if (type === 'LineString' || type === 'Polygon') {
+                const layer = L.geoJSON(feature, {
+                    renderer: canvasRenderer,
+                    style: { color: '#FF0000', weight: 3 }
+                }).addTo(ns.geoJsonLayers);
+    
+                layer.on('click', function (e) {
+                    L.DomEvent.stopPropagation(e);
+                    let centerPoint = (type === 'Polygon') 
+                        ? window.getPolygonCentroid(feature.geometry.coordinates[0])
+                        : window.getLineStringMidpoint(feature.geometry.coordinates);
+                    
+                    if (centerPoint) {
+                        window.createNavButton(L.latLng(centerPoint[1], centerPoint[0]), feature.properties?.name);
+                    }
+                });
+            }
         });
     
-        // 點擊空白處回復舊版尺寸
+        // 點擊空白處重置樣式
         ns.map.off('click').on('click', () => {
             ns.markers.eachLayer(layer => {
                 if (layer instanceof L.CircleMarker) layer.setStyle(originalStyle);
@@ -431,17 +448,9 @@
             document.querySelectorAll('.marker-label span').forEach(s => s.classList.remove('label-active'));
             ns.navButtons.clearLayers();
         });
+    
+        ns.allKmlFeatures = geojsonFeatures;
     };
-
-    // 點擊空白處回復舊版尺寸
-    ns.map.off('click').on('click', () => {
-        ns.markers.eachLayer(layer => {
-            if (layer instanceof L.CircleMarker) layer.setStyle(originalStyle);
-        });
-        document.querySelectorAll('.marker-label span').forEach(s => s.classList.remove('label-active'));
-        ns.navButtons.clearLayers();
-    });
-};
             
             // 線段與多邊形處理 (同樣使用 canvasRenderer)
             else if (type === 'LineString' || type === 'Polygon') {
