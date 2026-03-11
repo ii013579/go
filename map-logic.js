@@ -467,7 +467,7 @@
     window.createNavButton = function (latlng, name) {
         if (!ns.map) return;
     
-        // 1. 清除地圖上現有的導航圖層
+        // 清除舊的導航按鈕
         if (ns.navButtons) {
             ns.navButtons.clearLayers();
         } else {
@@ -477,58 +477,54 @@
         const isMobile = window.innerWidth < 768;
         const googleMapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${latlng.lat},${latlng.lng}`;
     
-        // 2. 根據裝置設定按鈕大小 (手機 80px, 電腦 40px)
+        // 1. 建立導航圖示 (手機版 80px, 電腦版 40px)
         const buttonSize = isMobile ? 80 : 40;
-        
         const buttonIcon = L.divIcon({
             className: 'nav-button-icon',
             html: `
                 <div class="nav-button-content" style="width:${buttonSize}px; height:${buttonSize}px;">
                     <img src="https://i0.wp.com/canadasafetycouncil.org/wp-content/uploads/2018/08/offroad.png" 
-                         style="width:100%; height:100%; display:block; filter: drop-shadow(0 2px 5px rgba(0,0,0,0.3));" 
+                         style="width:100%; height:100%; filter: drop-shadow(0 4px 6px rgba(0,0,0,0.4));" 
                          alt="導航" />
                 </div>
             `,
             iconSize: [buttonSize, buttonSize],
-            iconAnchor: [buttonSize / 2, buttonSize / 2] // 錨點設中心，確保蓋在紅點正上方
+            iconAnchor: [buttonSize / 2, buttonSize / 2]
         });
     
-        // 3. 在地圖上建立導航標記
         const navMarker = L.marker(latlng, {
             icon: buttonIcon,
-            zIndexOffset: 5000, // 確保在所有點位與標籤之上
+            zIndexOffset: 5000,
             interactive: true
         }).addTo(ns.navButtons);
     
-        // 4. 點擊事件：跳轉導航
         navMarker.on('click', function (e) {
             L.DomEvent.stopPropagation(e);
             window.open(googleMapsUrl, '_blank');
         });
     
-        // 5. 核心：置中補償邏輯
+        // 2. 核心置中邏輯
         if (isMobile) {
-            /* 手機版因為上方列固定 (Title + Search 約 150px-180px)，
-               若直接 setView(latlng)，點位會被上方列擋住。
-               我們將地圖經緯度轉為像素點，向下偏移補償量後，再轉回經緯度讓地圖聚焦。
-            */
-            const zoomLevel = 18; // 搜尋聚焦的縮放層級
+            const zoomLevel = 18;
+            // 將地理座標投影為像素座標
             const targetPoint = ns.map.project(latlng, zoomLevel);
             
-            // 補償量：向下推 220 像素 (因 UI 放大兩倍，遮擋範圍也變大)
-            const offsetPoint = L.point(targetPoint.x, targetPoint.y + 220); 
+            /**
+             * 為什麼要 + 280？
+             * 因為手機上方有 150px 的固定功能區，
+             * 我們把地圖「中心點」設定在點位下方約 280 像素處，
+             * 這樣點位就會被「推」到螢幕剩下的空白區域的正中央。
+             */
+            const offsetPoint = L.point(targetPoint.x, targetPoint.y + 280); 
             const offsetLatLng = ns.map.unproject(offsetPoint, zoomLevel);
     
             ns.map.flyTo(offsetLatLng, zoomLevel, {
                 animate: true,
-                duration: 0.8,
-                easeLinearity: 0.25
+                duration: 0.8
             });
         } else {
-            // 電腦版直接置中，不需偏移
-            ns.map.setView(latlng, 18, {
-                animate: true
-            });
+            // 電腦版：直接精準置中，不需偏移
+            ns.map.setView(latlng, 18, { animate: true });
         }
     };
     
