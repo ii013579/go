@@ -4,7 +4,9 @@
    - 註解均為中文，段落以用途分類，盡量保留原始設計與行為
    ========================================================================== */
 * {
-    box-sizing: border-box;
+  box-sizing: border-box !important;
+  margin: 0;
+  padding: 0;
 }
 
 /* ---------- 全局與  本佈局 ---------- */
@@ -753,7 +755,7 @@ body {
 
 /* 避免在行動裝置上點擊畫布產生灰色半透明背景 */
 canvas {
-    -webkit-tap-highlight-color: transparent;
+    -webkit-tap-highlight-color: transparent !important;
 }
 
 /* ---------- 僅限手機 (寬度 < 768px) 完整優化方案 ---------- */
@@ -763,10 +765,11 @@ canvas {
   body, html {
     width: 100vw !important;
     height: 100vh !important;
-    overflow: hidden; /* 禁止全頁捲動 */
+    overflow: hidden; /* 禁止全頁捲動，避免頁面被撐開 */
   }
 
   /* 2. 固定頂部功能區 (標題 + 搜尋框) */
+  /* 將 position 設定為 fixed 確保它們不會隨著地圖滑動 */
   header, #title, .search-container {
     position: fixed !important;
     top: 0;
@@ -774,7 +777,7 @@ canvas {
     width: 100vw !important;
     z-index: 9999;
     background-color: #fff;
-    box-sizing: border-box;
+    box-sizing: border-box; /* 確保 padding 不會導致寬度超出螢幕 */
   }
 
   #title {
@@ -804,15 +807,16 @@ canvas {
   }
 
   /* 3. 地圖容器：填滿剩下的空間 */
+  /* 強制地圖寬度等於螢幕寬度，並扣除上方功能區總高度 (60+90=150px) */
   #map {
     width: 100vw !important;
-    height: calc(100vh - 150px) !important; /* 扣除 60+90=150px */
-    margin-top: 150px !important; /* 將地圖往下拉 */
+    height: calc(100vh - 150px) !important; 
+    margin-top: 150px !important; 
     position: relative;
     overflow: hidden;
   }
 
-  /* 4. 地圖文字標籤：整體放大 */
+  /* 4. 地圖文字標籤：整體放大，防止文字重疊與大小不一 */
   .marker-label span {
     font-size: 24px !important;
     font-weight: bold !important;
@@ -820,7 +824,7 @@ canvas {
     transform: translate(20px, -10px) !important;
   }
 
-  /* 5. 移除手機點擊紅點產生的外框 */
+  /* 5. 移除手機點擊紅點產生的外框 (Tap Highlight) */
   canvas, .leaflet-canvas-container canvas {
     outline: none !important;
     -webkit-tap-highlight-color: transparent !important;
