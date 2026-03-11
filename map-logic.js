@@ -467,7 +467,7 @@
     window.createNavButton = function (latlng, name) {
         if (!ns.map) return;
     
-        // 清除舊的導航按鈕
+        // 清除舊的導航圖層
         if (ns.navButtons) {
             ns.navButtons.clearLayers();
         } else {
@@ -477,7 +477,7 @@
         const isMobile = window.innerWidth < 768;
         const googleMapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${latlng.lat},${latlng.lng}`;
     
-        // 1. 建立導航圖示 (手機版 80px, 電腦版 40px)
+        // 1. 導航按鈕圖示定義 (手機放大至 80px)
         const buttonSize = isMobile ? 80 : 40;
         const buttonIcon = L.divIcon({
             className: 'nav-button-icon',
@@ -503,19 +503,25 @@
             window.open(googleMapsUrl, '_blank');
         });
     
-        // 2. 核心置中邏輯
+        // 2. 核心：手機動態高度置中邏輯
         if (isMobile) {
+            // 抓取真實高度，若元素不存在則給定預設值
+            const headerEl = document.getElementById('title');
+            const searchEl = document.querySelector('.search-container');
+            const headerHeight = headerEl ? headerEl.offsetHeight : 60;
+            const searchHeight = searchEl ? searchEl.offsetHeight : 90;
+            
+            // 總遮擋高度
+            const totalCoveredHeight = headerHeight + searchHeight;
+            
+            // 透過 Leaflet 投影計算目標點
             const zoomLevel = 18;
-            // 將地理座標投影為像素座標
             const targetPoint = ns.map.project(latlng, zoomLevel);
             
-            /**
-             * 為什麼要 + 280？
-             * 因為手機上方有 150px 的固定功能區，
-             * 我們把地圖「中心點」設定在點位下方約 280 像素處，
-             * 這樣點位就會被「推」到螢幕剩下的空白區域的正中央。
-             */
-            const offsetPoint = L.point(targetPoint.x, targetPoint.y + 280); 
+            // 計算偏移：將點位往「上」提，使其落在扣除上方列後的「剩餘視覺中心」
+            // 偏移量 = (剩餘螢幕高度 / 2) - (點位在螢幕相對位置)
+            // 這裡簡單以遮擋高度的比例進行補償
+            const offsetPoint = L.point(targetPoint.x, targetPoint.y + (totalCoveredHeight / 2)); 
             const offsetLatLng = ns.map.unproject(offsetPoint, zoomLevel);
     
             ns.map.flyTo(offsetLatLng, zoomLevel, {
@@ -523,7 +529,7 @@
                 duration: 0.8
             });
         } else {
-            // 電腦版：直接精準置中，不需偏移
+            // 電腦版：直接標準置中
             ns.map.setView(latlng, 18, { animate: true });
         }
     };
@@ -706,10 +712,17 @@
         if (ns.markers) ns.markers.clearLayers();
     }
 
-    // 抽離出的渲染邏輯（確保快取與網路共用同一套顯示流程）
+    /**
+     * ---------- 渲染 KML 資料邏輯 (動態高度置中版) ----------
+     * 說明：
+     * 1. 偵測手機版 (innerWidth < 768)
+     * 2. 自動抓取 #title 與 .search-container 的實際高度
+     * 3. 動態補償 paddingTopLeft，讓地圖範圍永遠落在視覺中心
+     */
     function renderKmlData(kmlData, kmlId) {
         let geojson = kmlData.geojson;
-
+    
+        // 1. 解析 GeoJSON 字串
         if (typeof geojson === 'string') {
             try {
                 geojson = JSON.parse(geojson);
@@ -718,23 +731,51 @@
                 return;
             }
         }
-
+    
+        // 2. 過濾有效要素
         const loadedFeatures = (geojson?.features || []).filter(f =>
             f && f.geometry && f.geometry.coordinates && f.properties
         );
-
+    
+        // 3. 更新狀態
         ns.allKmlFeatures = loadedFeatures;
         window.allKmlFeatures = loadedFeatures;
         ns.currentKmlLayerId = kmlId;
-
-        // 繪製地圖
+    
+        // 4. 繪製圖層
         window.addGeoJsonLayers(loadedFeatures);
-
-        // 自動縮放至圖層範圍
+    
+        // 5. 自動縮放至範圍 (核心：動態補償邏輯)
         const allLayers = L.featureGroup([ns.geoJsonLayers, ns.markers]);
         const bounds = allLayers.getBounds();
+    
         if (bounds && bounds.isValid()) {
-            ns.map.fitBounds(bounds, { padding: L.point(50, 50) });
+            const isMobile = window.innerWidth < 768;
+    
+            if (isMobile) {
+                // 動態抓取 UI 高度，防止寫死數值導致的誤差
+                const headerEl = document.getElementById('title');
+                const searchEl = document.querySelector('.search-container');
+                const headerHeight = headerEl ? headerEl.offsetHeight : 60;
+                const searchHeight = searchEl ? searchEl.offsetHeight : 90;
+                
+                // 總遮擋高度 + 緩衝區 (20px)
+                const topOffset = headerHeight + searchHeight + 20; 
+                
+                // 使用動態計算的 topOffset 進行 fitBounds
+                ns.map.fitBounds(bounds, {
+                    paddingTopLeft: [20, topOffset], 
+                    paddingBottomRight: [20, 80], // 下方避開三向鍵
+                    animate: true,
+                    duration: 1.0
+                });
+            } else {
+                // 電腦版維持標準對稱邊距
+                ns.map.fitBounds(bounds, { 
+                    padding: [50, 50],
+                    animate: true 
+                });
+            }
         }
     }
     
