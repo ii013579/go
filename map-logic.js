@@ -465,54 +465,71 @@
        
     // ---------- 公開方法：建立導航按鈕（v2.02 Canvas 相容版） ----------
     window.createNavButton = function (latlng, name) {
-        if (!ns.map) {
-            console.error("地圖尚未初始化。");
-            return;
+        if (!ns.map) return;
+    
+        // 1. 清除地圖上現有的導航圖層
+        if (ns.navButtons) {
+            ns.navButtons.clearLayers();
+        } else {
+            ns.navButtons = L.featureGroup().addTo(ns.map);
         }
-
-        // 1. 清除現有的導航按鈕（確保畫面上同時只有一個導航目標）
-        ns.navButtons.clearLayers();
-
-        // 2. 修正 Google Maps URL 格式（修正原本 0{latlng...} 的錯誤）
+    
+        const isMobile = window.innerWidth < 768;
         const googleMapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${latlng.lat},${latlng.lng}`;
+    
+        // 2. 根據裝置設定按鈕大小 (手機 80px, 電腦 40px)
+        const buttonSize = isMobile ? 80 : 40;
         
-        // 3. 建立按鈕 HTML
-        const buttonHtml = `
-           <div class="nav-button-content">
-               <img src="https://i0.wp.com/canadasafetycouncil.org/wp-content/uploads/2018/08/offroad.png" alt="導航" />
-           </div>
-        `;
-
-        // 4. 定義圖標
         const buttonIcon = L.divIcon({
             className: 'nav-button-icon',
-            html: buttonHtml,
-            iconSize: [50, 50],
-            iconAnchor: [25, 25] // 居中對齊紅點
+            html: `
+                <div class="nav-button-content" style="width:${buttonSize}px; height:${buttonSize}px;">
+                    <img src="https://i0.wp.com/canadasafetycouncil.org/wp-content/uploads/2018/08/offroad.png" 
+                         style="width:100%; height:100%; display:block; filter: drop-shadow(0 2px 5px rgba(0,0,0,0.3));" 
+                         alt="導航" />
+                </div>
+            `,
+            iconSize: [buttonSize, buttonSize],
+            iconAnchor: [buttonSize / 2, buttonSize / 2] // 錨點設中心，確保蓋在紅點正上方
         });
-
-        // 5. 建立 Marker
-        // 注意：導航按鈕必須使用 L.marker (DOM)，不可使用 CircleMarker，否則圖示無法顯示
+    
+        // 3. 在地圖上建立導航標記
         const navMarker = L.marker(latlng, {
             icon: buttonIcon,
-            zIndexOffset: 5000, // 確保在所有紅點之上
+            zIndexOffset: 5000, // 確保在所有點位與標籤之上
             interactive: true
         }).addTo(ns.navButtons);
-
-        // 6. 導航跳轉事件
+    
+        // 4. 點擊事件：跳轉導航
         navMarker.on('click', function (e) {
             L.DomEvent.stopPropagation(e);
             window.open(googleMapsUrl, '_blank');
         });
-
-        // 7. 地圖自動對焦到該位置
-        try {
-            ns.map.panTo(latlng, { animate: true, duration: 0.5 });
-        } catch (e) {
-            ns.map.setView(latlng);
+    
+        // 5. 核心：置中補償邏輯
+        if (isMobile) {
+            /* 手機版因為上方列固定 (Title + Search 約 150px-180px)，
+               若直接 setView(latlng)，點位會被上方列擋住。
+               我們將地圖經緯度轉為像素點，向下偏移補償量後，再轉回經緯度讓地圖聚焦。
+            */
+            const zoomLevel = 18; // 搜尋聚焦的縮放層級
+            const targetPoint = ns.map.project(latlng, zoomLevel);
+            
+            // 補償量：向下推 220 像素 (因 UI 放大兩倍，遮擋範圍也變大)
+            const offsetPoint = L.point(targetPoint.x, targetPoint.y + 220); 
+            const offsetLatLng = ns.map.unproject(offsetPoint, zoomLevel);
+    
+            ns.map.flyTo(offsetLatLng, zoomLevel, {
+                animate: true,
+                duration: 0.8,
+                easeLinearity: 0.25
+            });
+        } else {
+            // 電腦版直接置中，不需偏移
+            ns.map.setView(latlng, 18, {
+                animate: true
+            });
         }
-
-        console.info(`已為 ${name} 創建導航圖示 (${latlng.lat}, ${latlng.lng})`);
     };
     
     // ---------- 輔助函式：多邊形質心（面積加權） ----------
