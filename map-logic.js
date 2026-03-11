@@ -1,4 +1,4 @@
-﻿// map-logic.js v2.03
+﻿// map-logic.js v2.04
 
 (function () {
     'use strict';
@@ -359,17 +359,21 @@
         ns.markers.clearLayers();
         ns.navButtons.clearLayers();
     
-        // 定義「紅點白框」樣式 (同步自舊版 CSS)
+        // 1. 偵測是否為手機版
+        const isMobile = window.innerWidth < 768;
+    
+        // 2. 定義「紅點白框」樣式 (手機版放大至約兩倍)
         const originalStyle = {
-            radius: 8,           // 半徑 8 (對應 iconSize [16,16])
-            fillColor: "#e74c3c", // 紅色填充
+            radius: isMobile ? 14 : 8,      // 手機版直徑約 28px, 電腦版 16px
+            fillColor: "#e74c3c",           // 紅色填充
             fillOpacity: 1,
-            color: "#ffffff",    // 白色外框
-            weight: 2,           // 外框寬度 2px
+            color: "#ffffff",               // 白色外框
+            weight: isMobile ? 4 : 2,       // 手機版外框加粗
             opacity: 1,
             interactive: true
         };
     
+        // 建立 Canvas 渲染器，確保展點面積覆蓋全地圖
         const canvasRenderer = L.canvas({ padding: 0.1 });
     
         geojsonFeatures.forEach(feature => {
@@ -377,37 +381,43 @@
             const coords = feature?.geometry?.coordinates;
             if (!type || !coords) return;
     
-            // 處理點位 (Point)
+            // --- 處理點位 (Point) ---
             if (type === 'Point') {
                 const latlng = L.latLng(coords[1], coords[0]);
                 const name = feature.properties?.name || '未命名';
                 const labelId = `label-${String(coords[1])}-${String(coords[0])}`.replace(/\./g, '_');
     
-                // 建立帶白框的紅點 (Canvas)
+                // 建立 Canvas 紅點
                 const dot = L.circleMarker(latlng, {
                     renderer: canvasRenderer,
                     ...originalStyle
                 });
     
+                // 點擊點位事件
                 dot.on('click', (e) => {
                     L.DomEvent.stopPropagation(e);
                     
-                    // 重置所有點回「紅點白框」
+                    // A. 重置所有點位樣式 (取消高亮後回復原有大小)
                     ns.markers.eachLayer(layer => {
-                        if (layer instanceof L.CircleMarker) layer.setStyle(originalStyle);
+                        if (layer instanceof L.CircleMarker) {
+                            layer.setStyle(originalStyle);
+                        }
                     });
     
-                    // 高亮處理
+                    // B. 標籤高亮處理 (移除舊高亮，加入新高亮)
                     document.querySelectorAll('.marker-label span').forEach(s => s.classList.remove('label-active'));
                     const targetSpan = document.getElementById(labelId);
                     if (targetSpan) targetSpan.classList.add('label-active');
     
-                    window.createNavButton(latlng, name);
+                    // C. 產生導航按鈕 (內部包含手機定位偏移邏輯)
+                    if (typeof window.createNavButton === 'function') {
+                        window.createNavButton(latlng, name);
+                    }
                 });
     
                 ns.markers.addLayer(dot);
     
-                // 標籤處理 (DOM)
+                // 建立 DOM 標籤 (保持使用 CSS 定義的 marker-label)
                 const label = L.marker(latlng, {
                     icon: L.divIcon({
                         className: 'marker-label',
@@ -419,8 +429,9 @@
                     zIndexOffset: 500
                 });
                 ns.markers.addLayer(label);
-            }
-            // 處理線段與多邊形 (修正原本掉在函式外的邏輯)
+            } 
+            
+            // --- 處理線段或多邊形 (此段原先在 456 行報錯，現已修正移回函式內) ---
             else if (type === 'LineString' || type === 'Polygon') {
                 const layer = L.geoJSON(feature, {
                     renderer: canvasRenderer,
@@ -433,14 +444,14 @@
                         ? window.getPolygonCentroid(feature.geometry.coordinates[0])
                         : window.getLineStringMidpoint(feature.geometry.coordinates);
                     
-                    if (centerPoint) {
+                    if (centerPoint && typeof window.createNavButton === 'function') {
                         window.createNavButton(L.latLng(centerPoint[1], centerPoint[0]), feature.properties?.name);
                     }
                 });
             }
-        });
+        }); // 結束 forEach
     
-        // 點擊空白處重置樣式
+        // 3. 點擊地圖空白處：回復所有紅點原有大小並清除導航
         ns.map.off('click').on('click', () => {
             ns.markers.eachLayer(layer => {
                 if (layer instanceof L.CircleMarker) layer.setStyle(originalStyle);

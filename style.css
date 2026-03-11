@@ -714,16 +714,6 @@ body {
   100% { box-shadow: 0 0 0 0 rgba(26,115,232,0); }
 }
 
-/* ---------- 響應式優化（小螢幕） ---------- */
-@media (max-width: 768px) {
-  /* 減少陰影與動畫以節省效能 */
-  *:not(.user-location-dot),
-  *:not(.user-location-dot)::before,
-  *:not(.user-location-dot)::after {
-    box-shadow: none !important;
-    transition: none !important;
-  }
-
   /* 某些面板取消圓角以節省空間 */
   .user-card, .action-buttons, .message-box-content, .registration-modal-content, .confirmation-modal-content {
     border-radius: 0 !important;
@@ -759,4 +749,51 @@ body {
 /* 避免在行動裝置上點擊畫布產生灰色半透明背景 */
 canvas {
     -webkit-tap-highlight-color: transparent;
+}
+
+/* ---------- 僅限手機（螢幕寬度 < 768px）的兩倍視覺放大方案 ---------- */
+@media (max-width: 768px) {
+  /* 1. 地圖標籤文字：從 13px 放大至約 24px */
+  .marker-label span {
+    font-size: 24px !important; 
+    transform: translate(18px, -12px) !important;
+    text-shadow: -2px -2px 0 #fff, 2px -2px 0 #fff, -2px 2px 0 #fff, 2px 2px 0 #fff !important;
+    font-weight: bold !important;
+  }
+
+  /* 2. 高亮標籤：維持大尺寸，取消電腦版的額外位移 */
+  .marker-label span.label-active {
+    font-size: 24px !important;
+    padding: 6px 12px !important;
+    border-radius: 10px !important;
+    color: #007bff !important;
+    background: #fff !important;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3) !important;
+    transform: translate(18px, -12px) !important; /* 與一般標籤位置一致 */
+  }
+
+  /* 3. 導航按鈕圖示：從 40px 放大至 80px，方便手指點擊 */
+  .nav-button-content img {
+    width: 80px !important;
+    height: 80px !important;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.4) !important;
+  }
+
+  /* 4. 整體 UI：放大標題區域與搜尋框 */
+  #title {
+    font-size: 30px !important;
+    padding: 20px !important;
+  }
+  
+  #searchBox {
+    font-size: 22px !important;
+    height: 55px !important;
+  }
+
+  /* 5. 修正手機點擊地圖時產生的黑色圓角邊框 (Tap Highlight) */
+  canvas, 
+  .leaflet-canvas-container canvas {
+    outline: none !important;
+    -webkit-tap-highlight-color: transparent !important;
+  }
 }
