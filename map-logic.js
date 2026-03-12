@@ -1,4 +1,4 @@
-﻿// map-logic.js v2.04
+﻿// map-logic.js v2.03
 
 (function () {
     'use strict';
@@ -359,21 +359,17 @@
         ns.markers.clearLayers();
         ns.navButtons.clearLayers();
     
-        // 1. 偵測是否為手機版
-        const isMobile = window.innerWidth < 768;
-    
-        // 2. 定義「紅點白框」樣式 (手機版放大至約兩倍)
+        // 定義「紅點白框」樣式 (同步自舊版 CSS)
         const originalStyle = {
-            radius: isMobile ? 14 : 8,      // 手機版直徑約 28px, 電腦版 16px
-            fillColor: "#e74c3c",           // 紅色填充
+            radius: 8,           // 半徑 8 (對應 iconSize [16,16])
+            fillColor: "#e74c3c", // 紅色填充
             fillOpacity: 1,
-            color: "#ffffff",               // 白色外框
-            weight: isMobile ? 4 : 2,       // 手機版外框加粗
+            color: "#ffffff",    // 白色外框
+            weight: 2,           // 外框寬度 2px
             opacity: 1,
             interactive: true
         };
     
-        // 建立 Canvas 渲染器，確保展點面積覆蓋全地圖
         const canvasRenderer = L.canvas({ padding: 0.1 });
     
         geojsonFeatures.forEach(feature => {
@@ -381,43 +377,37 @@
             const coords = feature?.geometry?.coordinates;
             if (!type || !coords) return;
     
-            // --- 處理點位 (Point) ---
+            // 處理點位 (Point)
             if (type === 'Point') {
                 const latlng = L.latLng(coords[1], coords[0]);
                 const name = feature.properties?.name || '未命名';
                 const labelId = `label-${String(coords[1])}-${String(coords[0])}`.replace(/\./g, '_');
     
-                // 建立 Canvas 紅點
+                // 建立帶白框的紅點 (Canvas)
                 const dot = L.circleMarker(latlng, {
                     renderer: canvasRenderer,
                     ...originalStyle
                 });
     
-                // 點擊點位事件
                 dot.on('click', (e) => {
                     L.DomEvent.stopPropagation(e);
                     
-                    // A. 重置所有點位樣式 (取消高亮後回復原有大小)
+                    // 重置所有點回「紅點白框」
                     ns.markers.eachLayer(layer => {
-                        if (layer instanceof L.CircleMarker) {
-                            layer.setStyle(originalStyle);
-                        }
+                        if (layer instanceof L.CircleMarker) layer.setStyle(originalStyle);
                     });
     
-                    // B. 標籤高亮處理 (移除舊高亮，加入新高亮)
+                    // 高亮處理
                     document.querySelectorAll('.marker-label span').forEach(s => s.classList.remove('label-active'));
                     const targetSpan = document.getElementById(labelId);
                     if (targetSpan) targetSpan.classList.add('label-active');
     
-                    // C. 產生導航按鈕 (內部包含手機定位偏移邏輯)
-                    if (typeof window.createNavButton === 'function') {
-                        window.createNavButton(latlng, name);
-                    }
+                    window.createNavButton(latlng, name);
                 });
     
                 ns.markers.addLayer(dot);
     
-                // 建立 DOM 標籤 (保持使用 CSS 定義的 marker-label)
+                // 標籤處理 (DOM)
                 const label = L.marker(latlng, {
                     icon: L.divIcon({
                         className: 'marker-label',
@@ -429,9 +419,8 @@
                     zIndexOffset: 500
                 });
                 ns.markers.addLayer(label);
-            } 
-            
-            // --- 處理線段或多邊形 (此段原先在 456 行報錯，現已修正移回函式內) ---
+            }
+            // 處理線段與多邊形 (修正原本掉在函式外的邏輯)
             else if (type === 'LineString' || type === 'Polygon') {
                 const layer = L.geoJSON(feature, {
                     renderer: canvasRenderer,
@@ -444,14 +433,14 @@
                         ? window.getPolygonCentroid(feature.geometry.coordinates[0])
                         : window.getLineStringMidpoint(feature.geometry.coordinates);
                     
-                    if (centerPoint && typeof window.createNavButton === 'function') {
+                    if (centerPoint) {
                         window.createNavButton(L.latLng(centerPoint[1], centerPoint[0]), feature.properties?.name);
                     }
                 });
             }
-        }); // 結束 forEach
+        });
     
-        // 3. 點擊地圖空白處：回復所有紅點原有大小並清除導航
+        // 點擊空白處重置樣式
         ns.map.off('click').on('click', () => {
             ns.markers.eachLayer(layer => {
                 if (layer instanceof L.CircleMarker) layer.setStyle(originalStyle);
@@ -465,73 +454,54 @@
        
     // ---------- 公開方法：建立導航按鈕（v2.02 Canvas 相容版） ----------
     window.createNavButton = function (latlng, name) {
-        if (!ns.map) return;
-    
-        // 清除舊的導航圖層
-        if (ns.navButtons) {
-            ns.navButtons.clearLayers();
-        } else {
-            ns.navButtons = L.featureGroup().addTo(ns.map);
+        if (!ns.map) {
+            console.error("地圖尚未初始化。");
+            return;
         }
-    
-        const isMobile = window.innerWidth < 768;
+
+        // 1. 清除現有的導航按鈕（確保畫面上同時只有一個導航目標）
+        ns.navButtons.clearLayers();
+
+        // 2. 修正 Google Maps URL 格式（修正原本 0{latlng...} 的錯誤）
         const googleMapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${latlng.lat},${latlng.lng}`;
-    
-        // 1. 導航按鈕圖示定義 (手機放大至 80px)
-        const buttonSize = isMobile ? 80 : 40;
+        
+        // 3. 建立按鈕 HTML
+        const buttonHtml = `
+           <div class="nav-button-content">
+               <img src="https://i0.wp.com/canadasafetycouncil.org/wp-content/uploads/2018/08/offroad.png" alt="導航" />
+           </div>
+        `;
+
+        // 4. 定義圖標
         const buttonIcon = L.divIcon({
             className: 'nav-button-icon',
-            html: `
-                <div class="nav-button-content" style="width:${buttonSize}px; height:${buttonSize}px;">
-                    <img src="https://i0.wp.com/canadasafetycouncil.org/wp-content/uploads/2018/08/offroad.png" 
-                         style="width:100%; height:100%; filter: drop-shadow(0 4px 6px rgba(0,0,0,0.4));" 
-                         alt="導航" />
-                </div>
-            `,
-            iconSize: [buttonSize, buttonSize],
-            iconAnchor: [buttonSize / 2, buttonSize / 2]
+            html: buttonHtml,
+            iconSize: [50, 50],
+            iconAnchor: [25, 25] // 居中對齊紅點
         });
-    
+
+        // 5. 建立 Marker
+        // 注意：導航按鈕必須使用 L.marker (DOM)，不可使用 CircleMarker，否則圖示無法顯示
         const navMarker = L.marker(latlng, {
             icon: buttonIcon,
-            zIndexOffset: 5000,
+            zIndexOffset: 5000, // 確保在所有紅點之上
             interactive: true
         }).addTo(ns.navButtons);
-    
+
+        // 6. 導航跳轉事件
         navMarker.on('click', function (e) {
             L.DomEvent.stopPropagation(e);
             window.open(googleMapsUrl, '_blank');
         });
-    
-        // 2. 核心：手機動態高度置中邏輯
-        if (isMobile) {
-            // 抓取真實高度，若元素不存在則給定預設值
-            const headerEl = document.getElementById('title');
-            const searchEl = document.querySelector('.search-container');
-            const headerHeight = headerEl ? headerEl.offsetHeight : 60;
-            const searchHeight = searchEl ? searchEl.offsetHeight : 90;
-            
-            // 總遮擋高度
-            const totalCoveredHeight = headerHeight + searchHeight;
-            
-            // 透過 Leaflet 投影計算目標點
-            const zoomLevel = 18;
-            const targetPoint = ns.map.project(latlng, zoomLevel);
-            
-            // 計算偏移：將點位往「上」提，使其落在扣除上方列後的「剩餘視覺中心」
-            // 偏移量 = (剩餘螢幕高度 / 2) - (點位在螢幕相對位置)
-            // 這裡簡單以遮擋高度的比例進行補償
-            const offsetPoint = L.point(targetPoint.x, targetPoint.y + (totalCoveredHeight / 2)); 
-            const offsetLatLng = ns.map.unproject(offsetPoint, zoomLevel);
-    
-            ns.map.flyTo(offsetLatLng, zoomLevel, {
-                animate: true,
-                duration: 0.8
-            });
-        } else {
-            // 電腦版：直接標準置中
-            ns.map.setView(latlng, 18, { animate: true });
+
+        // 7. 地圖自動對焦到該位置
+        try {
+            ns.map.panTo(latlng, { animate: true, duration: 0.5 });
+        } catch (e) {
+            ns.map.setView(latlng);
         }
+
+        console.info(`已為 ${name} 創建導航圖示 (${latlng.lat}, ${latlng.lng})`);
     };
     
     // ---------- 輔助函式：多邊形質心（面積加權） ----------
@@ -712,17 +682,10 @@
         if (ns.markers) ns.markers.clearLayers();
     }
 
-    /**
-     * ---------- 渲染 KML 資料邏輯 (動態高度置中版) ----------
-     * 說明：
-     * 1. 偵測手機版 (innerWidth < 768)
-     * 2. 自動抓取 #title 與 .search-container 的實際高度
-     * 3. 動態補償 paddingTopLeft，讓地圖範圍永遠落在視覺中心
-     */
+    // 抽離出的渲染邏輯（確保快取與網路共用同一套顯示流程）
     function renderKmlData(kmlData, kmlId) {
         let geojson = kmlData.geojson;
-    
-        // 1. 解析 GeoJSON 字串
+
         if (typeof geojson === 'string') {
             try {
                 geojson = JSON.parse(geojson);
@@ -731,51 +694,23 @@
                 return;
             }
         }
-    
-        // 2. 過濾有效要素
+
         const loadedFeatures = (geojson?.features || []).filter(f =>
             f && f.geometry && f.geometry.coordinates && f.properties
         );
-    
-        // 3. 更新狀態
+
         ns.allKmlFeatures = loadedFeatures;
         window.allKmlFeatures = loadedFeatures;
         ns.currentKmlLayerId = kmlId;
-    
-        // 4. 繪製圖層
+
+        // 繪製地圖
         window.addGeoJsonLayers(loadedFeatures);
-    
-        // 5. 自動縮放至範圍 (核心：動態補償邏輯)
+
+        // 自動縮放至圖層範圍
         const allLayers = L.featureGroup([ns.geoJsonLayers, ns.markers]);
         const bounds = allLayers.getBounds();
-    
         if (bounds && bounds.isValid()) {
-            const isMobile = window.innerWidth < 768;
-    
-            if (isMobile) {
-                // 動態抓取 UI 高度，防止寫死數值導致的誤差
-                const headerEl = document.getElementById('title');
-                const searchEl = document.querySelector('.search-container');
-                const headerHeight = headerEl ? headerEl.offsetHeight : 60;
-                const searchHeight = searchEl ? searchEl.offsetHeight : 90;
-                
-                // 總遮擋高度 + 緩衝區 (20px)
-                const topOffset = headerHeight + searchHeight + 20; 
-                
-                // 使用動態計算的 topOffset 進行 fitBounds
-                ns.map.fitBounds(bounds, {
-                    paddingTopLeft: [20, topOffset], 
-                    paddingBottomRight: [20, 80], // 下方避開三向鍵
-                    animate: true,
-                    duration: 1.0
-                });
-            } else {
-                // 電腦版維持標準對稱邊距
-                ns.map.fitBounds(bounds, { 
-                    padding: [50, 50],
-                    animate: true 
-                });
-            }
+            ns.map.fitBounds(bounds, { padding: L.point(50, 50) });
         }
     }
     

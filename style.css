@@ -3,22 +3,15 @@
    - 本檔已整合重複規則、修正語法錯誤（例如 !important 放置位置）
    - 註解均為中文，段落以用途分類，盡量保留原始設計與行為
    ========================================================================== */
-* {
-  box-sizing: border-box !important;
-  margin: 0;
-  padding: 0;
-}
 
 /* ---------- 全局與  本佈局 ---------- */
 html, body {
   margin: 0;
   padding: 0;
-  width: 100%;
   height: 100%;
   font-family: 'Inter', sans-serif;
   color: #333;
   background-color: #f0f2f5;
-  overflow: hidden;  /* 禁止整頁捲動，只讓地圖內容滾動 */
 }
 body {
   display: flex;
@@ -721,6 +714,16 @@ body {
   100% { box-shadow: 0 0 0 0 rgba(26,115,232,0); }
 }
 
+/* ---------- 響應式優化（小螢幕） ---------- */
+@media (max-width: 768px) {
+  /* 減少陰影與動畫以節省效能 */
+  *:not(.user-location-dot),
+  *:not(.user-location-dot)::before,
+  *:not(.user-location-dot)::after {
+    box-shadow: none !important;
+    transition: none !important;
+  }
+
   /* 某些面板取消圓角以節省空間 */
   .user-card, .action-buttons, .message-box-content, .registration-modal-content, .confirmation-modal-content {
     border-radius: 0 !important;
@@ -755,78 +758,5 @@ body {
 
 /* 避免在行動裝置上點擊畫布產生灰色半透明背景 */
 canvas {
-    -webkit-tap-highlight-color: transparent !important;
-}
-
-/* ---------- 僅限手機 (寬度 < 768px) 完整優化方案 ---------- */
-@media (max-width: 768px) {
-  
-  /* 1. 鎖定全域樣式，防止寬度超出螢幕 */
-  body, html {
-    width: 100vw !important;
-    height: 100vh !important;
-    overflow: hidden; /* 禁止全頁捲動，避免頁面被撐開 */
-  }
-
-  /* 2. 固定頂部功能區 (標題 + 搜尋框) */
-  /* 將 position 設定為 fixed 確保它們不會隨著地圖滑動 */
-  header, #title, .search-container {
-    position: fixed !important;
-    top: 0;
-    left: 0;
-    width: 100vw !important;
-    z-index: 9999;
-    background-color: #fff;
-    box-sizing: border-box; /* 確保 padding 不會導致寬度超出螢幕 */
-  }
-
-  #title {
-    height: 60px;
-    font-size: 26px !important;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-bottom: 1px solid #ddd;
-  }
-
-  .search-container {
-    top: 60px; /* 接在標題下方 */
-    height: 90px;
-    padding: 10px 0;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    box-shadow: 0 4px 10px rgba(0,0,0,0.1);
-  }
-
-  #searchBox {
-    font-size: 16px !important; 
-    height: 45px !important;
-    width: 92% !important;
-    border: 2px solid #007bff !important;
-  }
-
-  /* 3. 地圖容器：填滿剩下的空間 */
-  /* 強制地圖寬度等於螢幕寬度，並扣除上方功能區總高度 (60+90=150px) */
-  #map {
-    width: 100vw !important;
-    height: calc(100vh - 150px) !important; 
-    margin-top: 150px !important; 
-    position: relative;
-    overflow: hidden;
-  }
-
-  /* 4. 地圖文字標籤：整體放大，防止文字重疊與大小不一 */
-  .marker-label span {
-    font-size: 24px !important;
-    font-weight: bold !important;
-    text-shadow: -2px -2px 0 #fff, 2px -2px 0 #fff, -2px 2px 0 #fff, 2px 2px 0 #fff !important;
-    transform: translate(20px, -10px) !important;
-  }
-
-  /* 5. 移除手機點擊紅點產生的外框 (Tap Highlight) */
-  canvas, .leaflet-canvas-container canvas {
-    outline: none !important;
-    -webkit-tap-highlight-color: transparent !important;
-  }
+    -webkit-tap-highlight-color: transparent;
 }
