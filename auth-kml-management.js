@@ -441,22 +441,27 @@ auth.onAuthStateChanged(async (user) => {
             els.userEmailDisplay.textContent = `${user.email} (${getRoleDisplayName(window.currentUserRole)})`;
           }
 
-          // 2. 根據角色調整管理功能 (僅控制 Dashboard 顯示，不影響地圖瀏覽)
+          // 2. 根據角色調整管理功能
           const canEdit = (newRole === 'owner' || newRole === 'editor');
           const isOwner = (newRole === 'owner');
 
           const toggleDisplay = (el, show) => { if (el) el.style.display = show ? 'flex' : 'none'; };
           const toggleBlock = (el, show) => { if (el) el.style.display = show ? 'block' : 'none'; };
 
+          // 顯示/隱藏各項功能區塊
           toggleDisplay(els.uploadKmlSectionDashboard, canEdit);
           toggleDisplay(els.deleteKmlSectionDashboard, canEdit);
           toggleDisplay(els.registrationSettingsSection, isOwner);
+
+          // ✨【最小變更 1】：強制將使用者管理區塊設為隱藏 (預設不展開)
+          // 這樣進入編輯模式時，只會看到「刷新使用者列表」按鈕所在的容器，但列表是關閉的
           toggleBlock(els.userManagementSection, false);
 
-          // ✨ 修改 2：註解掉（或刪除）這段自動觸發讀取的邏輯
+          // ✨【最小變更 2】：移除/註解掉原本的自動讀取邏輯
           /* if (isOwner && (roleChanged || !els.userListDiv.hasChildNodes())) {
             if (typeof refreshUserList === 'function') refreshUserList();
-          } */
+          }
+          */
 
           // 3. 角色變動時同步 KML 權限狀態
           if (roleChanged && typeof optimizedUpdateKmlLayerSelects === 'function') {
@@ -484,11 +489,9 @@ auth.onAuthStateChanged(async (user) => {
     if (els.loginForm) els.loginForm.style.display = 'block';
     if (els.loggedInDashboard) els.loggedInDashboard.style.display = 'none';
     if (els.userEmailDisplay) els.userEmailDisplay.style.display = 'none';
-    
-    // 登出時不要清空 KML 下拉選單，確保未登入者仍可使用
   }
 
-  // --- B. ✨ 圖層載入邏輯 (移出 if (user)，確保未登入也能執行) ---
+  // --- B. 圖層載入邏輯 ---
   if (!hasInitialMenuLoaded) {
     hasInitialMenuLoaded = true; 
     console.log("[Init] 啟動初始圖層載入程序 (公開瀏覽)");
@@ -496,7 +499,7 @@ auth.onAuthStateChanged(async (user) => {
     if (typeof optimizedUpdateKmlLayerSelects === 'function') {
       await optimizedUpdateKmlLayerSelects();
     } else if (typeof updateKmlLayerSelects === 'function') {
-      await updateKmlLayerSelects(); // 備援機制
+      await updateKmlLayerSelects();
     }
   }
 });
