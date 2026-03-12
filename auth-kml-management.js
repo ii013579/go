@@ -451,11 +451,12 @@ auth.onAuthStateChanged(async (user) => {
           toggleDisplay(els.uploadKmlSectionDashboard, canEdit);
           toggleDisplay(els.deleteKmlSectionDashboard, canEdit);
           toggleDisplay(els.registrationSettingsSection, isOwner);
-          toggleBlock(els.userManagementSection, isOwner);
+          toggleBlock(els.userManagementSection, false);
 
-          if (isOwner && (roleChanged || !els.userListDiv.hasChildNodes())) {
+          // ✨ 修改 2：註解掉（或刪除）這段自動觸發讀取的邏輯
+          /* if (isOwner && (roleChanged || !els.userListDiv.hasChildNodes())) {
             if (typeof refreshUserList === 'function') refreshUserList();
-          }
+          } */
 
           // 3. 角色變動時同步 KML 權限狀態
           if (roleChanged && typeof optimizedUpdateKmlLayerSelects === 'function') {
