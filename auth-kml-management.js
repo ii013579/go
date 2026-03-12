@@ -452,12 +452,11 @@ auth.onAuthStateChanged(async (user) => {
           toggleDisplay(els.uploadKmlSectionDashboard, canEdit);
           toggleDisplay(els.deleteKmlSectionDashboard, canEdit);
           toggleDisplay(els.registrationSettingsSection, isOwner);
-
-          // ✨【最小變更 1】：強制將使用者管理區塊設為隱藏 (預設不展開)
-          // 這樣進入編輯模式時，只會看到「刷新使用者列表」按鈕所在的容器，但列表是關閉的
-          toggleBlock(els.userManagementSection, false);
-
-          // ✨【最小變更 2】：移除/註解掉原本的自動讀取邏輯
+          toggleBlock(els.userManagementSection, isOwner); 
+          if (els.userListDiv) {
+              els.userListDiv.style.display = 'none'; // 預設關閉列表容器
+          }
+          // 移除/註解掉原本的自動讀取邏輯
           /* if (isOwner && (roleChanged || !els.userListDiv.hasChildNodes())) {
             if (typeof refreshUserList === 'function') refreshUserList();
           }
