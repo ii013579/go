@@ -52,25 +52,19 @@
     <div id="loggedInDashboard" style="display: none;">
       <h3 id="userEmailDisplay"></h3>
 
-      <div id="kmlControlsDashboard">
-          <div id="uploadKmlSectionDashboard">
-              <label>上傳 KML:</label>
-              <input type="file" id="hiddenKmlFileInput" accept=".kml" style="display: none;" />
-              
-              <button id="triggerUploadBtn" class="action-buttons upload-btn" style="width: 80px; flex-shrink: 0;">上傳</button>
-              
-              <span id="selectedKmlFileNameDashboard" style="display: none;">尚未選擇檔案</span>
-              <button id="uploadKmlSubmitBtnDashboard" style="display: none;">執行上傳(隱藏)</button>
-          </div> 
-               
-          <div id="deleteKmlSectionDashboard">
-              <label for="kmlLayerSelectDashboard">刪除 KML:</label>
-              <select id="kmlLayerSelectDashboard" disabled>
-                  <option value="">-- 請選擇 KML 圖層 --</option>
-              </select>
-              <button id="deleteSelectedKmlBtn" class="action-buttons delete-btn">刪除</button>
-          </div>
-      </div>
+    <div id="kmlControlsDashboard">
+        <div id="uploadKmlSectionDashboard">
+            <input type="file" id="hiddenKmlFileInput" accept=".kml" style="display: none;" />
+            <button id="triggerUploadBtn" class="action-buttons" style="width: 80px; flex-shrink: 0;">上傳KML</button>
+            <button id="uploadKmlSubmitBtnDashboard" style="display: none;"></button>
+        </div>
+    
+        <div id="deleteKmlSectionDashboard" class="dashboard-section">
+            <button id="triggerDeleteBtn" class="action-buttons delete-btn" style="width: 80px; flex-shrink: 0;">刪除KML</button>           
+            <select id="kmlLayerSelectDashboard" style="display: none;"></select>
+            <button id="deleteSelectedKmlBtn" style="display: none;"></button>
+        </div>
+    </div>
 
       <div id="registrationSettingsSection" style="display: none;">
           <div class="registration-code-display-group">

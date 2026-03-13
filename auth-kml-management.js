@@ -25,6 +25,7 @@
     kmlLayerSelectDashboard: $('kmlLayerSelectDashboard'),
     deleteSelectedKmlBtn: $('deleteSelectedKmlBtn'),
     triggerUploadBtn: $('triggerUploadBtn'),
+    triggerDeleteBtn: $('triggerDeleteBtn'),
 
     registrationSettingsSection: $('registrationSettingsSection'),
     generateRegistrationCodeBtn: $('generateRegistrationCodeBtn'),
@@ -842,6 +843,45 @@ if (els.hiddenKmlFileInput) {
     });
   }
   
+  // 新增：處理單一刪除按鈕點擊
+  if (els.triggerDeleteBtn) {
+      els.triggerDeleteBtn.addEventListener('click', async () => {
+          // 1. 從隱藏的原本下拉選單中提取目前的 KML 清單
+          const options = Array.from(els.kmlLayerSelectDashboard.options)
+              .filter(opt => opt.value !== "") // 過濾掉「請選擇」空選項
+              .map(opt => `<option value="${opt.value}">${opt.textContent}</option>`)
+              .join('');
+  
+          if (!options) {
+              window.showMessage?.('提示', '目前沒有可刪除的 KML 圖層。');
+              return;
+          }
+  
+          // 2. 建立包含選單的對話框內容
+          const modalContent = `
+              <div style="text-align: left; margin-top: 10px;">
+                  <p>請選擇要刪除的圖層：</p>
+                  <select id="modalKmlDeletePicker" style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid #ddd; font-size: 14px; margin-top: 5px;">
+                      ${options}
+                  </select>
+                  <p style="color: #d32f2f; font-size: 12px; margin-top: 10px; font-weight: bold;">⚠️ 警告：刪除後資料將無法復原。</p>
+              </div>
+          `;
+  
+          // 3. 顯示對話框
+          const confirmDelete = await window.showConfirmationModal('刪除圖層', modalContent);
+  
+          if (confirmDelete) {
+              const selectedId = document.getElementById('modalKmlDeletePicker').value;
+              if (selectedId) {
+                  // 將值同步回隱藏的選單，並觸發原本的刪除處理程序
+                  els.kmlLayerSelectDashboard.value = selectedId;
+                  els.deleteSelectedKmlBtn.click();
+              }
+          }
+      });
+  }
+
   // 刪除所選 KML
   if (els.deleteSelectedKmlBtn) {
     els.deleteSelectedKmlBtn.addEventListener('click', async () => {
