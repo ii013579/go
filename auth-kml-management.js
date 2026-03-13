@@ -708,233 +708,202 @@ async function optimizedUpdateKmlLayerSelects() {
   }
 
 // --- [新增] 觸發選檔按鈕邏輯 ---
-if (els.triggerUploadBtn && els.hiddenKmlFileInput) {
-  els.triggerUploadBtn.addEventListener('click', () => {
-    els.hiddenKmlFileInput.click();
-  });
+if (typeof window.showConfirmationModal !== 'undefined') {
+  const originalModal = window.showConfirmationModal;
+  window.showConfirmationModal = function (title, message) {
+    return new Promise(resolve => {
+      const overlay = els.confirmationModalOverlay;
+      const titleEl = els.confirmationModalTitle;
+      const msgEl = els.confirmationModalMessage;
+      const yesBtn = els.confirmYesBtn;
+      const noBtn = els.confirmNoBtn;
+
+      if (!overlay || !titleEl || !msgEl || !yesBtn || !noBtn) {
+        resolve(confirm(message));
+        return;
+      }
+
+      titleEl.textContent = title;
+      msgEl.innerHTML = message; // 【關鍵修正】：使用 innerHTML 渲染 HTML 標籤
+      overlay.classList.add('visible');
+
+      const cleanupAndResolve = (result) => {
+        overlay.classList.remove('visible');
+        yesBtn.onclick = null;
+        noBtn.onclick = null;
+        resolve(result);
+      };
+
+      yesBtn.onclick = () => cleanupAndResolve(true);
+      noBtn.onclick = () => cleanupAndResolve(false);
+    });
+  };
 }
 
-// --- [新增] 監聽檔案選擇後的確認動作 ---
+// 上傳 KML 處理
+if (typeof window.showConfirmationModal !== 'undefined') {
+  const originalModal = window.showConfirmationModal;
+  window.showConfirmationModal = function (title, message) {
+    return new Promise(resolve => {
+      const overlay = els.confirmationModalOverlay;
+      const titleEl = els.confirmationModalTitle;
+      const msgEl = els.confirmationModalMessage;
+      const yesBtn = els.confirmYesBtn;
+      const noBtn = els.confirmNoBtn;
+
+      if (!overlay || !titleEl || !msgEl || !yesBtn || !noBtn) {
+        resolve(confirm(message));
+        return;
+      }
+
+      titleEl.textContent = title;
+      msgEl.innerHTML = message; // 【關鍵修正】：使用 innerHTML 渲染 HTML 標籤
+      overlay.classList.add('visible');
+
+      const cleanupAndResolve = (result) => {
+        overlay.classList.remove('visible');
+        yesBtn.onclick = null;
+        noBtn.onclick = null;
+        resolve(result);
+      };
+
+      yesBtn.onclick = () => cleanupAndResolve(true);
+      noBtn.onclick = () => cleanupAndResolve(false);
+    });
+  };
+}
+
+// --- [上傳邏輯] 觸發選檔與確認 ---
+if (els.triggerUploadBtn) {
+  els.triggerUploadBtn.addEventListener('click', () => els.hiddenKmlFileInput.click());
+}
+
 if (els.hiddenKmlFileInput) {
   els.hiddenKmlFileInput.addEventListener('change', async (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
-    // 彈出確認視窗，顯示選擇的檔案名稱
     const confirmUpload = await window.showConfirmationModal(
       '確認上傳',
-      `您選擇了檔案：<strong>${file.name}</strong><br>確定要執行上傳嗎？`
+      `您選擇了檔案：<br><strong>${file.name}</strong><br>確定要執行上傳嗎？`
     );
 
     if (confirmUpload) {
-      // 觸發下方的上傳邏輯
       els.uploadKmlSubmitBtnDashboard.click();
     } else {
-      els.hiddenKmlFileInput.value = ''; // 取消則清空
+      els.hiddenKmlFileInput.value = '';
     }
   });
 }
 
-// 上傳 KML 處理
-  if (els.uploadKmlSubmitBtnDashboard) {
-    els.uploadKmlSubmitBtnDashboard.addEventListener('click', async () => {
-      const file = els.hiddenKmlFileInput?.files?.[0];
-      if (!file) {
-        window.showMessage?.('提示', '請先選擇 KML 檔案。');
-        return;
+// --- [刪除邏輯] 彈窗內選取圖層 ---
+if (els.triggerDeleteBtn) {
+  els.triggerDeleteBtn.addEventListener('click', async () => {
+    const options = Array.from(els.kmlLayerSelectDashboard.options)
+      .filter(opt => opt.value !== "")
+      .map(opt => `<option value="${opt.value}">${opt.textContent}</option>`)
+      .join('');
+
+    if (!options) {
+      window.showMessage?.('提示', '目前沒有可刪除的 KML 圖層。');
+      return;
+    }
+
+    const modalContent = `
+      <div style="text-align: left; margin-top: 10px;">
+        <p>請選擇要刪除的圖層：</p>
+        <select id="modalKmlDeletePicker" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #ddd; margin-top: 5px;">
+          ${options}
+        </select>
+        <p style="color: #d32f2f; font-size: 12px; margin-top: 10px; font-weight: bold;">⚠️ 警告：刪除後資料將無法復原。</p>
+      </div>`;
+
+    const confirmDelete = await window.showConfirmationModal('刪除圖層', modalContent);
+
+    if (confirmDelete) {
+      const selectedId = document.getElementById('modalKmlDeletePicker').value;
+      if (selectedId) {
+        els.kmlLayerSelectDashboard.value = selectedId;
+        els.deleteSelectedKmlBtn.click();
       }
-      if (!auth.currentUser || (window.currentUserRole !== 'owner' && window.currentUserRole !== 'editor')) {
-        window.showMessage?.('錯誤', '您沒有權限上傳 KML。');
-        return;
-      }
+    }
+  });
+}
 
-      const reader = new FileReader();
-      reader.onload = async () => {
-        try {
-          const kmlString = reader.result;
-          const parser = new DOMParser();
-          const kmlDoc = parser.parseFromString(kmlString, 'text/xml');
+// --- [執行邏輯] 上傳 KML 處理 (與 Firebase 對接) ---
+if (els.uploadKmlSubmitBtnDashboard) {
+  els.uploadKmlSubmitBtnDashboard.addEventListener('click', async () => {
+    const file = els.hiddenKmlFileInput?.files?.[0];
+    if (!file || !auth.currentUser) return;
 
-          if (kmlDoc.getElementsByTagName('parsererror').length > 0) {
-            throw new Error(`KML XML 解析錯誤。`);
-          }
+    if (window.currentUserRole !== 'owner' && window.currentUserRole !== 'editor') {
+      window.showMessage?.('錯誤', '您沒有權限上傳 KML。');
+      return;
+    }
 
-          const geojson = toGeoJSON.kml(kmlDoc);
-          const parsedFeatures = geojson.features || [];
-
-          if (parsedFeatures.length === 0) {
-            window.showMessage?.('KML 載入', '檔案中沒有找到地理要素。');
-            return;
-          }
-
-          const fileName = file.name;
-          const kmlLayersCollectionRef = getKmlCollectionRef();
-
-          // 檢查覆蓋邏輯
-          const existingKmlQuery = await kmlLayersCollectionRef.where('name', '==', fileName).get();
-          let kmlLayerDocRef;
-          let isOverwriting = false;
-
-          if (!existingKmlQuery.empty) {
-            const confirmOverwrite = await window.showConfirmationModal(
-              '覆蓋 KML 檔案',
-              `確定要覆蓋 "${fileName}" 嗎？`
-            );
-            if (!confirmOverwrite) return;
-
-            kmlLayerDocRef = existingKmlQuery.docs[0].ref;
-            isOverwriting = true;
-
-            // 清理舊子集合 (相容舊結構)
-            const oldFeaturesSnapshot = await kmlLayerDocRef.collection('features').get();
-            if (!oldFeaturesSnapshot.empty) {
-              const deleteBatch = db.batch();
-              oldFeaturesSnapshot.forEach(d => deleteBatch.delete(d.ref));
-              await deleteBatch.commit();
-            }
-          } else {
-            kmlLayerDocRef = kmlLayersCollectionRef.doc();
-          }
-
-          // 1. 寫入 KML 主資料 (大檔案)
-          await kmlLayerDocRef.set({
-            name: fileName,
-            uploadTime: firebase.firestore.FieldValue.serverTimestamp(),
-            uploadedBy: auth.currentUser.email || auth.currentUser.uid,
-            uploadedByRole: window.currentUserRole,
-            geojson: JSON.stringify(geojson)
-          }, { merge: true });
-
-          // ======= 【核心優化：觸發全域同步與清理快取】 =======
-          const targetKmlId = kmlLayerDocRef.id;
-          const now = Date.now();
-          const lastUpdateTimeText = new Date(now).toLocaleString('zh-TW');
-
-          // 2. 更新全域同步戳記 (讓其他使用者知道有更新)
-          await db.collection('artifacts').doc(appId)
-            .collection('public').doc('data')
-            .collection('metadata').doc('sync')
-            .set({ lastUpdate: now, lastUpdateTime: lastUpdateTimeText}, { merge: true });
-
-          // 3. 清理自己的本地快取 (確保選單與內容立即更新)
-          localStorage.removeItem('kml_list_cache_data'); // 清單快取
-          localStorage.removeItem('kml_list_last_sync');  // 清單時間戳
-          localStorage.removeItem(`kml_data_${targetKmlId}`); // 該圖層內容快取
-          localStorage.removeItem(`kml_time_${targetKmlId}`); // 該圖層內容時間戳
-
-          console.log(`%c[同步成功] 已更新全域時間戳並清理本地快取`, "color: #4CAF50; font-weight: bold;");
-          // ===============================================
-
-          window.showMessage?.('成功', `KML "${fileName}" 已上傳/覆蓋成功。`);
-
-          if (els.hiddenKmlFileInput) els.hiddenKmlFileInput.value = '';
-          if (els.selectedKmlFileNameDashboard) els.selectedKmlFileNameDashboard.textContent = '尚未選擇檔案';
-          
-          // 重新載入選單 (這會因為上面清除了快取而從 Firebase 抓取最新清單)
-          await optimizedUpdateKmlLayerSelects(); 
-          updatePinButtonState();
-
-        } catch (error) {
-          console.error("上傳出錯:", error);
-          window.showMessage?.('錯誤', error.message);
-        }
-      };
-      reader.readAsText(file);
-    });
-  }
-  
-  // 新增：處理單一刪除按鈕點擊
-  if (els.triggerDeleteBtn) {
-      els.triggerDeleteBtn.addEventListener('click', async () => {
-          // 1. 從隱藏的原本下拉選單中提取目前的 KML 清單
-          const options = Array.from(els.kmlLayerSelectDashboard.options)
-              .filter(opt => opt.value !== "") // 過濾掉「請選擇」空選項
-              .map(opt => `<option value="${opt.value}">${opt.textContent}</option>`)
-              .join('');
-  
-          if (!options) {
-              window.showMessage?.('提示', '目前沒有可刪除的 KML 圖層。');
-              return;
-          }
-  
-          // 2. 建立包含選單的對話框內容
-          const modalContent = `
-              <div style="text-align: left; margin-top: 10px;">
-                  <p>請選擇要刪除的圖層：</p>
-                  <select id="modalKmlDeletePicker" style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid #ddd; font-size: 14px; margin-top: 5px;">
-                      ${options}
-                  </select>
-                  <p style="color: #d32f2f; font-size: 12px; margin-top: 10px; font-weight: bold;">⚠️ 警告：刪除後資料將無法復原。</p>
-              </div>
-          `;
-  
-          // 3. 顯示對話框
-          const confirmDelete = await window.showConfirmationModal('刪除圖層', modalContent);
-  
-          if (confirmDelete) {
-              const selectedId = document.getElementById('modalKmlDeletePicker').value;
-              if (selectedId) {
-                  // 將值同步回隱藏的選單，並觸發原本的刪除處理程序
-                  els.kmlLayerSelectDashboard.value = selectedId;
-                  els.deleteSelectedKmlBtn.click();
-              }
-          }
-      });
-  }
-
-  // 刪除所選 KML
-  if (els.deleteSelectedKmlBtn) {
-    els.deleteSelectedKmlBtn.addEventListener('click', async () => {
-      const kmlIdToDelete = els.kmlLayerSelectDashboard?.value || '';
-      if (!kmlIdToDelete) {
-        window.showMessage?.('提示', '請先選擇要刪除的圖層。');
-        return;
-      }
-      if (!auth.currentUser || (window.currentUserRole !== 'owner' && window.currentUserRole !== 'editor')) {
-        window.showMessage?.('錯誤', '您沒有權限刪除。');
-        return;
-      }
-
-      const confirmDelete = await window.showConfirmationModal('確認刪除', '確定要刪除此 KML 嗎？此操作不可逆！');
-      if (!confirmDelete) return;
-
+    const reader = new FileReader();
+    reader.onload = async () => {
       try {
-        const kmlLayerDocRef = getKmlCollectionRef().doc(kmlIdToDelete);
-        
-        // 1. 執行刪除 (消耗 1 次寫入)
-        await kmlLayerDocRef.delete();
+        const geojson = toGeoJSON.kml(new DOMParser().parseFromString(reader.result, 'text/xml'));
+        const kmlLayersCollectionRef = getKmlCollectionRef();
+        const existingKmlQuery = await kmlLayersCollectionRef.where('name', '==', file.name).get();
+        let kmlLayerDocRef = existingKmlQuery.empty ? kmlLayersCollectionRef.doc() : existingKmlQuery.docs[0].ref;
 
-        // ======= 【核心優化：觸發全域同步】 =======
+        await kmlLayerDocRef.set({
+          name: file.name,
+          uploadTime: firebase.firestore.FieldValue.serverTimestamp(),
+          uploadedBy: auth.currentUser.email,
+          uploadedByRole: window.currentUserRole,
+          geojson: JSON.stringify(geojson)
+        }, { merge: true });
+
+        // 全域同步
         const now = Date.now();
-        const dateText = new Date(now).toLocaleString('zh-TW');
+        await db.collection('artifacts').doc(appId).collection('public').doc('data')
+          .collection('metadata').doc('sync').set({ lastUpdate: now, lastUpdateTime: new Date(now).toLocaleString('zh-TW') }, { merge: true });
 
-        // 2. 更新全域同步戳記 (通知所有使用者移除此選單項)
-        await db.collection('artifacts').doc(appId)
-          .collection('public').doc('data')
-          .collection('metadata').doc('sync')
-          .set({ lastUpdate: now, lastUpdateTime: dateText}, { merge: true });
-
-        // 3. 清理自己的本地快取
+        // 清理快取
         localStorage.removeItem('kml_list_cache_data');
-        localStorage.removeItem('kml_list_last_sync');
-        localStorage.removeItem(`kml_data_${kmlIdToDelete}`);
-        localStorage.removeItem(`kml_time_${kmlIdToDelete}`);
-        
-        console.log(`%c[同步成功] 已刪除圖層並更新全域同步戳記`, "color: #F44336; font-weight: bold;");
-        // ===============================================
+        localStorage.removeItem(`kml_data_${kmlLayerDocRef.id}`);
 
-        window.showMessage?.('成功', `圖層已刪除。`);
-        
-        // 重新同步選單
+        window.showMessage?.('成功', `KML "${file.name}" 已處理成功。`);
         await optimizedUpdateKmlLayerSelects();
-        window.clearAllKmlLayers?.();
         updatePinButtonState();
+        els.hiddenKmlFileInput.value = '';
       } catch (error) {
-        console.error("刪除失敗:", error);
-        window.showMessage?.('刪除失敗', error.message);
+        window.showMessage?.('錯誤', error.message);
       }
-    });
-  }
+    };
+    reader.readAsText(file);
+  });
+}
+
+// --- [執行邏輯] 刪除 KML 處理 ---
+if (els.deleteSelectedKmlBtn) {
+  els.deleteSelectedKmlBtn.addEventListener('click', async () => {
+    const kmlIdToDelete = els.kmlLayerSelectDashboard.value;
+    if (!kmlIdToDelete) return;
+
+    try {
+      await getKmlCollectionRef().doc(kmlIdToDelete).delete();
+      
+      // 全域同步
+      const now = Date.now();
+      await db.collection('artifacts').doc(appId).collection('public').doc('data')
+        .collection('metadata').doc('sync').set({ lastUpdate: now, lastUpdateTime: new Date(now).toLocaleString('zh-TW') }, { merge: true });
+
+      localStorage.removeItem('kml_list_cache_data');
+      localStorage.removeItem(`kml_data_${kmlIdToDelete}`);
+
+      window.showMessage?.('成功', '圖層已刪除。');
+      await optimizedUpdateKmlLayerSelects();
+      window.clearAllKmlLayers?.();
+      updatePinButtonState();
+    } catch (error) {
+      window.showMessage?.('刪除失敗', error.message);
+    }
+  });
+}
   
   // 產生一次性註冊碼（英文字母 + 數字）
   const generateRegistrationAlphanumericCode = () => {
