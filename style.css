@@ -612,7 +612,7 @@ body {
 .action-buttons.google-btn img { width: 20px; height: 20px; }
 .action-buttons.upload-btn { background-color: #007bff; }
 .action-buttons.delete-btn { background-color: #dc3545; }
-.action-buttons.audit-btn {background-color: #fd7e14; 
+.action-buttons.audit-btn { background-color: #fd7e14; }
 
 /* Dashboard 內部按鈕風格 */
 .admin-option-button.upload-kml-dashboard-btn { background-color: #007bff; }

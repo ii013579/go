@@ -918,7 +918,7 @@ if (els.deleteSelectedKmlBtn) {
 }
 
 // 清查邏輯
-const auditBtn = document.getElementById('auditKmlBtn');
+const auditBtn = document.getElementById('auditBtn');
 if (auditBtn) {
     auditBtn.addEventListener('click', () => {
         // 確保清查模組函式已載入
