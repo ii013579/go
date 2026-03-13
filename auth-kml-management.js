@@ -24,6 +24,7 @@
     deleteKmlSectionDashboard: $('deleteKmlSectionDashboard'),
     kmlLayerSelectDashboard: $('kmlLayerSelectDashboard'),
     deleteSelectedKmlBtn: $('deleteSelectedKmlBtn'),
+    triggerUploadBtn: $('triggerUploadBtn'),
 
     registrationSettingsSection: $('registrationSettingsSection'),
     generateRegistrationCodeBtn: $('generateRegistrationCodeBtn'),
@@ -704,6 +705,34 @@ async function optimizedUpdateKmlLayerSelects() {
       }
     });
   }
+
+// --- [新增] 觸發選檔按鈕邏輯 ---
+if (els.triggerUploadBtn && els.hiddenKmlFileInput) {
+  els.triggerUploadBtn.addEventListener('click', () => {
+    els.hiddenKmlFileInput.click();
+  });
+}
+
+// --- [新增] 監聽檔案選擇後的確認動作 ---
+if (els.hiddenKmlFileInput) {
+  els.hiddenKmlFileInput.addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    // 彈出確認視窗，顯示選擇的檔案名稱
+    const confirmUpload = await window.showConfirmationModal(
+      '確認上傳',
+      `您選擇了檔案：<strong>${file.name}</strong><br>確定要執行上傳嗎？`
+    );
+
+    if (confirmUpload) {
+      // 觸發下方的上傳邏輯
+      els.uploadKmlSubmitBtnDashboard.click();
+    } else {
+      els.hiddenKmlFileInput.value = ''; // 取消則清空
+    }
+  });
+}
 
 // 上傳 KML 處理
   if (els.uploadKmlSubmitBtnDashboard) {

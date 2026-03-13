@@ -54,13 +54,15 @@
 
       <div id="kmlControlsDashboard">
           <div id="uploadKmlSectionDashboard">
-              <label for="hiddenKmlFileInput">上傳 KML:</label>
-              <!-- hiddenKmlFileInput 僅用於程式碼邏輯，不直接顯示 -->
+              <label>上傳 KML:</label>
               <input type="file" id="hiddenKmlFileInput" accept=".kml" style="display: none;" />
-              <!-- 這個 span 用於顯示選擇的檔案名稱，並透過點擊觸發 hiddenKmlFileInput -->
-              <span id="selectedKmlFileNameDashboard">尚未選擇檔案</span>
-              <button id="uploadKmlSubmitBtnDashboard" class="action-buttons upload-btn" disabled>上傳</button>
-          </div>
+              
+              <button id="triggerUploadBtn" class="action-buttons upload-btn" style="width: 80px; flex-shrink: 0;">上傳</button>
+              
+              <span id="selectedKmlFileNameDashboard" style="display: none;">尚未選擇檔案</span>
+              <button id="uploadKmlSubmitBtnDashboard" style="display: none;">執行上傳(隱藏)</button>
+          </div> 
+               
           <div id="deleteKmlSectionDashboard">
               <label for="kmlLayerSelectDashboard">刪除 KML:</label>
               <select id="kmlLayerSelectDashboard" disabled>
