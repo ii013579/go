@@ -607,17 +607,19 @@ body {
   box-shadow: none;
 }
 
-/* 特定按鈕顏色（Google、上傳、刪除） */
+/* 特定按鈕顏色（Google、上傳、刪除、清查） */
 .action-buttons.google-btn { background-color: #4285F4; display: flex; align-items: center; justify-content: center; gap: 10px; }
 .action-buttons.google-btn img { width: 20px; height: 20px; }
 .action-buttons.upload-btn { background-color: #007bff; }
 .action-buttons.delete-btn { background-color: #dc3545; }
+.action-buttons.audit-btn {background-color: #fd7e14; 
 
 /* Dashboard 內部按鈕風格 */
 .admin-option-button.upload-kml-dashboard-btn { background-color: #007bff; }
 .admin-option-button.delete-kml-dashboard-btn { background-color: #dc3545; }
 .admin-option-button.add-user-dashboard-btn { background-color: #17a2b8; }
 .admin-option-button.add-user-dashboard-btn:hover { background-color: #138496; }
+
 
 /* ---------- 新增使用者區塊 ---------- */
 #addUserSection {

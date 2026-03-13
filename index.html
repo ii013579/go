@@ -61,8 +61,13 @@
             <button id="uploadKmlSubmitBtnDashboard" style="display: none;"></button>
     
             <button id="triggerDeleteBtn" class="action-buttons delete-btn" style="width: 80px; flex-shrink: 0;">刪除</button>
+            
+            <button id="auditKmlBtn" class="action-buttons audit-btn">清查</button>
+            
             <select id="kmlLayerSelectDashboard" style="display: none;"></select>
             <button id="deleteSelectedKmlBtn" style="display: none;"></button>
+            
+            
         </div>
     </div>
 
@@ -142,10 +147,13 @@
   <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
   <!-- 其他函式庫 -->
   <script src="https://unpkg.com/togeojson"></script> 
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
   <!-- 自定義 JS 檔案載入 -->
   <!-- 順序很重要，請確保依賴的檔案先載入 -->
   <script src="firebase-init.js"></script>
   <script src="map-logic.js"></script>
+  <script src="audit-module.js"></script>
   <script src="auth-kml-management.js"></script>
   <script src="ui-interactions.js"></script>
 </body>

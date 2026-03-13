@@ -1,4 +1,4 @@
-// auth-kml-management.js v2.03
+// auth-kml-management.js v3.01
 
 (function () {
   'use strict';
@@ -882,28 +882,64 @@ if (els.uploadKmlSubmitBtnDashboard) {
 if (els.deleteSelectedKmlBtn) {
   els.deleteSelectedKmlBtn.addEventListener('click', async () => {
     const kmlIdToDelete = els.kmlLayerSelectDashboard.value;
+    // 取得選取到的 KML 名稱，用於清理清查資料
+    const selectedOption = els.kmlLayerSelectDashboard.options[els.kmlLayerSelectDashboard.selectedIndex];
+    const kmlName = selectedOption ? selectedOption.textContent : null;
+
     if (!kmlIdToDelete) return;
 
     try {
+      // 1. 執行原有的刪除圖層邏輯
       await getKmlCollectionRef().doc(kmlIdToDelete).delete();
       
-      // 全域同步
+      // 2. 【新增】同步呼叫 audit-module 的清理函式
+      if (typeof window.cleanupAuditData === 'function' && kmlName) {
+        console.log(`[系統] 觸發清查資料清理: ${kmlName}`);
+        await window.cleanupAuditData(kmlName);
+      }
+
+      // 3. 全域同步與狀態重置
       const now = Date.now();
-      await db.collection('artifacts').doc(appId).collection('public').doc('data')
-        .collection('metadata').doc('sync').set({ lastUpdate: now, lastUpdateTime: new Date(now).toLocaleString('zh-TW') }, { merge: true });
+      await db.collection('artifacts').doc(currentAppId).collection('public').doc('data')
+        .collection('metadata').doc('sync').set({ lastUpdate: now }, { merge: true });
 
       localStorage.removeItem('kml_list_cache_data');
       localStorage.removeItem(`kml_data_${kmlIdToDelete}`);
 
-      window.showMessage?.('成功', '圖層已刪除。');
+      window.showMessage?.('成功', '圖層及相關清查資料已刪除。');
       await optimizedUpdateKmlLayerSelects();
       window.clearAllKmlLayers?.();
       updatePinButtonState();
     } catch (error) {
+      console.error("刪除失敗:", error);
       window.showMessage?.('刪除失敗', error.message);
     }
   });
 }
+
+// 清查邏輯
+const auditBtn = document.getElementById('auditKmlBtn');
+if (auditBtn) {
+    auditBtn.addEventListener('click', () => {
+        // 確保清查模組函式已載入
+        if (typeof window.openAuditInterface === 'function') {
+            const select = els.kmlLayerSelectDashboard;
+            const kmlId = select?.value;
+            const kmlName = select?.options[select.selectedIndex]?.textContent;
+
+            if (!kmlId || kmlId === "") {
+                window.showMessage?.('提示', '請先從下拉選單中選擇一個 KML 圖層進行清查。');
+                return;
+            }
+            // 呼叫 audit-module.js 定義的介面
+            window.openAuditInterface(kmlName); 
+        } else {
+            console.error("清查模組尚未載入。");
+            window.showMessage?.('錯誤', '清查功能目前無法使用。');
+        }
+    });
+}
+
   
   // 產生一次性註冊碼（英文字母 + 數字）
   const generateRegistrationAlphanumericCode = () => {
