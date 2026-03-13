@@ -785,7 +785,7 @@ if (els.hiddenKmlFileInput) {
 
     const confirmUpload = await window.showConfirmationModal(
       '確認上傳',
-      `您選擇了檔案：<br><strong>${file.name}</strong><br>確定要執行上傳嗎？`
+      `您選擇了檔案：<br><strong style="color: red;">${file.name}</strong><br>確定要執行上傳嗎？`
     );
 
     if (confirmUpload) {
