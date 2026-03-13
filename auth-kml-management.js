@@ -1094,5 +1094,23 @@ if (els.refreshUsersBtn) {
     console.error('找不到 id 為 "pinButton" 的圖釘按鈕，釘選功能無法啟用。');
   }
 
+const auditBtn = document.getElementById('auditKmlBtn');
+
+// 清查功能
+if (auditBtn) {
+    auditBtn.addEventListener('click', () => {
+        // 1. 取得選單的值
+        const select = els.kmlLayerSelectDashboard;
+        const kmlName = select?.options[select.selectedIndex]?.textContent;
+
+        // 2. 呼叫 audit-module.js 提供的公開 API
+        if (typeof window.openAuditInterface === 'function') {
+            window.openAuditInterface(kmlName);
+        } else {
+            window.showMessage?.('錯誤', '清查功能模組尚未準備好。');
+        }
+    });
+}
+
   // IIFE 結束
 })();
