@@ -26,6 +26,7 @@
     deleteSelectedKmlBtn: $('deleteSelectedKmlBtn'),
     triggerUploadBtn: $('triggerUploadBtn'),
     triggerDeleteBtn: $('triggerDeleteBtn'),
+    auditKmlBtn: document.getElementById('auditKmlBtn'),
 
     registrationSettingsSection: $('registrationSettingsSection'),
     generateRegistrationCodeBtn: $('generateRegistrationCodeBtn'),
@@ -920,17 +921,19 @@ if (els.deleteSelectedKmlBtn) {
 // 清查邏輯
 const auditBtn = document.getElementById('auditKmlBtn');
 
-if (auditBtn) {
-    auditBtn.addEventListener('click', () => {
-        // 1. 取得選單的值
+if (els.auditKmlBtn) {
+    els.auditKmlBtn.addEventListener('click', () => {
         const select = els.kmlLayerSelectDashboard;
-        const kmlName = select?.options[select.selectedIndex]?.textContent;
-
-        // 2. 呼叫 audit-module.js 提供的公開 API
+        const kmlName = select.options[select.selectedIndex]?.textContent;
+        
+        console.log("正在呼叫清查介面，圖層名稱:", kmlName);
+        
+        // 檢查是否成功呼叫模組
         if (typeof window.openAuditInterface === 'function') {
             window.openAuditInterface(kmlName);
         } else {
-            window.showMessage?.('錯誤', '清查功能模組尚未準備好。');
+            console.error("錯誤：window.openAuditInterface 未定義");
+            window.showMessage?.('錯誤', '清查功能模組尚未啟動。');
         }
     });
 }
