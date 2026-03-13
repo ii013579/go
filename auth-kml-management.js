@@ -89,7 +89,7 @@
   const createOption = (value, text) => {
     const o = document.createElement('option');
     o.value = value;
-    o.ˇ = text;
+    o.textContent = text;
     return o;
   };
 
