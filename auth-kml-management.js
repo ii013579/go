@@ -918,24 +918,19 @@ if (els.deleteSelectedKmlBtn) {
 }
 
 // 清查邏輯
-const auditBtn = document.getElementById('auditBtn');
+const auditBtn = document.getElementById('auditKmlBtn');
+
 if (auditBtn) {
     auditBtn.addEventListener('click', () => {
-        // 確保清查模組函式已載入
-        if (typeof window.openAuditInterface === 'function') {
-            const select = els.kmlLayerSelectDashboard;
-            const kmlId = select?.value;
-            const kmlName = select?.options[select.selectedIndex]?.textContent;
+        // 1. 取得選單的值
+        const select = els.kmlLayerSelectDashboard;
+        const kmlName = select?.options[select.selectedIndex]?.textContent;
 
-            if (!kmlId || kmlId === "") {
-                window.showMessage?.('提示', '請先從下拉選單中選擇一個 KML 圖層進行清查。');
-                return;
-            }
-            // 呼叫 audit-module.js 定義的介面
-            window.openAuditInterface(kmlName); 
+        // 2. 呼叫 audit-module.js 提供的公開 API
+        if (typeof window.openAuditInterface === 'function') {
+            window.openAuditInterface(kmlName);
         } else {
-            console.error("清查模組尚未載入。");
-            window.showMessage?.('錯誤', '清查功能目前無法使用。');
+            window.showMessage?.('錯誤', '清查功能模組尚未準備好。');
         }
     });
 }
@@ -1093,24 +1088,6 @@ if (els.refreshUsersBtn) {
   } else {
     console.error('找不到 id 為 "pinButton" 的圖釘按鈕，釘選功能無法啟用。');
   }
-
-const auditBtn = document.getElementById('auditKmlBtn');
-
-// 清查功能
-if (auditBtn) {
-    auditBtn.addEventListener('click', () => {
-        // 1. 取得選單的值
-        const select = els.kmlLayerSelectDashboard;
-        const kmlName = select?.options[select.selectedIndex]?.textContent;
-
-        // 2. 呼叫 audit-module.js 提供的公開 API
-        if (typeof window.openAuditInterface === 'function') {
-            window.openAuditInterface(kmlName);
-        } else {
-            window.showMessage?.('錯誤', '清查功能模組尚未準備好。');
-        }
-    });
-}
-
+  
   // IIFE 結束
 })();
