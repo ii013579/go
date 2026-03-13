@@ -89,7 +89,7 @@
   const createOption = (value, text) => {
     const o = document.createElement('option');
     o.value = value;
-    o.textContent = text;
+    o.ˇ = text;
     return o;
   };
 
@@ -276,7 +276,7 @@ const tryLoadPinnedKmlLayerWhenReady = () => {
 
         // 顯示 modal
         titleEl.textContent = title;
-        msgEl.textContent = message;
+        msgEl.innerHTML = message;
         overlay.classList.add('visible');
 
         // 清理與回傳
