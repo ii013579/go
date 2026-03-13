@@ -53,14 +53,14 @@
       <h3 id="userEmailDisplay"></h3>
 
     <div id="kmlControlsDashboard">
-        <div id="uploadKmlSectionDashboard">
+        <div id="unifiedKmlActions" style="display: flex; align-items: center; gap: 8px;">
+            <label style="font-size: 14px; font-weight: 500; white-space: nowrap;">KML 管理:</label>
+            
             <input type="file" id="hiddenKmlFileInput" accept=".kml" style="display: none;" />
-            <button id="triggerUploadBtn" class="action-buttons" style="width: 80px; flex-shrink: 0;">上傳KML</button>
+            <button id="triggerUploadBtn" class="action-buttons" style="width: 80px; flex-shrink: 0;">上傳</button>
             <button id="uploadKmlSubmitBtnDashboard" style="display: none;"></button>
-        </div>
     
-        <div id="deleteKmlSectionDashboard" class="dashboard-section">
-            <button id="triggerDeleteBtn" class="action-buttons delete-btn" style="width: 80px; flex-shrink: 0;">刪除KML</button>           
+            <button id="triggerDeleteBtn" class="action-buttons delete-btn" style="width: 80px; flex-shrink: 0;">刪除</button>
             <select id="kmlLayerSelectDashboard" style="display: none;"></select>
             <button id="deleteSelectedKmlBtn" style="display: none;"></button>
         </div>
