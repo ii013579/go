@@ -22,11 +22,11 @@
     uploadKmlSubmitBtnDashboard: $('uploadKmlSubmitBtnDashboard'),
     hiddenKmlFileInput: $('hiddenKmlFileInput'),
     deleteKmlSectionDashboard: $('deleteKmlSectionDashboard'),
-    kmlLayerSelectDashboard: $('kmlLayerSelectDashboard'),
     deleteSelectedKmlBtn: $('deleteSelectedKmlBtn'),
     triggerUploadBtn: $('triggerUploadBtn'),
     triggerDeleteBtn: $('triggerDeleteBtn'),
     auditKmlBtn: document.getElementById('auditKmlBtn'),
+    kmlLayerSelectDashboard: document.getElementById('kmlLayerSelectDashboard')
 
     registrationSettingsSection: $('registrationSettingsSection'),
     generateRegistrationCodeBtn: $('generateRegistrationCodeBtn'),
