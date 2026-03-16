@@ -919,72 +919,78 @@ if (els.deleteSelectedKmlBtn) {
 }
 
 // --- [清查功能整合邏輯] ---
-  const auditBtn = $('auditKmlBtn');
-  const zipBtn = $('downloadAuditZipBtn');
+const auditBtn = $('auditKmlBtn');
+const zipBtn = $('downloadAuditZipBtn');
 
-  if (auditBtn) {
+if (auditBtn) {
     auditBtn.onclick = async () => {
-      const select = els.kmlLayerSelectDashboard;
-      const kmlName = select?.options[select.selectedIndex]?.textContent;
+        const select = els.kmlLayerSelectDashboard;
+        const kmlName = select?.options[select.selectedIndex]?.textContent;
 
-      if (!kmlName || select.value === "") {
-        window.showMessage?.('提示', '請先選擇要清查的 KML 圖層。');
-        return;
-      }
-
-      // 判斷狀態：如果要「關閉」
-      if (auditBtn.textContent === "關閉清查") {
-        if (typeof window.setAuditMode === 'function') {
-          window.setAuditMode(false);
+        if (!kmlName || select.value === "") {
+            window.showMessage?.('提示', '請先選擇要清查的 KML 圖層。');
+            return;
         }
-        auditBtn.textContent = "開啟清查";
-        auditBtn.style.backgroundColor = "#fd7e14"; // 恢復橘色
-        if (zipBtn) zipBtn.style.display = "none";
-        return;
-      }
 
-      // 判斷狀態：如果要「開啟」 (顯示設定彈窗)
-      const modalContent = `
-        <div style="text-align: left; margin-top: 10px;">
-          <p>請輸入預計清查的照片張數：</p>
-          <input type="number" id="auditPhotoCountInput" value="10" min="1" max="100" 
-                 style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
-        </div>`;
-
-      const confirmSet = await window.showConfirmationModal('設定清查目標', modalContent);
-
-      if (confirmSet) {
-        const count = document.getElementById('auditPhotoCountInput').value;
-        if (typeof window.openAuditInterface === 'function') {
-          window.openAuditInterface(kmlName, count);
-          
-          // 切換按鈕 UI
-          auditBtn.textContent = "關閉清查";
-          auditBtn.style.backgroundColor = "#6c757d"; // 變灰色代表運作中
-          if (zipBtn) zipBtn.style.display = "block";  // 顯示下載按鈕
+        // 狀態 A：關閉邏輯 (目前按鈕顯示 "關閉清查")
+        if (auditBtn.textContent === "關閉清查") {
+            if (typeof window.setAuditMode === 'function') {
+                window.setAuditMode(false);
+            }
+            auditBtn.textContent = "開啟清查";
+            auditBtn.classList.remove('active');
+            if (zipBtn) zipBtn.style.display = "none";
+            return;
         }
-      }
-    };
-  }
 
-  // 綁定下載按鈕
-  if (zipBtn) {
-    zipBtn.onclick = () => {
-      const kmlName = els.kmlLayerSelectDashboard.options[els.kmlLayerSelectDashboard.selectedIndex]?.textContent;
-      if (typeof window.downloadAuditZip === 'function') {
-        window.downloadAuditZip(kmlName);
-      }
-    };
-  }
+        // 狀態 B：開啟邏輯 (彈出張數設定)
+        const modalContent = `
+            <div style="text-align: left; margin-top: 10px;">
+                <p>請設定預計清查照片張數 (1-100)：</p>
+                <input type="number" id="auditPhotoCountInput" value="10" min="1" max="100" 
+                       style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px;">
+            </div>`;
 
-// 綁定下載 ZIP 動作
+        const confirmed = await window.showConfirmationModal('啟動圖層清查', modalContent);
+
+        if (confirmed) {
+            const countInput = document.getElementById('auditPhotoCountInput');
+            const count = countInput ? countInput.value : 10;
+            
+            if (typeof window.openAuditInterface === 'function') {
+                // 1. 呼叫核心模組介面
+                window.openAuditInterface(kmlName, count);
+                
+                // 2. 更新 UI 狀態
+                auditBtn.textContent = "關閉清查";
+                auditBtn.classList.add('active');
+                if (zipBtn) zipBtn.style.display = "block";
+                
+                window.showMessage?.('成功', `已開啟「${kmlName}」清查模式<br>目標：${count} 張照片`);
+            }
+        }
+    };
+}
+
+// 綁定下載按鈕
 if (zipBtn) {
-    zipBtn.addEventListener('click', () => {
+    zipBtn.onclick = () => {
         const kmlName = els.kmlLayerSelectDashboard.options[els.kmlLayerSelectDashboard.selectedIndex]?.textContent;
         if (typeof window.downloadAuditZip === 'function') {
             window.downloadAuditZip(kmlName);
         }
-    });
+    };
+}
+
+// 統一綁定下載按鈕 (只留一個)
+if (zipBtn) {
+    zipBtn.onclick = () => {
+        const select = els.kmlLayerSelectDashboard;
+        const kmlName = select?.options[select.selectedIndex]?.textContent;
+        if (kmlName && typeof window.downloadAuditZip === 'function') {
+            window.downloadAuditZip(kmlName);
+        }
+    };
 }
 
   
