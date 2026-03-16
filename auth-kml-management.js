@@ -920,21 +920,19 @@ if (els.deleteSelectedKmlBtn) {
 
 // --- [清查功能整合邏輯] ---
 const auditBtn = $('auditKmlBtn');
-const zipBtn = $('downloadAuditZipBtn');
 
 if (auditBtn) {
     auditBtn.onclick = async () => {
-        // 1. 關閉邏輯：如果已經在清查中，點擊即為關閉
+        // 1. 關閉邏輯：若按鈕已啟用，則關閉清查
         if (auditBtn.classList.contains('active')) {
             window.setAuditMode?.(false);
             auditBtn.textContent = "開啟清查";
             auditBtn.classList.remove('active');
-            if (zipBtn) zipBtn.style.display = "none";
             window.showMessage?.('提示', '清查模式已關閉。');
             return;
         }
 
-        // 2. 開啟邏輯：顯示對話框
+        // 2. 開啟邏輯：呼叫模組渲染彈窗
         if (typeof window.renderAuditModal === 'function') {
             const select = els.kmlLayerSelectDashboard;
             const layers = [];
@@ -948,21 +946,16 @@ if (auditBtn) {
             const confirmed = await window.showConfirmationModal('啟動圖層清查', modalContent);
 
             if (confirmed) {
-                // 抓取勾選的圖層與張數
+                // 抓取勾選清單與張數設定
                 const checkedBoxes = document.querySelectorAll('input[name="auditKml"]:checked');
                 const checkedLayers = [...checkedBoxes].map(c => c.value);
                 const count = document.getElementById('auditPhotoCountInput')?.value || 10;
                 
                 if (checkedLayers.length > 0) {
-                    // 呼叫 audit-module 執行核心邏輯
                     window.openAuditInterface(checkedLayers, count);
-                    
-                    // UI 更新
                     auditBtn.textContent = "關閉清查";
                     auditBtn.classList.add('active');
-                    if (zipBtn) zipBtn.style.display = "block";
-                    
-                    window.showMessage?.('成功', `已開啟 ${checkedLayers.length} 個圖層的清查模式`);
+                    window.showMessage?.('成功', `已開啟 ${checkedLayers.length} 個圖層清查`);
                 } else {
                     window.showMessage?.('提示', '請至少選擇一個圖層。');
                 }
@@ -971,18 +964,6 @@ if (auditBtn) {
     };
 }
 
-// 統一綁定下載按鈕
-if (zipBtn) {
-    zipBtn.onclick = () => {
-        const select = els.kmlLayerSelectDashboard;
-        const kmlName = select?.options[select.selectedIndex]?.textContent;
-        if (kmlName) {
-            window.downloadAuditZip?.(kmlName);
-        } else {
-            window.showMessage?.('提示', '請先選擇一個圖層以進行下載。');
-        }
-    };
-}
   
 // --- [產生一次性註冊碼（英文字母 + 數字）邏輯 ---
 const generateRegistrationAlphanumericCode = () => {
