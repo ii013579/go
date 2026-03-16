@@ -363,5 +363,39 @@
             console.error(`清理圖層 ${kmlName} 的清查資料時發生錯誤:`, error);
         }
     };
+    
+    // ==========================================
+    // 公開 API 給外部管理按鈕呼叫 (整合至 window)
+    // ==========================================
+    
+    // 開啟清查模式
+    window.openAuditInterface = function(kmlName, targetCount) {
+        isAuditMode = true; // 設定模組內部的狀態
+        auditPhotoCount = parseInt(targetCount); // 設定照片張數
+        
+        console.log(`%c[Audit] 啟動清查: ${kmlName}, 目標: ${targetCount}張`, "color: orange; font-weight: bold;");
+        
+        // 觸發模組原本的啟動邏輯 (如果有對應函式請呼叫)
+        if (typeof checkAuditPermission === 'function') checkAuditPermission();
+        window.showMessage?.('成功', `已開啟「${kmlName}」清查模式<br>目標張數：${targetCount}`);
+    };
 
+    // 關閉清查模式 (手動切換狀態)
+    window.setAuditMode = function(isActive) {
+        isAuditMode = isActive;
+        if (!isActive) {
+            console.log("[Audit] 清查模式已手動關閉");
+        }
+    };
+
+    // 供外部觸發下載 ZIP
+    window.downloadAuditZip = async function(kmlName) {
+        // 觸發模組內原本的下載邏輯
+        const downloadBtn = document.getElementById('downloadAuditBtn');
+        if (downloadBtn) {
+            downloadBtn.click();
+        } else {
+            console.error("找不到內部的 downloadAuditBtn");
+        }
+    };
 })();

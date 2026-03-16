@@ -918,96 +918,145 @@ if (els.deleteSelectedKmlBtn) {
   });
 }
 
-// 清查邏輯
-const auditBtn = document.getElementById('auditKmlBtn');
+// --- [清查功能整合邏輯] ---
+  const auditBtn = $('auditKmlBtn');
+  const zipBtn = $('downloadAuditZipBtn');
 
-if (els.auditKmlBtn) {
-    els.auditKmlBtn.addEventListener('click', () => {
-        const select = els.kmlLayerSelectDashboard;
-        const kmlName = select.options[select.selectedIndex]?.textContent;
-        
-        console.log("正在呼叫清查介面，圖層名稱:", kmlName);
-        
-        // 檢查是否成功呼叫模組
+  if (auditBtn) {
+    auditBtn.onclick = async () => {
+      const select = els.kmlLayerSelectDashboard;
+      const kmlName = select?.options[select.selectedIndex]?.textContent;
+
+      if (!kmlName || select.value === "") {
+        window.showMessage?.('提示', '請先選擇要清查的 KML 圖層。');
+        return;
+      }
+
+      // 判斷狀態：如果要「關閉」
+      if (auditBtn.textContent === "關閉清查") {
+        if (typeof window.setAuditMode === 'function') {
+          window.setAuditMode(false);
+        }
+        auditBtn.textContent = "開啟清查";
+        auditBtn.style.backgroundColor = "#fd7e14"; // 恢復橘色
+        if (zipBtn) zipBtn.style.display = "none";
+        return;
+      }
+
+      // 判斷狀態：如果要「開啟」 (顯示設定彈窗)
+      const modalContent = `
+        <div style="text-align: left; margin-top: 10px;">
+          <p>請輸入預計清查的照片張數：</p>
+          <input type="number" id="auditPhotoCountInput" value="10" min="1" max="100" 
+                 style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+        </div>`;
+
+      const confirmSet = await window.showConfirmationModal('設定清查目標', modalContent);
+
+      if (confirmSet) {
+        const count = document.getElementById('auditPhotoCountInput').value;
         if (typeof window.openAuditInterface === 'function') {
-            window.openAuditInterface(kmlName);
-        } else {
-            console.error("錯誤：window.openAuditInterface 未定義");
-            window.showMessage?.('錯誤', '清查功能模組尚未啟動。');
+          window.openAuditInterface(kmlName, count);
+          
+          // 切換按鈕 UI
+          auditBtn.textContent = "關閉清查";
+          auditBtn.style.backgroundColor = "#6c757d"; // 變灰色代表運作中
+          if (zipBtn) zipBtn.style.display = "block";  // 顯示下載按鈕
+        }
+      }
+    };
+  }
+
+  // 綁定下載按鈕
+  if (zipBtn) {
+    zipBtn.onclick = () => {
+      const kmlName = els.kmlLayerSelectDashboard.options[els.kmlLayerSelectDashboard.selectedIndex]?.textContent;
+      if (typeof window.downloadAuditZip === 'function') {
+        window.downloadAuditZip(kmlName);
+      }
+    };
+  }
+
+// 綁定下載 ZIP 動作
+if (zipBtn) {
+    zipBtn.addEventListener('click', () => {
+        const kmlName = els.kmlLayerSelectDashboard.options[els.kmlLayerSelectDashboard.selectedIndex]?.textContent;
+        if (typeof window.downloadAuditZip === 'function') {
+            window.downloadAuditZip(kmlName);
         }
     });
 }
 
   
-  // 產生一次性註冊碼（英文字母 + 數字）
-  const generateRegistrationAlphanumericCode = () => {
-    const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-    const digits = '013456789';
-    let res = '';
-    for (let i = 0; i < 3; i++) res += letters.charAt(Math.floor(Math.random() * letters.length));
-    for (let i = 0; i < 5; i++) res += digits.charAt(Math.floor(Math.random() * digits.length));
-    return res;
-  };
+// --- [產生一次性註冊碼（英文字母 + 數字）邏輯 ---
+const generateRegistrationAlphanumericCode = () => {
+  const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  const digits = '013456789';
+  let res = '';
+  for (let i = 0; i < 3; i++) res += letters.charAt(Math.floor(Math.random() * letters.length));
+  for (let i = 0; i < 5; i++) res += digits.charAt(Math.floor(Math.random() * digits.length));
+  return res;
+};
 
-  // 生成註冊碼按鈕（僅 owner 可用）
-  if (els.generateRegistrationCodeBtn) {
-    els.generateRegistrationCodeBtn.addEventListener('click', async () => {
-      if (window.currentUserRole !== 'owner') {
-        window.showMessage?.('權限不足', '只有管理員才能生成註冊碼。');
-        return;
-      }
-      if (registrationCodeTimer) { clearInterval(registrationCodeTimer); registrationCodeTimer = null; }
+// 生成註冊碼按鈕（僅 owner 可用）
+if (els.generateRegistrationCodeBtn) {
+  els.generateRegistrationCodeBtn.addEventListener('click', async () => {
+    if (window.currentUserRole !== 'owner') {
+      window.showMessage?.('權限不足', '只有管理員才能生成註冊碼。');
+      return;
+    }
+    if (registrationCodeTimer) { clearInterval(registrationCodeTimer); registrationCodeTimer = null; }
 
-      try {
-        const code = generateRegistrationAlphanumericCode();
-        let countdownSeconds = 60;
-        const expiryDate = new Date();
-        expiryDate.setSeconds(expiryDate.getSeconds() + countdownSeconds);
+    try {
+      const code = generateRegistrationAlphanumericCode();
+      let countdownSeconds = 60;
+      const expiryDate = new Date();
+      expiryDate.setSeconds(expiryDate.getSeconds() + countdownSeconds);
 
-        // 將註冊碼與過期時間寫入 Firestore（server-side 規則亦應強制驗證）
-        await db.collection('settings').doc('registration').set({
-          oneTimeCode: code,
-          oneTimeCodeExpiry: firebase.firestore.Timestamp.fromDate(expiryDate)
-        }, { merge: true });
+      // 將註冊碼與過期時間寫入 Firestore（server-side 規則亦應強制驗證）
+      await db.collection('settings').doc('registration').set({
+        oneTimeCode: code,
+        oneTimeCodeExpiry: firebase.firestore.Timestamp.fromDate(expiryDate)
+      }, { merge: true });
 
-        if (els.registrationCodeDisplay) els.registrationCodeDisplay.textContent = code;
-        if (els.registrationCodeCountdown) els.registrationCodeCountdown.textContent = ` (剩餘 ${countdownSeconds} 秒)`;
-        if (els.registrationCodeDisplay) els.registrationCodeDisplay.style.display = 'inline-block';
-        if (els.registrationCodeCountdown) els.registrationCodeCountdown.style.display = 'inline-block';
-        if (els.registrationExpiryDisplay) els.registrationExpiryDisplay.style.display = 'none';
+      if (els.registrationCodeDisplay) els.registrationCodeDisplay.textContent = code;
+      if (els.registrationCodeCountdown) els.registrationCodeCountdown.textContent = ` (剩餘 ${countdownSeconds} 秒)`;
+      if (els.registrationCodeDisplay) els.registrationCodeDisplay.style.display = 'inline-block';
+      if (els.registrationCodeCountdown) els.registrationCodeCountdown.style.display = 'inline-block';
+      if (els.registrationExpiryDisplay) els.registrationExpiryDisplay.style.display = 'none';
 
-        // 啟動倒數計時器（前端顯示用）
-        registrationCodeTimer = setInterval(() => {
-          countdownSeconds--;
-          if (countdownSeconds >= 0) {
-            if (els.registrationCodeCountdown) els.registrationCodeCountdown.textContent = ` (剩餘 ${countdownSeconds} 秒)`;
-          } else {
-            clearInterval(registrationCodeTimer);
-            registrationCodeTimer = null;
-            if (els.registrationCodeDisplay) els.registrationCodeDisplay.textContent = '註冊碼已過期';
-            if (els.registrationCodeCountdown) els.registrationCodeCountdown.style.display = 'none';
-          }
-        }, 1000);
-
-        // 嘗試複製到剪貼簿（優先使用 navigator.clipboard）
-        try {
-          await navigator.clipboard.writeText(code);
-        } catch (e) {
-          const tempInput = document.createElement('textarea');
-          tempInput.value = code;
-          document.body.appendChild(tempInput);
-          tempInput.select();
-          document.execCommand('copy');
-          document.body.removeChild(tempInput);
+      // 啟動倒數計時器（前端顯示用）
+      registrationCodeTimer = setInterval(() => {
+        countdownSeconds--;
+        if (countdownSeconds >= 0) {
+          if (els.registrationCodeCountdown) els.registrationCodeCountdown.textContent = ` (剩餘 ${countdownSeconds} 秒)`;
+        } else {
+          clearInterval(registrationCodeTimer);
+          registrationCodeTimer = null;
+          if (els.registrationCodeDisplay) els.registrationCodeDisplay.textContent = '註冊碼已過期';
+          if (els.registrationCodeCountdown) els.registrationCodeCountdown.style.display = 'none';
         }
+      }, 1000);
 
-        window.showMessage?.('成功', `一次性註冊碼已生成並複製到剪貼簿，設定為 ${60} 秒後過期！`);
-      } catch (error) {
-        console.error("生成註冊碼時出錯:", error);
-        window.showMessage?.('錯誤', `生成註冊碼失敗: ${error.message}`);
+      // 嘗試複製到剪貼簿（優先使用 navigator.clipboard）
+      try {
+        await navigator.clipboard.writeText(code);
+      } catch (e) {
+        const tempInput = document.createElement('textarea');
+        tempInput.value = code;
+        document.body.appendChild(tempInput);
+        tempInput.select();
+        document.execCommand('copy');
+        document.body.removeChild(tempInput);
       }
-    });
-  }
+
+      window.showMessage?.('成功', `一次性註冊碼已生成並複製到剪貼簿，設定為 ${60} 秒後過期！`);
+    } catch (error) {
+      console.error("生成註冊碼時出錯:", error);
+      window.showMessage?.('錯誤', `生成註冊碼失敗: ${error.message}`);
+    }
+  });
+}
 
 // 刷新使用者列表按鈕（切換顯示、整合快取清除邏輯）
 if (els.refreshUsersBtn) {

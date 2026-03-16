@@ -762,3 +762,24 @@ body {
 canvas {
     -webkit-tap-highlight-color: transparent;
 }
+
+/* ---------- 清查按鈕 ---------- */
+/* 清查按鈕 - 橘色 */
+.action-buttons.audit-btn {
+    background: linear-gradient(135deg, #fd7e14, #e8590c);
+    color: white;
+    width: 100px;
+}
+
+/* 下載按鈕 - 綠色 (預設隱藏) */
+.action-buttons.download-btn {
+    background: linear-gradient(135deg, #28a745, #218838);
+    color: white;
+    width: 100px;
+    display: none; /* 初始隱藏 */
+}
+
+/* 當按鈕處於「關閉清查」狀態時的顏色 (深灰色) */
+.action-buttons.audit-btn.active {
+    background: #6c757d;
+}
