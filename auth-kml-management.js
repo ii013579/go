@@ -924,75 +924,65 @@ const zipBtn = $('downloadAuditZipBtn');
 
 if (auditBtn) {
     auditBtn.onclick = async () => {
-        const select = els.kmlLayerSelectDashboard;
-        const kmlName = select?.options[select.selectedIndex]?.textContent;
-
-        if (!kmlName || select.value === "") {
-            window.showMessage?.('提示', '請先選擇要清查的 KML 圖層。');
-            return;
-        }
-
-        // 狀態 A：關閉邏輯 (目前按鈕顯示 "關閉清查")
-        if (auditBtn.textContent === "關閉清查") {
-            if (typeof window.setAuditMode === 'function') {
-                window.setAuditMode(false);
-            }
+        // 1. 關閉邏輯：如果已經在清查中，點擊即為關閉
+        if (auditBtn.classList.contains('active')) {
+            window.setAuditMode?.(false);
             auditBtn.textContent = "開啟清查";
             auditBtn.classList.remove('active');
             if (zipBtn) zipBtn.style.display = "none";
+            window.showMessage?.('提示', '清查模式已關閉。');
             return;
         }
 
-        // 狀態 B：開啟邏輯 (彈出張數設定)
-        const modalContent = `
-            <div style="text-align: left; margin-top: 10px;">
-                <p>請設定預計清查照片張數 (1-100)：</p>
-                <input type="number" id="auditPhotoCountInput" value="10" min="1" max="100" 
-                       style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px;">
-            </div>`;
+        // 2. 開啟邏輯：顯示對話框
+        if (typeof window.renderAuditModal === 'function') {
+            const select = els.kmlLayerSelectDashboard;
+            const layers = [];
+            for (let i = 0; i < select.options.length; i++) {
+                if (select.options[i].value) {
+                    layers.push({ name: select.options[i].textContent });
+                }
+            }
 
-        const confirmed = await window.showConfirmationModal('啟動圖層清查', modalContent);
+            const modalContent = window.renderAuditModal(layers);
+            const confirmed = await window.showConfirmationModal('啟動圖層清查', modalContent);
 
-        if (confirmed) {
-            const countInput = document.getElementById('auditPhotoCountInput');
-            const count = countInput ? countInput.value : 10;
-            
-            if (typeof window.openAuditInterface === 'function') {
-                // 1. 呼叫核心模組介面
-                window.openAuditInterface(kmlName, count);
+            if (confirmed) {
+                // 抓取勾選的圖層與張數
+                const checkedBoxes = document.querySelectorAll('input[name="auditKml"]:checked');
+                const checkedLayers = [...checkedBoxes].map(c => c.value);
+                const count = document.getElementById('auditPhotoCountInput')?.value || 10;
                 
-                // 2. 更新 UI 狀態
-                auditBtn.textContent = "關閉清查";
-                auditBtn.classList.add('active');
-                if (zipBtn) zipBtn.style.display = "block";
-                
-                window.showMessage?.('成功', `已開啟「${kmlName}」清查模式<br>目標：${count} 張照片`);
+                if (checkedLayers.length > 0) {
+                    // 呼叫 audit-module 執行核心邏輯
+                    window.openAuditInterface(checkedLayers, count);
+                    
+                    // UI 更新
+                    auditBtn.textContent = "關閉清查";
+                    auditBtn.classList.add('active');
+                    if (zipBtn) zipBtn.style.display = "block";
+                    
+                    window.showMessage?.('成功', `已開啟 ${checkedLayers.length} 個圖層的清查模式`);
+                } else {
+                    window.showMessage?.('提示', '請至少選擇一個圖層。');
+                }
             }
         }
     };
 }
 
-// 綁定下載按鈕
-if (zipBtn) {
-    zipBtn.onclick = () => {
-        const kmlName = els.kmlLayerSelectDashboard.options[els.kmlLayerSelectDashboard.selectedIndex]?.textContent;
-        if (typeof window.downloadAuditZip === 'function') {
-            window.downloadAuditZip(kmlName);
-        }
-    };
-}
-
-// 統一綁定下載按鈕 (只留一個)
+// 統一綁定下載按鈕
 if (zipBtn) {
     zipBtn.onclick = () => {
         const select = els.kmlLayerSelectDashboard;
         const kmlName = select?.options[select.selectedIndex]?.textContent;
-        if (kmlName && typeof window.downloadAuditZip === 'function') {
-            window.downloadAuditZip(kmlName);
+        if (kmlName) {
+            window.downloadAuditZip?.(kmlName);
+        } else {
+            window.showMessage?.('提示', '請先選擇一個圖層以進行下載。');
         }
     };
 }
-
   
 // --- [產生一次性註冊碼（英文字母 + 數字）邏輯 ---
 const generateRegistrationAlphanumericCode = () => {
