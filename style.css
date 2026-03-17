@@ -764,15 +764,17 @@ canvas {
 }
 
 /* ---------- 清查按鈕 ---------- */
-/* 清查按鈕 - 預設橘色 */
+/* 預設顏色 (灰或深橘) */
 .audit-btn {
-    background: linear-gradient(135deg, #fd7e14, #e8590c);
+    background-color: #666; 
     color: white;
+    transition: background-color 0.3s;
 }
 
-/* 運作中狀態 - 深灰色 */
+/* 啟動中的顏色 (亮橘) */
 .audit-btn.active {
-    background: #6c757d !important;
+    background-color: #ff8533 !important;
+    box-shadow: 0 0 10px rgba(255, 133, 51, 0.5);
 }
 
 /* 下載按鈕 - 綠色 (預設隱藏) */

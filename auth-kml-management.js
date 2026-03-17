@@ -919,51 +919,50 @@ if (els.deleteSelectedKmlBtn) {
 }
 
 // --- [清查功能整合邏輯] ---
-const auditBtn = $('auditKmlBtn');
+const auditBtn = document.getElementById('auditKmlBtn');
 
 if (auditBtn) {
     auditBtn.onclick = async () => {
-        // 1. 關閉邏輯：若按鈕已啟用，則關閉清查
-        if (auditBtn.classList.contains('active')) {
-            window.setAuditMode?.(false);
-            auditBtn.textContent = "開啟清查";
-            auditBtn.classList.remove('active');
-            window.showMessage?.('提示', '清查模式已關閉。');
-            return;
-        }
+        // 取得目前所有可用的圖層列表 (包含名稱與 ID)
+        const layers = window.getCurrentLayersList?.() || []; 
 
-        // 2. 開啟邏輯：呼叫模組渲染彈窗
-        if (typeof window.renderAuditModal === 'function') {
-            const select = els.kmlLayerSelectDashboard;
-            const layers = [];
-            for (let i = 0; i < select.options.length; i++) {
-                if (select.options[i].value) {
-                    layers.push({ name: select.options[i].textContent });
+        // 呼叫模組渲染彈窗內容
+        const modalContent = window.renderAuditModal(layers);
+        
+        // 呼叫自定義對話框，將按鈕文字改為「開啟」與「關閉」
+        const result = await window.showAuditActionModal('啟動圖層清查', modalContent);
+
+        if (result === 'open') {
+            // 使用者點擊「開啟」
+            const checkedBoxes = document.querySelectorAll('input[name="auditKml"]:checked');
+            const checkedIds = [...checkedBoxes].map(c => c.value); // 這裡拿的是 kmlId
+            const count = document.getElementById('auditPhotoCountInput')?.value || 10;
+            
+            if (checkedIds.length > 0) {
+                // 逐一針對勾選的圖層寫入清查戳記
+                for (const id of checkedIds) {
+                    await window.openAuditInterface(id, count, true);
                 }
+                auditBtn.classList.add('active'); // 僅保留顏色變化 (CSS 控制)
+                window.showMessage?.('成功', `已開啟選定圖層的清查模式`);
             }
-
-            const modalContent = window.renderAuditModal(layers);
-            const confirmed = await window.showConfirmationModal('啟動圖層清查', modalContent);
-
-            if (confirmed) {
-                // 抓取勾選清單與張數設定
-                const checkedBoxes = document.querySelectorAll('input[name="auditKml"]:checked');
-                const checkedLayers = [...checkedBoxes].map(c => c.value);
-                const count = document.getElementById('auditPhotoCountInput')?.value || 10;
-                
-                if (checkedLayers.length > 0) {
-                    window.openAuditInterface(checkedLayers, count);
-                    auditBtn.textContent = "關閉清查";
-                    auditBtn.classList.add('active');
-                    window.showMessage?.('成功', `已開啟 ${checkedLayers.length} 個圖層清查`);
-                } else {
-                    window.showMessage?.('提示', '請至少選擇一個圖層。');
-                }
+        } else if (result === 'close') {
+            // 使用者點擊「關閉」
+            const checkedBoxes = document.querySelectorAll('input[name="auditKml"]:checked');
+            const checkedIds = [...checkedBoxes].map(c => c.value);
+            
+            for (const id of checkedIds) {
+                await window.openAuditInterface(id, 10, false); // 關閉清查
             }
+            
+            // 檢查是否還有任何圖層在清查中，若無則移除顏色
+            if (Object.keys(window.auditLayersState).length === 0) {
+                auditBtn.classList.remove('active');
+            }
+            window.showMessage?.('提示', '選定圖層已關閉清查。');
         }
     };
 }
-
   
 // --- [產生一次性註冊碼（英文字母 + 數字）邏輯 ---
 const generateRegistrationAlphanumericCode = () => {
