@@ -1,6 +1,6 @@
 ﻿/**
  * audit-module.js - 清查系統完整核心邏輯
- * 職責：各別圖層戳記管理、CSS 點位渲染、照片處理、ZIP 打包下載
+ * 包含：狀態監聽、CSS 樣式判定、照片 800x600 處理、ZIP 下載、自定義對話框
  */
 (function() {
     'use strict';
@@ -8,13 +8,14 @@
     const db = firebase.firestore();
     const storage = firebase.storage();
     
-    // 本地快取：存放各圖層的清查狀態 { kmlId: { enabled: true, targetCount: 10 } }
+    // 全域狀態快取
     window.auditLayersState = {};
     const auditUnsubscribes = {};
 
-    // --- [1. 狀態監聽：監聽個別圖層資料夾下的戳記] ---
+    // --- [1. 狀態監聽：與 KML 資料夾同步] ---
     window.watchAuditStatus = function(kmlId) {
         if (auditUnsubscribes[kmlId]) return;
+        // 路徑指向個別圖層資料夾
         const path = `artifacts/kmldata-d22fb/public/data/kmlLayers/${kmlId}`;
         
         auditUnsubscribes[kmlId] = db.doc(path).onSnapshot((doc) => {
@@ -29,7 +30,7 @@
             // 狀態變更時，觸發地圖重新渲染
             if (window.refreshMapLayers) window.refreshMapLayers();
             
-            // 更新管理按鈕顏色
+            // 更新管理列按鈕樣式
             const auditBtn = document.getElementById('auditKmlBtn');
             if (auditBtn) {
                 const anyActive = Object.values(window.auditLayersState).some(s => s.enabled);
@@ -38,10 +39,10 @@
         });
     };
 
-    // --- [2. 地圖渲染：CircleMarker 樣式判定] ---
+    // --- [2. 地圖渲染：CSS 樣式判定] ---
     window.getAuditPointStyle = function(kmlId, hasRecord) {
         const style = {
-            radius: 8, // 保持與紅點一致的半徑
+            radius: 8, // 預設半徑
             fillOpacity: 1,
             color: "#ffffff", // 白色外框
             weight: 2,
@@ -53,13 +54,13 @@
         if (!config || !config.enabled) {
             style.fillColor = "#e74c3c"; // 一般模式：紅點
         } else {
-            // 清查模式：完成為粉紅(#ff85c0)，未完成為藍色(#3498db)
+            // 清查模式：完成為粉紅 (#ff85c0)，未完成為藍色 (#3498db)
             style.fillColor = hasRecord ? "#ff85c0" : "#3498db"; 
         }
         return style;
     };
 
-    // --- [3. 導航欄 UI 注入：編輯/修改按鈕與圖示] ---
+    // --- [3. 介面注入：導航欄編輯/修改按鈕] ---
     window.injectAuditTools = function(point, kmlId) {
         if (!window.auditLayersState[kmlId]?.enabled) return '';
 
@@ -78,115 +79,36 @@
             </div>`;
     };
 
-    // --- [4. 編輯器彈窗與照片處理 (800x600)] ---
-    window.tempPhotos = {}; 
-
-    window.openAuditEditor = function(pointId, kmlId, pointData) {
-        window.tempPhotos = {}; 
-        let html = `
-            <div id="auditEditor" style="text-align: left;">
-                <p><strong>標題：</strong> ${pointId}</p>
-                <div style="margin-bottom:10px;">
-                    <strong>狀況：</strong>
-                    <select id="auditStatus" style="width: 100%; padding: 8px;">
-                        <option value="存在" ${pointData.auditStatus === '存在' ? 'selected' : ''}>存在</option>
-                        <option value="破損" ${pointData.auditStatus === '破損' ? 'selected' : ''}>破損</option>
-                        <option value="遺失" ${pointData.auditStatus === '遺失' ? 'selected' : ''}>遺失</option>
-                    </select>
-                </div>
-                <div style="margin-bottom:10px;">
-                    <strong>備註：</strong>
-                    <textarea id="auditNote" style="width: 100%; height: 60px; padding: 8px;">${pointData.auditNote || ''}</textarea>
-                </div>
-                <p><strong>照片 (2~8 張)：</strong></p>
-                <div id="photoGrid" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;">
-                    ${Array.from({length: 8}, (_, i) => `
-                        <div onclick="document.getElementById('file_${i}').click()" 
-                             style="width: 100%; aspect-ratio: 1; border: 1px dashed #aaa; display: flex; align-items: center; justify-content: center; cursor: pointer; position: relative; background: #fafafa;">
-                            <span id="label_${i}">${i + 1}</span>
-                            <img id="img_${i}" style="display: none; width: 100%; height: 100%; object-fit: cover;">
-                            <input type="file" id="file_${i}" accept="image/*" capture="camera" style="display: none;" onchange="window.handleAuditPhoto(this, ${i}, '${pointId}')">
-                        </div>
-                    `).join('')}
-                </div>
-            </div>`;
-
-        window.showConfirmationModal(`點位清查 - ${pointId}`, html, async () => {
-            await window.saveAuditData(pointId, kmlId);
+    // --- [4. 對話框核心：修正 showAuditActionModal] ---
+    window.showAuditActionModal = function(title, content) {
+        return new Promise((resolve) => {
+            if (typeof Swal === 'undefined') {
+                console.error("SweetAlert2 未載入");
+                return resolve(null);
+            }
+            Swal.fire({
+                title: title,
+                html: content,
+                showCancelButton: true,
+                showDenyButton: true,
+                confirmButtonText: '開啟',
+                denyButtonText: '關閉',
+                cancelButtonText: '取消',
+                confirmButtonColor: '#ff8533', // 清查橘
+                denyButtonColor: '#4a90e2',    // 關閉藍
+                reverseButtons: true
+            }).then((result) => {
+                if (result.isConfirmed) resolve('open');
+                else if (result.isDenied) resolve('close');
+                else resolve(null);
+            });
         });
     };
 
-    window.handleAuditPhoto = function(input, index, pointId) {
-        if (!input.files?.[0]) return;
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            const img = new Image();
-            img.onload = () => {
-                const canvas = document.createElement('canvas');
-                canvas.width = 800; canvas.height = 600; // 強制轉成 800x600尺寸
-                const ctx = canvas.getContext('2d');
-                ctx.drawImage(img, 0, 0, 800, 600);
-                canvas.toBlob((blob) => {
-                    window.tempPhotos[index] = blob;
-                    const preview = document.getElementById(`img_${index}`);
-                    preview.src = URL.createObjectURL(blob);
-                    preview.style.display = 'block';
-                    document.getElementById(`label_${index}`).style.display = 'none';
-                }, 'image/jpeg', 0.8);
-            };
-            img.src = e.target.result;
-        };
-        reader.readAsDataURL(input.files[0]);
-    };
-
-    // --- [5. 儲存與下載邏輯 (路徑解耦)] ---
-    window.saveAuditData = async function(pointId, kmlId) {
-        const status = document.getElementById('auditStatus').value;
-        const note = document.getElementById('auditNote').value;
-        const path = `artifacts/kmldata-d22fb/public/data/kmlLayers/${kmlId}`;
-
-        // 1. 上傳至 Storage (檔名：點位-序號)
-        const uploadTasks = Object.entries(window.tempPhotos).map(([idx, blob]) => {
-            const ref = storage.ref(`${kmlId}/${pointId}-${parseInt(idx)+1}.jpg`);
-            return ref.put(blob);
-        });
-        await Promise.all(uploadTasks);
-
-        // 2. 寫入狀況與備註到圖層 Doc
-        const doc = await db.doc(path).get();
-        const nodes = doc.data().nodes || [];
-        const updatedNodes = nodes.map(n => n.id === pointId ? { ...n, auditStatus: status, auditNote: note } : n);
-        await db.doc(path).update({ nodes: updatedNodes });
-    };
-
-    window.downloadAuditZip = async function(kmlId, kmlName) {
-        const zip = new JSZip();
-        const doc = await db.doc(`artifacts/kmldata-d22fb/public/data/kmlLayers/${kmlId}`).get();
-        const nodes = doc.data().nodes || [];
-
-        // 製作 CSV
-        let csv = "\ufeff點名,狀況,備註\n";
-        nodes.forEach(n => { if(n.auditStatus) csv += `${n.id},${n.auditStatus},${n.auditNote || ''}\n`; });
-        zip.file("清查紀錄.csv", csv);
-
-        // 打包照片
-        const photoFolder = zip.folder("照片檔案");
-        const list = await storage.ref(kmlId).listAll();
-        await Promise.all(list.items.map(async (item) => {
-            const blob = await (await fetch(await item.getDownloadURL())).blob();
-            photoFolder.file(item.name, blob);
-        }));
-
-        const content = await zip.generateAsync({type:"blob"});
-        saveAs(content, `${kmlName}_清查報告.zip`);
-    };
-
-    // --- [6. UI 彈窗渲染與操作介面] ---
     window.renderAuditModal = function(layers) {
-        let html = `
-            <div style="text-align: left; margin-top: 10px;">
-                <p>請勾選清查圖層：</p>
-                <div id="auditLayerList" style="max-height: 250px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; border-radius: 8px;">`;
+        let html = `<div style="text-align: left; margin-top: 10px;">
+            <p>請勾選清查圖層：</p>
+            <div id="auditLayerList" style="max-height: 250px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; border-radius: 8px;">`;
         
         layers.forEach(layer => {
             const isEnabled = window.auditLayersState[layer.id]?.enabled;
@@ -214,7 +136,52 @@
         if (btn) btn.style.display = checkbox.checked ? 'block' : 'none';
     };
 
-    // --- [7. 啟動/關閉 API] ---
+    // --- [5. 照片處理與儲存 (800x600)] ---
+    window.tempPhotos = {}; 
+
+    window.handleAuditPhoto = function(input, index, pointId) {
+        if (!input.files?.[0]) return;
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const img = new Image();
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                canvas.width = 800; canvas.height = 600;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, 800, 600);
+                canvas.toBlob((blob) => {
+                    window.tempPhotos[index] = blob;
+                    const preview = document.getElementById(`img_${index}`);
+                    preview.src = URL.createObjectURL(blob);
+                    preview.style.display = 'block';
+                    document.getElementById(`label_${index}`).style.display = 'none';
+                }, 'image/jpeg', 0.85);
+            };
+            img.src = e.target.result;
+        };
+        reader.readAsDataURL(input.files[0]);
+    };
+
+    window.saveAuditData = async function(pointId, kmlId) {
+        const status = document.getElementById('auditStatus').value;
+        const note = document.getElementById('auditNote').value;
+        const path = `artifacts/kmldata-d22fb/public/data/kmlLayers/${kmlId}`;
+
+        // 上傳照片
+        const uploadTasks = Object.entries(window.tempPhotos).map(([idx, blob]) => {
+            const ref = storage.ref(`${kmlId}/${pointId}-${parseInt(idx)+1}.jpg`);
+            return ref.put(blob);
+        });
+        await Promise.all(uploadTasks);
+
+        // 更新 Firestore nodes
+        const doc = await db.doc(path).get();
+        const nodes = doc.data().nodes || [];
+        const updatedNodes = nodes.map(n => n.id === pointId ? { ...n, auditStatus: status, auditNote: note } : n);
+        await db.doc(path).update({ nodes: updatedNodes });
+    };
+
+    // --- [6. 啟動/關閉 API] ---
     window.openAuditInterface = async function(kmlId, count, isEnabled = true) {
         const path = `artifacts/kmldata-d22fb/public/data/kmlLayers/${kmlId}`;
         await db.doc(path).set({ 
@@ -224,6 +191,21 @@
                 updatedAt: firebase.firestore.FieldValue.serverTimestamp() 
             } 
         }, { merge: true });
+    };
+
+    window.downloadAuditZip = async function(kmlId, kmlName) {
+        const zip = new JSZip();
+        const doc = await db.doc(`artifacts/kmldata-d22fb/public/data/kmlLayers/${kmlId}`).get();
+        const nodes = doc.data().nodes || [];
+        let csv = "\ufeff點名,狀況,備註\n";
+        nodes.forEach(n => { if(n.auditStatus) csv += `${n.id},${n.auditStatus},${n.auditNote || ''}\n`; });
+        zip.file("清查紀錄.csv", csv);
+        const list = await storage.ref(kmlId).listAll();
+        await Promise.all(list.items.map(async (item) => {
+            const blob = await (await fetch(await item.getDownloadURL())).blob();
+            zip.file(`現場照片/${item.name}`, blob);
+        }));
+        saveAs(await zip.generateAsync({type:"blob"}), `${kmlName}_清查報告.zip`);
     };
 
 })();
