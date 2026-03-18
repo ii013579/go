@@ -922,7 +922,8 @@ if (els.deleteSelectedKmlBtn) {
 const auditBtn = document.getElementById('auditKmlBtn');
 
 if (auditBtn) {
-    const layers = Object.keys(window.allKmlLayers || {}).map(id => ({
+    auditBtn.onclick = async () => {
+    	  const layers = Object.keys(window.allKmlLayers || {}).map(id => ({
             id: id,
             name: window.allKmlLayers[id].name || id
         }));
