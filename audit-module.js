@@ -14,71 +14,130 @@
 
     // --- [1. 狀態監聽：與 KML 資料夾同步] ---
     window.watchAuditStatus = function(kmlId) {
-        if (auditUnsubscribes[kmlId]) return;
-        // 路徑指向個別圖層資料夾
-        const path = `artifacts/kmldata-d22fb/public/data/kmlLayers/${kmlId}`;
-        
-        auditUnsubscribes[kmlId] = db.doc(path).onSnapshot((doc) => {
+        // 1. 防止重複監聽
+        if (!window.auditUnsubscribes) window.auditUnsubscribes = {};
+        if (window.auditUnsubscribes[kmlId]) return;
+    
+        const db = firebase.firestore();
+        // 確切的嵌套路徑：artifacts -> kmldata-d22fb -> public -> data -> kmlLayers -> {id}
+        const docRef = db.collection('artifacts').doc('kmldata-d22fb')
+                         .collection('public').doc('data')
+                         .collection('kmlLayers').doc(kmlId);
+    
+        console.log(`[監聽啟動] 開始監聽圖層狀態: ${kmlId}`);
+    
+        // 2. 建立即時監聽 (onSnapshot)
+        window.auditUnsubscribes[kmlId] = docRef.onSnapshot((doc) => {
+            if (!doc.exists) {
+                console.warn(`圖層 ${kmlId} 在資料庫中不存在`);
+                return;
+            }
+    
             const data = doc.data();
-            // 讀取該圖層資料夾下的 auditStamp
+            
+            // 3. 更新全域快取
+            // 即使重新整理網頁，這裡也會觸發第一次讀取，將雲端的 auditStamp 存入記憶體
             if (data && data.auditStamp) {
                 window.auditLayersState[kmlId] = data.auditStamp;
+                console.log(`[狀態同步] ${kmlId} 目前清查狀態:`, data.auditStamp);
             } else {
+                // 如果資料庫中沒有戳記，確保快取是清空的
                 delete window.auditLayersState[kmlId];
             }
-            
-            // 狀態變更時，觸發地圖重新渲染
-            if (window.refreshMapLayers) window.refreshMapLayers();
-            
-            // 更新管理列按鈕樣式
+    
+            // 4. 觸發 UI 與地圖聯動
+            // 當雲端狀態為 enabled 時，通知地圖重新繪製點位顏色
+            if (window.refreshMapLayers) {
+                window.refreshMapLayers();
+            }
+    
+            // 5. 更新側邊欄或按鈕的樣式 (選配)
             const auditBtn = document.getElementById('auditKmlBtn');
             if (auditBtn) {
-                const anyActive = Object.values(window.auditLayersState).some(s => s.enabled);
-                anyActive ? auditBtn.classList.add('active') : auditBtn.classList.remove('active');
+                const isAnyLayerEnabled = Object.values(window.auditLayersState).some(s => s.enabled);
+                isAnyLayerEnabled ? auditBtn.classList.add('active') : auditBtn.classList.remove('active');
             }
+        }, (error) => {
+            console.error(`[監聽失敗] 圖層 ${kmlId}:`, error);
         });
     };
 
     // --- [2. 地圖渲染：CSS 樣式判定] ---
     window.getAuditPointStyle = function(kmlId, hasRecord) {
+        const config = window.auditLayersState[kmlId];
+        
+        // 預設樣式
         const style = {
-            radius: 8, // 預設半徑
+            radius: 8,
             fillOpacity: 1,
             color: "#ffffff", // 白色外框
             weight: 2,
-            opacity: 1,
-            interactive: true
+            fillColor: "#e74c3c" // 預設紅色
         };
-
-        const config = window.auditLayersState[kmlId];
-        if (!config || !config.enabled) {
-            style.fillColor = "#e74c3c"; // 一般模式：紅點
-        } else {
-            // 清查模式：完成為粉紅 (#ff85c0)，未完成為藍色 (#3498db)
+    
+        // 如果該圖層已開啟清查模式
+        if (config && config.enabled) {
+            // 已有紀錄為粉紅，無紀錄為藍色
             style.fillColor = hasRecord ? "#ff85c0" : "#3498db"; 
         }
+    
         return style;
     };
-
-    // --- [3. 介面注入：導航欄編輯/修改按鈕] ---
-    window.injectAuditTools = function(point, kmlId) {
-        if (!window.auditLayersState[kmlId]?.enabled) return '';
-
-        const isDone = !!point.auditStatus; 
-        const iconUrl = isDone 
-            ? 'https://cdn-icons-png.freepik.com/512/8280/8280538.png' // 修改圖示
-            : 'https://cdn-icons-png.freepik.com/512/8280/8280556.png'; // 編輯圖示
+    
+    // 判定是否顯示「編輯/修正」按鈕
+    window.injectAuditTools = function(pointProperties, kmlId) {
+        const config = window.auditLayersState[kmlId];
         
+        // 如果圖層未開啟清查，不回傳任何按鈕
+        if (!config || !config.enabled) return '';
+    
+        const isDone = !!pointProperties.auditStatus;
+        const btnText = isDone ? '修正清查紀錄' : '編輯清查紀錄';
+        const iconUrl = isDone 
+            ? 'https://cdn-icons-png.freepik.com/512/8280/8280538.png' 
+            : 'https://cdn-icons-png.freepik.com/512/8280/8280556.png';
+    
+        // 回傳按鈕 HTML (點擊後開啟編輯器)
         return `
-            <div class="audit-tool-panel" style="margin-top: 10px; border-top: 1px dashed #ddd; padding-top: 10px;">
-                <button onclick="window.openAuditEditor('${point.id}', '${kmlId}', ${JSON.stringify(point).replace(/"/g, '&quot;')})" 
-                        style="width: 100%; background: white; border: 1px solid #ccc; padding: 10px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;">
-                    <img src="${iconUrl}" style="width: 20px; height: 20px;">
-                    <span style="font-weight: bold; color: #333;">${isDone ? '修改清查紀錄' : '編輯清查紀錄'}</span>
+            <div class="audit-tool-panel" style="margin-top:10px; border-top:1px dashed #ccc; padding-top:10px;">
+                <button onclick="window.openAuditEditor('${pointProperties.id}', '${kmlId}')" 
+                        style="width:100%; padding:8px; border-radius:5px; border:1px solid #ddd; background:#fff; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:5px;">
+                    <img src="${iconUrl}" style="width:16px; height:16px;">
+                    <span style="font-weight:bold;">${btnText}</span>
                 </button>
             </div>`;
     };
 
+    window.refreshMapLayers = function() {
+        if (typeof map === 'undefined') return;
+    
+        map.eachLayer(function(layer) {
+            // 確保只處理屬於 KML 圖層的點位 (CircleMarker)
+            if (layer instanceof L.CircleMarker && layer.options && layer.options.kmlId) {
+                const kmlId = layer.options.kmlId;
+                const props = layer.feature.properties;
+                
+                // 1. 檢查該點位是否有清查紀錄 (屬性名稱請依您的 KML 為準)
+                const hasRecord = !!(props.auditStatus || props.auditPhotoCount);
+    
+                // 2. 呼叫樣式判定 (紅/藍/粉)
+                if (window.getAuditPointStyle) {
+                    const newStyle = window.getAuditPointStyle(kmlId, hasRecord);
+                    layer.setStyle(newStyle);
+                }
+    
+                // 3. 重新綁定 Popup，確保編輯按鈕依據清查狀態顯示/隱藏
+                if (window.injectAuditTools) {
+                    const toolsHTML = window.injectAuditTools(props, kmlId);
+                    // 假設原本 Popup 只顯示名稱
+                    const baseContent = props.name || "未命名點位";
+                    layer.setPopupContent(baseContent + toolsHTML);
+                }
+            }
+        });
+        console.log("[地圖重新整理] 已根據最新清查狀態更新點位樣式");
+    };
+    
     // --- [4. 對話框核心：修正 showAuditActionModal] ---
     window.showAuditActionModal = function(title, content) {
         return new Promise((resolve) => {

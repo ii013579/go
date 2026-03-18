@@ -919,54 +919,82 @@ if (els.deleteSelectedKmlBtn) {
 }
 
 // --- [清查功能整合邏輯] ---
+// 職責：從 Firestore 讀取所有圖層文件，並確保「重新開啟網頁」後能同步狀態
 const auditBtn = document.getElementById('auditKmlBtn');
 
 if (auditBtn) {
     auditBtn.onclick = async () => {
         try {
-            // 從 Firestore 讀取現存圖檔
-            const snapshot = await firebase.firestore()
-                .collection('artifacts/kmldata-d22fb/public/data/kmlLayers')
-                .get();
+            const db = firebase.firestore();
+            const APP_ID = 'kmldata-d22fb'; // 您的專案路徑 ID
+
+            // 1. 依照正確嵌套結構讀取現存圖層清單
+            // 路徑：artifacts -> kmldata-d22fb -> public -> data -> kmlLayers
+            const snapshot = await db.collection('artifacts').doc(APP_ID)
+                                     .collection('public').doc('data')
+                                     .collection('kmlLayers').get();
 
             const layers = [];
             snapshot.forEach(doc => {
                 const id = doc.id;
                 const data = doc.data();
-                // 啟動監聽以確保狀態同步
+                
+                // ✨ 關鍵修正：重開網頁時，先將讀取到的 auditStamp 存入全域快取
+                if (data.auditStamp) {
+                    if (!window.auditLayersState) window.auditLayersState = {};
+                    window.auditLayersState[id] = data.auditStamp;
+                }
+
+                // 啟動即時監聽，確保後續開啟/關閉動作能立刻反應在地圖上
                 if (window.watchAuditStatus) window.watchAuditStatus(id);
-                layers.push({ id: id, name: data.name || id });
+                
+                layers.push({ 
+                    id: id, 
+                    name: data.name || id 
+                });
             });
 
             if (layers.length === 0) {
-                Swal.fire('提示', '目前沒有現存圖檔', 'info');
+                Swal.fire('提示', '目前資料庫中沒有 KML 圖檔紀錄', 'info');
                 return;
             }
 
-            // 呼叫模組 (需確保模組載入無誤)
+            // 2. 呼叫模組渲染彈窗 (帶入從資料庫讀取的 layers)
             if (typeof window.renderAuditModal !== 'function') {
-                throw new Error("audit-module.js 載入失敗或有語法錯誤");
+                throw new Error("audit-module.js 尚未載入或 renderAuditModal 函式不存在");
             }
 
             const modalContent = window.renderAuditModal(layers);
-            const result = await window.showAuditActionModal('啟動圖層清查', modalContent);
+            
+            // 3. 開啟操作對話框 (開啟/關閉/取消)
+            const result = await window.showAuditActionModal('圖層清查管理', modalContent);
 
+            // 4. 根據按鈕結果處理寫入
             if (result === 'open' || result === 'close') {
                 const isEnable = (result === 'open');
+                
+                // 抓取彈窗中被勾選的圖層 ID
                 const checkedBoxes = document.querySelectorAll('input[name="auditKml"]:checked');
-                const checkedIds = [...checkedBoxes].map(c => c.value); 
-                const count = document.getElementById('auditPhotoCountInput')?.value || 10;
+                const checkedIds = Array.from(checkedBoxes).map(c => c.value); 
+                
+                // 抓取預計張數設定
+                const countInput = document.getElementById('auditPhotoCountInput');
+                const count = countInput ? parseInt(countInput.value) : 10;
                 
                 if (checkedIds.length > 0) {
+                    // 執行寫入 API (使用您原本可運作的 openAuditInterface)
                     for (const id of checkedIds) {
                         await window.openAuditInterface(id, count, isEnable);
                     }
-                    window.showMessage?.('成功', `已${isEnable ? '開啟' : '關閉'}選定圖層清查模式`);
+                    
+                    window.showMessage?.('成功', `已${isEnable ? '開啟' : '關閉'}選定圖層的清查模式`);
+                } else {
+                    Swal.fire('提示', '請先勾選要操作的圖層', 'warning');
                 }
             }
         } catch (error) {
-            console.error("清查邏輯出錯:", error);
-            Swal.fire('錯誤', error.message, 'error');
+            console.error("清查邏輯執行失敗:", error);
+            Swal.fire('錯誤', `無法啟動清查功能：${error.message}`, 'error');
         }
     };
 }
