@@ -25,6 +25,19 @@
                          .collection('kmlLayers').doc(kmlId);
     
         console.log(`[監聽啟動] 開始監聽圖層狀態: ${kmlId}`);
+        	
+        auditUnsubscribes[kmlId] = docRef.onSnapshot((doc) => {
+            const data = doc.data();
+            if (data && data.auditStamp) {
+                window.auditLayersState[kmlId] = data.auditStamp;
+            } else {
+                delete window.auditLayersState[kmlId];
+            }
+            
+            // ✨ 核心功能：當 Firebase 狀態改變，主動要求地圖重繪該圖層點位
+            window.refreshMapLayers(kmlId);
+        });
+    };
     
         // 2. 建立即時監聽 (onSnapshot)
         window.auditUnsubscribes[kmlId] = docRef.onSnapshot((doc) => {
@@ -62,29 +75,53 @@
         });
     };
 
-    // --- [2. 地圖渲染：CSS 樣式判定] ---
+    // --- [2. 地圖遍歷重繪函式] ---
+    window.refreshMapLayers = function(targetKmlId = null) {
+        if (typeof map === 'undefined') return;
+
+        map.eachLayer(layer => {
+            // 僅處理帶有 kmlId 的 CircleMarker
+            if (layer instanceof L.CircleMarker && layer.options && layer.options.kmlId) {
+                const kmlId = layer.options.kmlId;
+                
+                // 如果指定了圖層 ID，則只更新該圖層；否則全部更新
+                if (targetKmlId && kmlId !== targetKmlId) return;
+
+                const props = layer.feature.properties;
+                const hasRecord = !!(props.auditStatus || props.auditPhotoCount);
+
+                // A. 更新樣式 (變色)
+                const newStyle = window.getAuditPointStyle(kmlId, hasRecord);
+                layer.setStyle(newStyle);
+
+                // B. 更新 Popup (注入工具按鈕)
+                const baseContent = props.name || "未命名點位";
+                const toolsHTML = window.injectAuditTools(props, kmlId);
+                layer.setPopupContent(baseContent + toolsHTML);
+            }
+        });
+    };
+
+    // --- [3. 樣式判定邏輯] ---
     window.getAuditPointStyle = function(kmlId, hasRecord) {
         const config = window.auditLayersState[kmlId];
-        
-        // 預設樣式
-        const style = {
-            radius: 8,
-            fillOpacity: 1,
-            color: "#ffffff", // 白色外框
-            weight: 2,
-            fillColor: "#e74c3c" // 預設紅色
-        };
-    
-        // 如果該圖層已開啟清查模式
+        let color = "#e74c3c"; // 預設紅色
+
         if (config && config.enabled) {
-            // 已有紀錄為粉紅，無紀錄為藍色
-            style.fillColor = hasRecord ? "#ff85c0" : "#3498db"; 
+            // 藍色 = 待清查, 粉紅 = 已清查
+            color = hasRecord ? "#ff85c0" : "#3498db";
         }
-    
-        return style;
+
+        return {
+            fillColor: color,
+            fillOpacity: 1,
+            color: "#ffffff",
+            weight: 2,
+            radius: 8
+        };
     };
     
-    // 判定是否顯示「編輯/修正」按鈕
+    // --- [4. Popup 工具注入] ---
     window.injectAuditTools = function(pointProperties, kmlId) {
         const config = window.auditLayersState[kmlId];
         
@@ -108,35 +145,6 @@
             </div>`;
     };
 
-    window.refreshMapLayers = function() {
-        if (typeof map === 'undefined') return;
-    
-        map.eachLayer(function(layer) {
-            // 確保只處理屬於 KML 圖層的點位 (CircleMarker)
-            if (layer instanceof L.CircleMarker && layer.options && layer.options.kmlId) {
-                const kmlId = layer.options.kmlId;
-                const props = layer.feature.properties;
-                
-                // 1. 檢查該點位是否有清查紀錄 (屬性名稱請依您的 KML 為準)
-                const hasRecord = !!(props.auditStatus || props.auditPhotoCount);
-    
-                // 2. 呼叫樣式判定 (紅/藍/粉)
-                if (window.getAuditPointStyle) {
-                    const newStyle = window.getAuditPointStyle(kmlId, hasRecord);
-                    layer.setStyle(newStyle);
-                }
-    
-                // 3. 重新綁定 Popup，確保編輯按鈕依據清查狀態顯示/隱藏
-                if (window.injectAuditTools) {
-                    const toolsHTML = window.injectAuditTools(props, kmlId);
-                    // 假設原本 Popup 只顯示名稱
-                    const baseContent = props.name || "未命名點位";
-                    layer.setPopupContent(baseContent + toolsHTML);
-                }
-            }
-        });
-        console.log("[地圖重新整理] 已根據最新清查狀態更新點位樣式");
-    };
     
     // --- [4. 對話框核心：修正 showAuditActionModal] ---
     window.showAuditActionModal = function(title, content) {
