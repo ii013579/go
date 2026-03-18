@@ -106,34 +106,41 @@
     };
 
     window.renderAuditModal = function(layers) {
-        let html = `<div style="text-align: left; margin-top: 10px;">
-            <p>請勾選清查圖層：</p>
-            <div id="auditLayerList" style="max-height: 200px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; border-radius: 8px; background: #fff;">`;
+        let html = `
+            <div style="text-align: left; font-family: sans-serif;">
+                <p style="margin-bottom: 10px; color: #555;">請從現存圖檔中勾選要操作的項目：</p>
+                <div id="auditLayerList" style="max-height: 250px; overflow-y: auto; border: 1px solid #ddd; padding: 5px; border-radius: 8px; background: #fafafa;">`;
         
-        if (!layers || layers.length === 0) {
-            html += `<p style="color: #999; text-align: center;">( 無可用圖層 )</p>`;
-        } else {
-            layers.forEach(layer => {
-                const isEnabled = window.auditLayersState[layer.id]?.enabled;
-                // 這裡確保 layer.id 和 layer.name 都有值
-                html += `
-                    <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #eee;">
-                        <label style="display: flex; align-items: center; cursor: pointer; flex: 1;">
-                            <input type="checkbox" name="auditKml" value="${layer.id}" ${isEnabled ? 'checked' : ''} 
-                                   onchange="window.toggleDownloadBtn(this, '${layer.id}')" style="width: 18px; height: 18px;">
-                            <span style="margin-left: 10px; font-size: 16px;">${layer.name}</span>
-                        </label>
-                        <button id="dlBtn_${layer.id}" class="action-buttons" 
-                                style="display: ${isEnabled ? 'block' : 'none'}; padding: 4px 10px; background: #28a745; color: white; border: none; border-radius: 4px; font-size: 12px;"
-                                onclick="window.downloadAuditZip('${layer.id}', '${layer.name}')">下載</button>
-                    </div>`;
-            });
-        }
+        layers.forEach(layer => {
+            // 檢查該圖層目前的清查狀態 (從全域快取 window.auditLayersState 讀取)
+            const isEnabled = window.auditLayersState[layer.id]?.enabled;
+            const statusTag = isEnabled ? '<span style="color:#28a745; font-size:11px;">(清查中)</span>' : '';
+    
+            html += `
+                <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px; border-bottom: 1px solid #eee; background: white; margin-bottom: 2px;">
+                    <label style="display: flex; align-items: center; cursor: pointer; flex: 1;">
+                        <input type="checkbox" name="auditKml" value="${layer.id}" ${isEnabled ? 'checked' : ''} 
+                               onchange="window.toggleDownloadBtn(this, '${layer.id}')" style="width: 18px; height: 18px;">
+                        <div style="margin-left: 10px;">
+                            <div style="font-size: 15px; font-weight: 500;">${layer.name}</div>
+                            ${statusTag}
+                        </div>
+                    </label>
+                    <button id="dlBtn_${layer.id}" class="action-buttons" 
+                            style="display: ${isEnabled ? 'block' : 'none'}; padding: 5px 12px; background: #28a745; color: white; border: none; border-radius: 4px; font-size: 12px;"
+                            onclick="window.downloadAuditZip('${layer.id}', '${layer.name}')">下載</button>
+                </div>`;
+        });
         
         html += `</div>
-                 <p style="margin-top: 15px; font-weight: bold;">預計清查照片張數：</p>
-                 <input type="number" id="auditPhotoCountInput" value="2" min="1" max="100" 
-                        style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box;">
+                 <div style="margin-top: 15px; padding: 10px; background: #fffde7; border-radius: 6px; border: 1px solid #fff59d;">
+                    <p style="margin: 0 0 5px 0; font-weight: bold; color: #856404;">設定：</p>
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <span>預計張數：</span>
+                        <input type="number" id="auditPhotoCountInput" value="2" min="1" max="100" 
+                               style="flex: 1; padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
+                    </div>
+                 </div>
             </div>`;
         return html;
     };

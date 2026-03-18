@@ -919,74 +919,84 @@ if (els.deleteSelectedKmlBtn) {
 }
 
 // --- [清查功能整合邏輯] ---
+// 職責：從 Firestore 讀取現存 KML 清單，並開啟控制彈窗
 const auditBtn = document.getElementById('auditKmlBtn');
 
 if (auditBtn) {
-     auditBtn.onclick = async () => {
-         // --- 強力抓取圖層清單 ---
-         // 優先從全域 KML 物件抓取，如果沒有，就從目前畫面上有的圖層抓取
-         const source = window.kmlLayers || window.allKmlLayers || window.activeLayers || {};
-         
-         let layers = Object.keys(source).map(id => ({
-             id: id,
-             name: source[id].name || id
-         }));
-     
-         // 如果還是空的，嘗試從 DOM 列表（側邊欄）抓取已上傳的圖層名稱
-         if (layers.length === 0) {
-             const layerItems = document.querySelectorAll('.layer-item-title'); // 假設你的圖層列表有這個 class
-             layerItems.forEach(item => {
-                 const id = item.getAttribute('data-id'); // 假設你有存 ID
-                 if (id) layers.push({ id: id, name: item.innerText });
-             });
-         }
-     
-         // --- 除錯檢查：如果還是 0，請打開控制台(F12)看輸出 ---
-         console.log("目前偵測到的圖層清單:", layers);
-     
-         if (layers.length === 0) {
-             // 如果真的沒圖層，才跳提示
-             Swal.fire({
-                 icon: 'info',
-                 title: '提示',
-                 text: '請先上傳並開啟 KML 圖層後，再進行清查操作。',
-                 confirmButtonColor: '#4a90e2'
-             });
-             return;
-         }
-     
-         // 正常執行彈窗
-         const modalContent = window.renderAuditModal(layers);
-         const result = await window.showAuditActionModal('啟動圖層清查', modalContent);
-        
-        if (result === 'open') {
-            // 使用者點擊「開啟」
-            const checkedBoxes = document.querySelectorAll('input[name="auditKml"]:checked');
-            const checkedIds = [...checkedBoxes].map(c => c.value); // 這裡拿的是 kmlId
-            const count = document.getElementById('auditPhotoCountInput')?.value || 10;
+    auditBtn.onclick = async () => {
+        try {
+            // 1. 直接從 Firestore 抓取所有現存的圖層文件 [讀取來源修正]
+            // 路徑與您的資料結構對齊
+            const snapshot = await firebase.firestore()
+                .collection('artifacts/kmldata-d22fb/public/data/kmlLayers')
+                .get();
+
+            const layers = [];
+            snapshot.forEach(doc => {
+                const data = doc.data();
+                layers.push({
+                    id: doc.id,
+                    name: data.name || doc.id // 優先取檔案原名，無則取 ID
+                });
+            });
+
+            // 2. 檢查資料庫是否有檔案
+            if (layers.length === 0) {
+                Swal.fire({
+                    icon: 'info',
+                    title: '提示',
+                    text: '目前伺服器中沒有任何現存的 KML 圖檔。',
+                    confirmButtonColor: '#4a90e2'
+                });
+                return;
+            }
+
+            // 3. 呼叫 audit-module 渲染彈窗 HTML 內容
+            const modalContent = window.renderAuditModal(layers);
             
-            if (checkedIds.length > 0) {
-                // 逐一針對勾選的圖層寫入清查戳記
-                for (const id of checkedIds) {
-                    await window.openAuditInterface(id, count, true);
+            // 4. 開啟自定義對話框 (支援：開啟/關閉/取消)
+            // 這裡使用了 await，確保使用者點擊後才繼續執行
+            const result = await window.showAuditActionModal('啟動圖層清查', modalContent);
+
+            // 5. 根據按鈕結果處理邏輯
+            if (result === 'open') {
+                // --- 使用者點擊「開啟」 ---
+                const checkedBoxes = document.querySelectorAll('input[name="auditKml"]:checked');
+                const checkedIds = [...checkedBoxes].map(c => c.value); 
+                const count = document.getElementById('auditPhotoCountInput')?.value || 2;
+                
+                if (checkedIds.length > 0) {
+                    for (const id of checkedIds) {
+                        // 調用 API 寫入 auditStamp
+                        await window.openAuditInterface(id, count, true);
+                    }
+                    // 顏色變化由 audit-module 內的 onSnapshot 自動觸發，這裡僅顯示成功訊息
+                    window.showMessage?.('成功', `已開啟 ${checkedIds.length} 個圖層的清查模式`);
+                } else {
+                    window.showMessage?.('提示', '請先勾選要開啟的圖層');
                 }
-                auditBtn.classList.add('active'); // 僅保留顏色變化 (CSS 控制)
-                window.showMessage?.('成功', `已開啟選定圖層的清查模式`);
+
+            } else if (result === 'close') {
+                // --- 使用者點擊「關閉」 ---
+                const checkedBoxes = document.querySelectorAll('input[name="auditKml"]:checked');
+                const checkedIds = [...checkedBoxes].map(c => c.value);
+                
+                if (checkedIds.length > 0) {
+                    for (const id of checkedIds) {
+                        // 調用 API 將 enabled 設為 false
+                        await window.openAuditInterface(id, 2, false);
+                    }
+                    window.showMessage?.('提示', '選定圖層已關閉清查');
+                } else {
+                    window.showMessage?.('提示', '請先勾選要關閉的圖層');
+                }
             }
-        } else if (result === 'close') {
-            // 使用者點擊「關閉」
-            const checkedBoxes = document.querySelectorAll('input[name="auditKml"]:checked');
-            const checkedIds = [...checkedBoxes].map(c => c.value);
             
-            for (const id of checkedIds) {
-                await window.openAuditInterface(id, 10, false); // 關閉清查
-            }
-            
-            // 檢查是否還有任何圖層在清查中，若無則移除顏色
-            if (Object.keys(window.auditLayersState).length === 0) {
-                auditBtn.classList.remove('active');
-            }
-            window.showMessage?.('提示', '選定圖層已關閉清查。');
+            // 如果 result 為 null 代表點擊「取消」或關閉彈窗，不執行任何動作
+
+        } catch (error) {
+            console.error("清查功能執行失敗:", error);
+            Swal.fire('錯誤', '無法讀取圖層清單，請檢查網路連線或資料庫權限', 'error');
         }
     };
 }
