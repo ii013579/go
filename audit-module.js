@@ -108,38 +108,35 @@
     window.renderAuditModal = function(layers) {
         let html = `
             <div style="text-align: left; font-family: sans-serif;">
-                <p style="margin-bottom: 10px; color: #555;">請從現存圖檔中勾選要操作的項目：</p>
-                <div id="auditLayerList" style="max-height: 250px; overflow-y: auto; border: 1px solid #ddd; padding: 5px; border-radius: 8px; background: #fafafa;">`;
+                <p style="margin-bottom: 12px; color: #555; font-size: 14px;">請勾選要清查的圖層：</p>
+                <div id="auditLayerList" style="max-height: 250px; overflow-y: auto; border: 1px solid #ddd; padding: 2px; border-radius: 8px; background: #fff;">`;
         
         layers.forEach(layer => {
-            // 檢查該圖層目前的清查狀態 (從全域快取 window.auditLayersState 讀取)
+            // 從全域狀態讀取目前是否已開啟清查
             const isEnabled = window.auditLayersState[layer.id]?.enabled;
-            const statusTag = isEnabled ? '<span style="color:#28a745; font-size:11px;">(清查中)</span>' : '';
-    
+            
             html += `
-                <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px; border-bottom: 1px solid #eee; background: white; margin-bottom: 2px;">
-                    <label style="display: flex; align-items: center; cursor: pointer; flex: 1;">
+                <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px; border-bottom: 1px solid #eee; min-height: 45px;">
+                    <label style="display: flex; align-items: center; cursor: pointer; flex: 1; min-width: 0; margin-right: 10px;">
                         <input type="checkbox" name="auditKml" value="${layer.id}" ${isEnabled ? 'checked' : ''} 
-                               onchange="window.toggleDownloadBtn(this, '${layer.id}')" style="width: 18px; height: 18px;">
-                        <div style="margin-left: 10px;">
-                            <div style="font-size: 15px; font-weight: 500;">${layer.name}</div>
-                            ${statusTag}
-                        </div>
+                               onchange="window.toggleDownloadBtn(this, '${layer.id}')" 
+                               style="width: 18px; height: 18px; flex-shrink: 0; cursor: pointer;">
+                        <span style="margin-left: 10px; font-size: 15px; color: #333; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                            ${layer.name}
+                        </span>
                     </label>
+                    
                     <button id="dlBtn_${layer.id}" class="action-buttons" 
-                            style="display: ${isEnabled ? 'block' : 'none'}; padding: 5px 12px; background: #28a745; color: white; border: none; border-radius: 4px; font-size: 12px;"
+                            style="display: ${isEnabled ? 'inline-block' : 'none'}; width: 75px; height: 32px; background: #28a745; color: white; border: none; border-radius: 6px; font-size: 13px; flex-shrink: 0; cursor: pointer;"
                             onclick="window.downloadAuditZip('${layer.id}', '${layer.name}')">下載</button>
                 </div>`;
         });
         
         html += `</div>
-                 <div style="margin-top: 15px; padding: 10px; background: #fffde7; border-radius: 6px; border: 1px solid #fff59d;">
-                    <p style="margin: 0 0 5px 0; font-weight: bold; color: #856404;">設定：</p>
-                    <div style="display: flex; align-items: center; gap: 10px;">
-                        <span>預計張數：</span>
-                        <input type="number" id="auditPhotoCountInput" value="2" min="1" max="100" 
-                               style="flex: 1; padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
-                    </div>
+                 <div style="margin-top: 15px;">
+                    <p style="margin-bottom: 5px; font-weight: bold; color: #444;">預計清查照片張數：</p>
+                    <input type="number" id="auditPhotoCountInput" value="10" min="1" max="100" 
+                           style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 5px; box-sizing: border-box; font-size: 16px;">
                  </div>
             </div>`;
         return html;
@@ -197,16 +194,29 @@
 
     // --- [6. 啟動/關閉 API] ---
     window.openAuditInterface = async function(kmlId, count, isEnabled = true) {
+        const db = firebase.firestore();
+        // 確保路徑完全正確
         const path = `artifacts/kmldata-d22fb/public/data/kmlLayers/${kmlId}`;
-        await db.doc(path).set({ 
-            auditStamp: { 
-                enabled: isEnabled, 
-                targetCount: parseInt(count),
-                updatedAt: firebase.firestore.FieldValue.serverTimestamp() 
-            } 
-        }, { merge: true });
-    };
-
+        
+        try {
+            await db.doc(path).set({ 
+                auditStamp: { 
+                    enabled: isEnabled, 
+                    targetCount: parseInt(count),
+                    updatedAt: firebase.firestore.FieldValue.serverTimestamp() 
+                } 
+            }, { merge: true });
+            
+            // 成功後手動更新本地快取，確保介面同步
+            if (!window.auditLayersState[kmlId]) window.auditLayersState[kmlId] = {};
+            window.auditLayersState[kmlId].enabled = isEnabled;
+            
+            console.log(`圖層 ${kmlId} 清查狀態已設為: ${isEnabled}`);
+        } catch (error) {
+            console.error("Firebase 寫入失敗:", error);
+            throw error; // 丟出錯誤讓呼叫端處理
+        }
+    
     window.downloadAuditZip = async function(kmlId, kmlName) {
         const zip = new JSZip();
         const doc = await db.doc(`artifacts/kmldata-d22fb/public/data/kmlLayers/${kmlId}`).get();

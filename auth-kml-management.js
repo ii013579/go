@@ -919,14 +919,12 @@ if (els.deleteSelectedKmlBtn) {
 }
 
 // --- [清查功能整合邏輯] ---
-// 職責：從 Firestore 讀取現存 KML 清單，並開啟控制彈窗
 const auditBtn = document.getElementById('auditKmlBtn');
 
 if (auditBtn) {
     auditBtn.onclick = async () => {
         try {
-            // 1. 直接從 Firestore 抓取所有現存的圖層文件 [讀取來源修正]
-            // 路徑與您的資料結構對齊
+            // 1. 從 Firestore 抓取所有現存 KML 圖層
             const snapshot = await firebase.firestore()
                 .collection('artifacts/kmldata-d22fb/public/data/kmlLayers')
                 .get();
@@ -934,69 +932,47 @@ if (auditBtn) {
             const layers = [];
             snapshot.forEach(doc => {
                 const data = doc.data();
+                const id = doc.id;
+                
+                // [重要]：確保每個圖層都有啟動狀態監聽，這樣彈窗勾選狀態才會準確
+                if (window.watchAuditStatus) window.watchAuditStatus(id);
+                
                 layers.push({
-                    id: doc.id,
-                    name: data.name || doc.id // 優先取檔案原名，無則取 ID
+                    id: id,
+                    name: data.name || id
                 });
             });
 
-            // 2. 檢查資料庫是否有檔案
             if (layers.length === 0) {
-                Swal.fire({
-                    icon: 'info',
-                    title: '提示',
-                    text: '目前伺服器中沒有任何現存的 KML 圖檔。',
-                    confirmButtonColor: '#4a90e2'
-                });
+                Swal.fire('提示', '目前沒有現存圖檔可供清查', 'info');
                 return;
             }
 
-            // 3. 呼叫 audit-module 渲染彈窗 HTML 內容
+            // 2. 呼叫渲染 (傳入 layers)
             const modalContent = window.renderAuditModal(layers);
             
-            // 4. 開啟自定義對話框 (支援：開啟/關閉/取消)
-            // 這裡使用了 await，確保使用者點擊後才繼續執行
+            // 3. 呼叫對話框 (按鈕改為 開啟 / 關閉)
             const result = await window.showAuditActionModal('啟動圖層清查', modalContent);
 
-            // 5. 根據按鈕結果處理邏輯
-            if (result === 'open') {
-                // --- 使用者點擊「開啟」 ---
+            // 4. 處理點擊結果
+            if (result === 'open' || result === 'close') {
+                const isEnable = (result === 'open');
                 const checkedBoxes = document.querySelectorAll('input[name="auditKml"]:checked');
                 const checkedIds = [...checkedBoxes].map(c => c.value); 
-                const count = document.getElementById('auditPhotoCountInput')?.value || 2;
+                const count = document.getElementById('auditPhotoCountInput')?.value || 10;
                 
                 if (checkedIds.length > 0) {
+                    // 批次寫入 Firebase 戳記
                     for (const id of checkedIds) {
-                        // 調用 API 寫入 auditStamp
-                        await window.openAuditInterface(id, count, true);
+                        await window.openAuditInterface(id, count, isEnable);
                     }
-                    // 顏色變化由 audit-module 內的 onSnapshot 自動觸發，這裡僅顯示成功訊息
-                    window.showMessage?.('成功', `已開啟 ${checkedIds.length} 個圖層的清查模式`);
+                    window.showMessage?.('成功', `已${isEnable ? '開啟' : '關閉'}選定圖層清查模式`);
                 } else {
-                    window.showMessage?.('提示', '請先勾選要開啟的圖層');
-                }
-
-            } else if (result === 'close') {
-                // --- 使用者點擊「關閉」 ---
-                const checkedBoxes = document.querySelectorAll('input[name="auditKml"]:checked');
-                const checkedIds = [...checkedBoxes].map(c => c.value);
-                
-                if (checkedIds.length > 0) {
-                    for (const id of checkedIds) {
-                        // 調用 API 將 enabled 設為 false
-                        await window.openAuditInterface(id, 2, false);
-                    }
-                    window.showMessage?.('提示', '選定圖層已關閉清查');
-                } else {
-                    window.showMessage?.('提示', '請先勾選要關閉的圖層');
+                    window.showMessage?.('提示', '請先勾選圖層');
                 }
             }
-            
-            // 如果 result 為 null 代表點擊「取消」或關閉彈窗，不執行任何動作
-
         } catch (error) {
-            console.error("清查功能執行失敗:", error);
-            Swal.fire('錯誤', '無法讀取圖層清單，請檢查網路連線或資料庫權限', 'error');
+            console.error("清查邏輯出錯:", error);
         }
     };
 }
