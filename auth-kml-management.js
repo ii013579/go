@@ -922,20 +922,43 @@ if (els.deleteSelectedKmlBtn) {
 const auditBtn = document.getElementById('auditKmlBtn');
 
 if (auditBtn) {
-    auditBtn.onclick = async () => {
-    	  const layers = Object.keys(window.allKmlLayers || {}).map(id => ({
-            id: id,
-            name: window.allKmlLayers[id].name || id
-        }));
-    
-        if (layers.length === 0) {
-            window.showMessage?.('提示', '目前地圖上沒有可清查的圖層');
-            return;
-        }
-    
-        const modalContent = window.renderAuditModal(layers);
-        const result = await window.showAuditActionModal('啟動圖層清查', modalContent);
-    
+     auditBtn.onclick = async () => {
+         // --- 強力抓取圖層清單 ---
+         // 優先從全域 KML 物件抓取，如果沒有，就從目前畫面上有的圖層抓取
+         const source = window.kmlLayers || window.allKmlLayers || window.activeLayers || {};
+         
+         let layers = Object.keys(source).map(id => ({
+             id: id,
+             name: source[id].name || id
+         }));
+     
+         // 如果還是空的，嘗試從 DOM 列表（側邊欄）抓取已上傳的圖層名稱
+         if (layers.length === 0) {
+             const layerItems = document.querySelectorAll('.layer-item-title'); // 假設你的圖層列表有這個 class
+             layerItems.forEach(item => {
+                 const id = item.getAttribute('data-id'); // 假設你有存 ID
+                 if (id) layers.push({ id: id, name: item.innerText });
+             });
+         }
+     
+         // --- 除錯檢查：如果還是 0，請打開控制台(F12)看輸出 ---
+         console.log("目前偵測到的圖層清單:", layers);
+     
+         if (layers.length === 0) {
+             // 如果真的沒圖層，才跳提示
+             Swal.fire({
+                 icon: 'info',
+                 title: '提示',
+                 text: '請先上傳並開啟 KML 圖層後，再進行清查操作。',
+                 confirmButtonColor: '#4a90e2'
+             });
+             return;
+         }
+     
+         // 正常執行彈窗
+         const modalContent = window.renderAuditModal(layers);
+         const result = await window.showAuditActionModal('啟動圖層清查', modalContent);
+        
         if (result === 'open') {
             // 使用者點擊「開啟」
             const checkedBoxes = document.querySelectorAll('input[name="auditKml"]:checked');
