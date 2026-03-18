@@ -194,10 +194,7 @@
 
     // --- [6. 啟動/關閉 API] ---
     window.openAuditInterface = async function(kmlId, count, isEnabled = true) {
-        const db = firebase.firestore();
-        // 確保路徑完全正確
         const path = `artifacts/kmldata-d22fb/public/data/kmlLayers/${kmlId}`;
-        
         try {
             await db.doc(path).set({ 
                 auditStamp: { 
@@ -206,17 +203,17 @@
                     updatedAt: firebase.firestore.FieldValue.serverTimestamp() 
                 } 
             }, { merge: true });
-            
-            // 成功後手動更新本地快取，確保介面同步
             if (!window.auditLayersState[kmlId]) window.auditLayersState[kmlId] = {};
             window.auditLayersState[kmlId].enabled = isEnabled;
-            
-            console.log(`圖層 ${kmlId} 清查狀態已設為: ${isEnabled}`);
-        } catch (error) {
-            console.error("Firebase 寫入失敗:", error);
-            throw error; // 丟出錯誤讓呼叫端處理
-        }
-    
+        } catch (e) { console.error("寫入失敗", e); }
+    };
+
+    window.toggleDownloadBtn = function(checkbox, id) {
+        const btn = document.getElementById(`dlBtn_${id}`);
+        if (btn) btn.style.display = checkbox.checked ? 'inline-block' : 'none';
+    };
+
+    // 5. 下載 ZIP 邏輯
     window.downloadAuditZip = async function(kmlId, kmlName) {
         const zip = new JSZip();
         const doc = await db.doc(`artifacts/kmldata-d22fb/public/data/kmlLayers/${kmlId}`).get();
@@ -224,12 +221,17 @@
         let csv = "\ufeff點名,狀況,備註\n";
         nodes.forEach(n => { if(n.auditStatus) csv += `${n.id},${n.auditStatus},${n.auditNote || ''}\n`; });
         zip.file("清查紀錄.csv", csv);
-        const list = await storage.ref(kmlId).listAll();
-        await Promise.all(list.items.map(async (item) => {
-            const blob = await (await fetch(await item.getDownloadURL())).blob();
-            zip.file(`現場照片/${item.name}`, blob);
-        }));
-        saveAs(await zip.generateAsync({type:"blob"}), `${kmlName}_清查報告.zip`);
+        
+        try {
+            const list = await storage.ref(kmlId).listAll();
+            await Promise.all(list.items.map(async (item) => {
+                const url = await item.getDownloadURL();
+                const blob = await (await fetch(url)).blob();
+                zip.file(`現場照片/${item.name}`, blob);
+            }));
+            const content = await zip.generateAsync({type:"blob"});
+            saveAs(content, `${kmlName}_清查報告.zip`);
+        } catch (e) { console.error("下載失敗", e); }
     };
 
 })();

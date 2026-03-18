@@ -924,37 +924,33 @@ const auditBtn = document.getElementById('auditKmlBtn');
 if (auditBtn) {
     auditBtn.onclick = async () => {
         try {
-            // 1. 從 Firestore 抓取所有現存 KML 圖層
+            // 從 Firestore 讀取現存圖檔
             const snapshot = await firebase.firestore()
                 .collection('artifacts/kmldata-d22fb/public/data/kmlLayers')
                 .get();
 
             const layers = [];
             snapshot.forEach(doc => {
-                const data = doc.data();
                 const id = doc.id;
-                
-                // [重要]：確保每個圖層都有啟動狀態監聽，這樣彈窗勾選狀態才會準確
+                const data = doc.data();
+                // 啟動監聽以確保狀態同步
                 if (window.watchAuditStatus) window.watchAuditStatus(id);
-                
-                layers.push({
-                    id: id,
-                    name: data.name || id
-                });
+                layers.push({ id: id, name: data.name || id });
             });
 
             if (layers.length === 0) {
-                Swal.fire('提示', '目前沒有現存圖檔可供清查', 'info');
+                Swal.fire('提示', '目前沒有現存圖檔', 'info');
                 return;
             }
 
-            // 2. 呼叫渲染 (傳入 layers)
+            // 呼叫模組 (需確保模組載入無誤)
+            if (typeof window.renderAuditModal !== 'function') {
+                throw new Error("audit-module.js 載入失敗或有語法錯誤");
+            }
+
             const modalContent = window.renderAuditModal(layers);
-            
-            // 3. 呼叫對話框 (按鈕改為 開啟 / 關閉)
             const result = await window.showAuditActionModal('啟動圖層清查', modalContent);
 
-            // 4. 處理點擊結果
             if (result === 'open' || result === 'close') {
                 const isEnable = (result === 'open');
                 const checkedBoxes = document.querySelectorAll('input[name="auditKml"]:checked');
@@ -962,17 +958,15 @@ if (auditBtn) {
                 const count = document.getElementById('auditPhotoCountInput')?.value || 10;
                 
                 if (checkedIds.length > 0) {
-                    // 批次寫入 Firebase 戳記
                     for (const id of checkedIds) {
                         await window.openAuditInterface(id, count, isEnable);
                     }
                     window.showMessage?.('成功', `已${isEnable ? '開啟' : '關閉'}選定圖層清查模式`);
-                } else {
-                    window.showMessage?.('提示', '請先勾選圖層');
                 }
             }
         } catch (error) {
             console.error("清查邏輯出錯:", error);
+            Swal.fire('錯誤', error.message, 'error');
         }
     };
 }
