@@ -922,16 +922,19 @@ if (els.deleteSelectedKmlBtn) {
 const auditBtn = document.getElementById('auditKmlBtn');
 
 if (auditBtn) {
-    auditBtn.onclick = async () => {
-        // 取得目前所有可用的圖層列表 (包含名稱與 ID)
-        const layers = window.getCurrentLayersList?.() || []; 
-
-        // 呼叫模組渲染彈窗內容
+    const layers = Object.keys(window.allKmlLayers || {}).map(id => ({
+            id: id,
+            name: window.allKmlLayers[id].name || id
+        }));
+    
+        if (layers.length === 0) {
+            window.showMessage?.('提示', '目前地圖上沒有可清查的圖層');
+            return;
+        }
+    
         const modalContent = window.renderAuditModal(layers);
-        
-        // 呼叫自定義對話框，將按鈕文字改為「開啟」與「關閉」
         const result = await window.showAuditActionModal('啟動圖層清查', modalContent);
-
+    
         if (result === 'open') {
             // 使用者點擊「開啟」
             const checkedBoxes = document.querySelectorAll('input[name="auditKml"]:checked');

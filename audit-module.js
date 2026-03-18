@@ -108,25 +108,32 @@
     window.renderAuditModal = function(layers) {
         let html = `<div style="text-align: left; margin-top: 10px;">
             <p>請勾選清查圖層：</p>
-            <div id="auditLayerList" style="max-height: 250px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; border-radius: 8px;">`;
+            <div id="auditLayerList" style="max-height: 200px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; border-radius: 8px; background: #fff;">`;
         
-        layers.forEach(layer => {
-            const isEnabled = window.auditLayersState[layer.id]?.enabled;
-            html += `
-                <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #eee;">
-                    <div>
-                        <input type="checkbox" name="auditKml" value="${layer.id}" ${isEnabled ? 'checked' : ''} onchange="window.toggleDownloadBtn(this, '${layer.id}')">
-                        <span style="margin-left: 8px;">${layer.name}</span>
-                    </div>
-                    <button id="dlBtn_${layer.id}" class="action-buttons" 
-                            style="display: ${isEnabled ? 'block' : 'none'}; padding: 4px 12px; background: #28a745; color: white; border: none; border-radius: 4px;"
-                            onclick="window.downloadAuditZip('${layer.id}', '${layer.name}')">下載</button>
-                </div>`;
-        });
+        if (!layers || layers.length === 0) {
+            html += `<p style="color: #999; text-align: center;">( 無可用圖層 )</p>`;
+        } else {
+            layers.forEach(layer => {
+                const isEnabled = window.auditLayersState[layer.id]?.enabled;
+                // 這裡確保 layer.id 和 layer.name 都有值
+                html += `
+                    <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #eee;">
+                        <label style="display: flex; align-items: center; cursor: pointer; flex: 1;">
+                            <input type="checkbox" name="auditKml" value="${layer.id}" ${isEnabled ? 'checked' : ''} 
+                                   onchange="window.toggleDownloadBtn(this, '${layer.id}')" style="width: 18px; height: 18px;">
+                            <span style="margin-left: 10px; font-size: 16px;">${layer.name}</span>
+                        </label>
+                        <button id="dlBtn_${layer.id}" class="action-buttons" 
+                                style="display: ${isEnabled ? 'block' : 'none'}; padding: 4px 10px; background: #28a745; color: white; border: none; border-radius: 4px; font-size: 12px;"
+                                onclick="window.downloadAuditZip('${layer.id}', '${layer.name}')">下載</button>
+                    </div>`;
+            });
+        }
         
         html += `</div>
-                 <p style="margin-top: 15px;">預計清查照片張數：</p>
-                 <input type="number" id="auditPhotoCountInput" value="10" min="1" max="100" style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px;">
+                 <p style="margin-top: 15px; font-weight: bold;">預計清查照片張數：</p>
+                 <input type="number" id="auditPhotoCountInput" value="2" min="1" max="100" 
+                        style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box;">
             </div>`;
         return html;
     };
