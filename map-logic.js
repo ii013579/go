@@ -31,7 +31,19 @@
             minZoom: 5
         }).setView([23.6, 120.9], 8);
 
-        
+        function createControlHelpers(map) {
+        const corners = map._controlCorners;
+        const container = map._controlContainer;
+        const name = 'bottomcenter';
+    
+        if (!corners[name]) {
+            // 建立一個新的 div 節點
+            corners[name] = L.DomUtil.create('div', 'leaflet-' + name, container);
+        }
+    }
+    
+    createControlHelpers(ns.map); // 執行建立容器
+
         window.map = ns.map;
         window.geoJsonLayers = ns.geoJsonLayers;
         window.markers = ns.markers;
