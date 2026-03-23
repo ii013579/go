@@ -37,6 +37,10 @@
         window.markers = ns.markers;
         window.mapNamespace = ns;
         
+        if (window.initBottomAuditControl) {
+            window.initBottomAuditControl(window.map);
+        }
+        
         // 基本圖層定義（使用常數）
         const baseLayers = {
             'Google 街道圖': L.tileLayer('https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {
