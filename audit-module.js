@@ -1,105 +1,88 @@
 ﻿/**
- * audit-module.js - 清查系統獨立擴充模組
- * 整合功能：單圖層控制、自動變色、底部浮動選單、照片壓縮、ZIP下載
+ * audit-module.js - 清查系統全功能獨立整合版 (2026.03.24)
+ * 1. 支援單圖層獨立開關 (開啟/關閉/下載)
+ * 2. 自動名稱加註：開啟後顯示 "(清查中:X張)"
+ * 3. 底部浮動選單：L.Control.extend 實現編輯/修正按鈕
+ * 4. 自動樣式切換：紅(未開) / 藍(開未查) / 粉(已查)
+ * 5. 照片處理：Canvas 壓縮至 800x600
+ * 6. 錯誤修正：自動建立 Leaflet bottomcenter 容器
  */
 (function() {
     'use strict';
 
-    // Firebase 配置 (請確保全域已初始化 firebase)
     const db = firebase.firestore();
     const storage = firebase.storage();
     const APP_PATH = 'artifacts/kmldata-d22fb/public/data/kmlLayers';
     
-    window.auditLayersState = {}; // 存放各圖層清查狀態：{ kmlId: { enabled: bool, targetCount: int } }
+    window.auditLayersState = {}; 
     const auditUnsubscribes = {};
-    let bottomControl = null;     // 存放 Leaflet 底部控制項實體
+    let bottomControl = null;
 
-    // --- [1. 狀態監聽：同步 Firebase 與地圖樣式] ---
+    // --- [1. 基礎設施：自動建立 Leaflet 缺失的容器] ---
+    function ensureLeafletContainer(mapInstance) {
+        const name = 'bottomcenter';
+        if (mapInstance._controlCorners && !mapInstance._controlCorners[name]) {
+            mapInstance._controlCorners[name] = L.DomUtil.create('div', 'leaflet-' + name, mapInstance._controlContainer);
+        }
+    }
+
+    // --- [2. 狀態監聽與 UI 連動] ---
     window.watchAuditStatus = function(kmlId) {
         if (auditUnsubscribes[kmlId]) return;
-
         const docRef = db.doc(`${APP_PATH}/${kmlId}`);
         auditUnsubscribes[kmlId] = docRef.onSnapshot((doc) => {
             if (!doc.exists) return;
             const data = doc.data();
+            window.auditLayersState[kmlId] = data?.auditStamp || { enabled: false, targetCount: 2 };
             
-            // 更新狀態快取
-            if (data && data.auditStamp) {
-                window.auditLayersState[kmlId] = data.auditStamp;
-            } else {
-                delete window.auditLayersState[kmlId];
-            }
-            
-            // 狀態變更時，通知主 UI 與地圖重繪顏色
             updateMainMenuBtnStatus();
             window.refreshMapLayers(kmlId);
             if (bottomControl) bottomControl.update();
         });
     };
 
-    // --- [2. 地圖層級邏輯：變色與事件掛載] ---
+    // --- [3. 樣式與事件：紅/藍/粉 變色與導航觸發] ---
     window.refreshMapLayers = function(targetKmlId = null) {
         if (typeof map === 'undefined') return;
-
         map.eachLayer(layer => {
-            // 僅處理帶有 kmlId 的圓點圖徵
             if (layer instanceof L.CircleMarker && layer.options?.kmlId) {
                 const kmlId = layer.options.kmlId;
                 if (targetKmlId && kmlId !== targetKmlId) return;
 
                 const props = layer.feature.properties;
                 const hasRecord = !!(props.auditStatus || props.auditPhotoCount);
-
-                // A. 更新顏色：紅(未開) / 藍(已開未查) / 粉(已查)
+                
+                // 設定顏色：未開啟(紅) / 開啟未查(藍) / 開啟已查(粉)
                 layer.setStyle(window.getAuditPointStyle(kmlId, hasRecord));
 
-                // B. 注入點擊監聽 (僅掛載一次)
+                // 注入點擊監聽：觸發導航 + 喚醒底部選單
                 if (!layer._auditListenerAttached) {
                     layer.on('click', function(e) {
                         L.DomEvent.stopPropagation(e);
-                        
-                        // 1. 觸發外部原有的導航按鈕 (不更動其邏輯)
-                        if (window.createNavButton) {
-                            window.createNavButton(e.latlng, props.name || "未命名點位");
-                        }
-
-                        // 2. 設定選中點位，喚醒螢幕下方浮動按鈕
+                        // A. 呼叫外部導航 (不修改其邏輯)
+                        if (window.createNavButton) window.createNavButton(e.latlng, props.name);
+                        // B. 更新選中狀態
                         window.currentSelectedPoint = { id: props.id, kmlId: kmlId, props: props };
                         if (bottomControl) bottomControl.update();
                     });
                     layer._auditListenerAttached = true;
                 }
-                
-                // C. 移除原本 Popup 裡的按鈕，僅保留名稱 (避免 UI 重疊)
                 layer.setPopupContent(props.name || "點位");
             }
         });
     };
 
-    // 樣式計算邏輯
     window.getAuditPointStyle = function(kmlId, hasRecord) {
         const config = window.auditLayersState[kmlId];
-        let color = "#e74c3c"; // 預設紅色
-
-        if (config && config.enabled) {
-            // 已開啟清查後：藍色為待查，粉紅為已查
-            color = hasRecord ? "#ff85c0" : "#3498db"; 
-        }
-
-        return {
-            fillColor: color,
-            fillOpacity: 1,
-            color: "#ffffff",
-            weight: 2,
-            radius: 8
-        };
+        let color = "#e74c3c"; // 預設紅
+        if (config?.enabled) color = hasRecord ? "#ff85c0" : "#3498db";
+        return { fillColor: color, fillOpacity: 1, color: "#ffffff", weight: 2, radius: 8 };
     };
 
-    // --- [3. 螢幕正下方浮動選單 (L.Control)] ---
+    // --- [4. 螢幕正下方浮動選單 (L.Control)] ---
     const AuditBottomMenu = L.Control.extend({
         options: { position: 'bottomcenter' }, 
         onAdd: function() {
-            // 使用您定義的 .audit-bottom-menu CSS class
             this._container = L.DomUtil.create('div', 'audit-bottom-menu');
             this._container.style.display = 'none';
             return this._container;
@@ -110,13 +93,10 @@
                 this._container.style.display = 'none';
                 return;
             }
-
             const config = window.auditLayersState[active.kmlId];
             if (config && config.enabled) {
                 const isDone = !!active.props.auditStatus;
-                // 粉紅(修正) / 紅色(編輯)
                 const bgColor = isDone ? '#ff85c0' : '#e74c3c'; 
-                
                 this._container.style.display = 'block';
                 this._container.innerHTML = `
                     <button onclick="window.openAuditEditor('${active.id}', '${active.kmlId}')" 
@@ -132,8 +112,8 @@
 
     window.initBottomAuditControl = function(mapInstance) {
         if (!bottomControl) {
+            ensureLeafletContainer(mapInstance); // 確保容器存在避免 insertBefore 報錯
             bottomControl = new AuditBottomMenu().addTo(mapInstance);
-            // 點擊地圖空白處自動隱藏按鈕
             mapInstance.on('click', () => {
                 window.currentSelectedPoint = null;
                 bottomControl.update();
@@ -141,30 +121,44 @@
         }
     };
 
-    // --- [4. 管理視窗：單獨控制與名稱動態加註] ---
+    // --- [5. 管理視窗：對接舊有 showAuditActionModal 接口] ---
+    window.showAuditActionModal = function(layers) {
+        const layerList = Array.isArray(layers) ? layers : [layers];
+        Swal.fire({
+            title: '圖層清查管理',
+            html: window.renderAuditModal(layerList),
+            showConfirmButton: false,
+            showCancelButton: true,
+            cancelButtonText: '關閉',
+            width: '90%',
+            didOpen: () => {
+                layerList.forEach(l => window.watchAuditStatus(l.id));
+            }
+        });
+    };
+
     window.renderAuditModal = function(layers) {
-        let html = `<div style="text-align: left; max-height: 400px; overflow-y: auto; font-family: sans-serif;">`;
+        let html = `<div style="text-align: left; max-height: 400px; overflow-y: auto;">`;
         layers.forEach(layer => {
             const state = window.auditLayersState[layer.id] || { enabled: false, targetCount: 2 };
-            // 開啟清查時，名稱加註橘色字樣
             const tag = state.enabled ? ` <span style="color:#ff8533; font-weight:bold;">(清查中:${state.targetCount}張)</span>` : "";
             
             html += `
-                <div style="padding: 12px; border-bottom: 1px solid #eee; background: #fff; display: flex; flex-direction: column; gap: 8px;">
+                <div style="padding: 12px; border-bottom: 1px solid #eee; background: #fff;">
                     <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <span style="font-size: 14px; flex: 1; margin-right: 10px;">${layer.name}${tag}</span>
-                        <div style="display: flex; gap: 4px;">
+                        <span style="font-size: 14px; flex: 1;">${layer.name}${tag}</span>
+                        <div style="display: flex; gap: 5px;">
                             <button onclick="window.updateLayerAudit('${layer.id}', true)" 
-                                    style="padding: 4px 8px; background: #28a745; color: white; border: none; border-radius: 4px; font-size: 12px; cursor: pointer;" ${state.enabled ? 'disabled' : ''}>開啟</button>
+                                    style="padding: 5px 10px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer;" ${state.enabled ? 'disabled' : ''}>開啟</button>
                             <button onclick="window.updateLayerAudit('${layer.id}', false)" 
-                                    style="padding: 4px 8px; background: #dc3545; color: white; border: none; border-radius: 4px; font-size: 12px; cursor: pointer;" ${!state.enabled ? 'disabled' : ''}>關閉</button>
+                                    style="padding: 5px 10px; background: #dc3545; color: white; border: none; border-radius: 4px; cursor: pointer;" ${!state.enabled ? 'disabled' : ''}>關閉</button>
                             <button onclick="window.downloadAuditZip('${layer.id}', '${layer.name}')" 
-                                    class="download-btn" style="display: inline-block; padding: 4px 8px; font-size: 12px;">下載</button>
+                                    class="download-btn" style="display: inline-block; padding: 5px 10px;">下載</button>
                         </div>
                     </div>
                     ${state.enabled ? `
-                    <div style="font-size: 12px; color: #666; background: #fdfaf5; padding: 5px; border-radius: 4px;">
-                        拍照張數 (2-10): <input type="number" value="${state.targetCount}" min="2" max="10" 
+                    <div style="margin-top: 8px; font-size: 12px; color: #666; background: #f9f9f9; padding: 5px; border-radius: 4px;">
+                        設定張數 (2-10): <input type="number" value="${state.targetCount}" min="2" max="10" 
                                      onchange="window.updateLayerAuditCount('${layer.id}', this.value)" style="width:45px; text-align:center;">
                     </div>` : ''}
                 </div>`;
@@ -172,17 +166,7 @@
         return html + `</div>`;
     };
 
-    function updateMainMenuBtnStatus() {
-        const auditBtn = document.querySelector('.audit-btn');
-        if (auditBtn) {
-            const isAnyEnabled = Object.values(window.auditLayersState).some(s => s.enabled);
-            // 任一圖層開啟清查，主按鈕變亮橘色 (.active)
-            isAnyEnabled ? auditBtn.classList.add('active') : auditBtn.classList.remove('active');
-        }
-    }
-
     window.updateLayerAudit = async function(id, enable) {
-        // 設定時預設張數為 2
         await db.doc(`${APP_PATH}/${id}`).set({ 
             auditStamp: { enabled: enable, targetCount: 2, updatedAt: firebase.firestore.FieldValue.serverTimestamp() } 
         }, { merge: true });
@@ -192,7 +176,15 @@
         await db.doc(`${APP_PATH}/${id}`).update({ "auditStamp.targetCount": parseInt(count) });
     };
 
-    // --- [5. 照片壓縮 (800x600) 與 下載 (完整保留)] ---
+    function updateMainMenuBtnStatus() {
+        const auditBtn = document.querySelector('.audit-btn');
+        if (auditBtn) {
+            const isAnyEnabled = Object.values(window.auditLayersState).some(s => s.enabled);
+            isAnyEnabled ? auditBtn.classList.add('active') : auditBtn.classList.remove('active');
+        }
+    }
+
+    // --- [6. 照片處理 (800x600) 與 ZIP 下載] ---
     window.handleAuditPhoto = function(input, index) {
         if (!input.files?.[0]) return;
         const reader = new FileReader();
@@ -207,10 +199,7 @@
                     window.tempPhotos = window.tempPhotos || {};
                     window.tempPhotos[index] = blob;
                     const preview = document.getElementById(`img_${index}`);
-                    if (preview) {
-                        preview.src = URL.createObjectURL(blob);
-                        preview.style.display = 'block';
-                    }
+                    if (preview) { preview.src = URL.createObjectURL(blob); preview.style.display = 'block'; }
                 }, 'image/jpeg', 0.85);
             };
             img.src = e.target.result;
@@ -226,7 +215,6 @@
             let csv = "\ufeff點名,狀況,備註\n";
             nodes.forEach(n => { if(n.auditStatus) csv += `${n.id},${n.auditStatus},${n.auditNote || ''}\n`; });
             zip.file("清查紀錄表.csv", csv);
-            
             const list = await storage.ref(kmlId).listAll();
             await Promise.all(list.items.map(async (item) => {
                 const url = await item.getDownloadURL();
@@ -235,7 +223,7 @@
             }));
             const content = await zip.generateAsync({type:"blob"});
             saveAs(content, `${kmlName}_清查報告.zip`);
-        } catch (e) { Swal.fire("下載失敗", "尚未有照片或網路錯誤", "error"); }
+        } catch (e) { Swal.fire("下載失敗", "尚未有照片", "error"); }
     };
 
 })();

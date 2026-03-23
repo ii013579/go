@@ -22,37 +22,35 @@
             return;
         }
 
-        // 初始化地圖
-        ns.map = L.map('map', {
-        	  preferCanvas: true,
-            attributionControl: true,
-            zoomControl: false,
-            maxZoom: 25,
-            minZoom: 5
-        }).setView([23.6, 120.9], 8);
-
-        function createControlHelpers(map) {
-        const corners = map._controlCorners;
-        const container = map._controlContainer;
-        const name = 'bottomcenter';
+    // 1. 初始化地圖
+    ns.map = L.map('map', {
+        preferCanvas: true,
+        attributionControl: true,
+        zoomControl: false,
+        maxZoom: 25,
+        minZoom: 5
+    }).setView([23.6, 120.9], 8);
     
-        if (!corners[name]) {
-            // 建立一個新的 div 節點
-            corners[name] = L.DomUtil.create('div', 'leaflet-' + name, container);
-        }
+    // 2. 建立 Leaflet 缺失的 bottomcenter 容器 (封裝成一個動作)
+    if (ns.map._controlContainer && !ns.map._controlCorners['bottomcenter']) {
+        ns.map._controlCorners['bottomcenter'] = L.DomUtil.create(
+            'div', 
+            'leaflet-bottomcenter', 
+            ns.map._controlContainer
+        );
     }
     
-    createControlHelpers(ns.map); // 執行建立容器
+    // 3. 設定全域變數提供給 audit-module.js 使用
+    window.map = ns.map;
+    window.geoJsonLayers = ns.geoJsonLayers;
+    window.markers = ns.markers;
+    window.mapNamespace = ns;
+    
+    // 4. 啟動清查系統底部控制選單 (僅需呼叫一次)
+    if (window.initBottomAuditControl) {
+        window.initBottomAuditControl(ns.map);
+    }
 
-        window.map = ns.map;
-        window.geoJsonLayers = ns.geoJsonLayers;
-        window.markers = ns.markers;
-        window.mapNamespace = ns;
-        
-        if (window.initBottomAuditControl) {
-            window.initBottomAuditControl(window.map);
-        }
-        
         // 基本圖層定義（使用常數）
         const baseLayers = {
             'Google 街道圖': L.tileLayer('https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {
