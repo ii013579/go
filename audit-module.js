@@ -129,7 +129,7 @@
             html: window.renderAuditModal(layerList),
             showConfirmButton: false,
             showCancelButton: true,
-            cancelButtonText: '關閉',
+            cancelButtonText: '取消',
             width: '90%',
             didOpen: () => {
                 layerList.forEach(l => window.watchAuditStatus(l.id));
@@ -141,18 +141,22 @@
         let html = `<div style="text-align: left; max-height: 400px; overflow-y: auto;">`;
         layers.forEach(layer => {
             const state = window.auditLayersState[layer.id] || { enabled: false, targetCount: 2 };
+            
+            // ✨ 修正名稱抓取：相容 layer.name, layer.label 或 layer.title
+            const displayName = layer.name || layer.label || layer.title || "未命名圖層";
+            
             const tag = state.enabled ? ` <span style="color:#ff8533; font-weight:bold;">(清查中:${state.targetCount}張)</span>` : "";
             
             html += `
                 <div style="padding: 12px; border-bottom: 1px solid #eee; background: #fff;">
                     <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <span style="font-size: 14px; flex: 1;">${layer.name}${tag}</span>
+                        <span style="font-size: 14px; flex: 1;">${displayName}${tag}</span>
                         <div style="display: flex; gap: 5px;">
                             <button onclick="window.updateLayerAudit('${layer.id}', true)" 
                                     style="padding: 5px 10px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer;" ${state.enabled ? 'disabled' : ''}>開啟</button>
                             <button onclick="window.updateLayerAudit('${layer.id}', false)" 
                                     style="padding: 5px 10px; background: #dc3545; color: white; border: none; border-radius: 4px; cursor: pointer;" ${!state.enabled ? 'disabled' : ''}>關閉</button>
-                            <button onclick="window.downloadAuditZip('${layer.id}', '${layer.name}')" 
+                            <button onclick="window.downloadAuditZip('${layer.id}', '${displayName}')" 
                                     class="download-btn" style="display: inline-block; padding: 5px 10px;">下載</button>
                         </div>
                     </div>
