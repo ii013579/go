@@ -1,24 +1,24 @@
 ﻿/**
- * audit-module.js - 清查系統全功能獨立整合版 (2026.03.24)
+ * audit-module.js - 清查系統全功能獨立整合版 (2026.03.24 最終版)
  * 1. 支援單圖層獨立開關 (開啟/關閉/下載)
- * 2. 自動名稱加註：開啟後顯示 "(清查中:X張)"
- * 3. 底部浮動選單：L.Control.extend 實現編輯/修正按鈕
+ * 2. 自動名稱抓取：相容 name, KmlName, label, id
+ * 3. 底部浮動選單：解決 insertBefore 錯誤，實現編輯/修正按鈕
  * 4. 自動樣式切換：紅(未開) / 藍(開未查) / 粉(已查)
- * 5. 照片處理：Canvas 壓縮至 800x600
- * 6. 錯誤修正：自動建立 Leaflet bottomcenter 容器
+ * 5. 照片處理：Canvas 壓縮至 800x600，不佔空間
  */
 (function() {
     'use strict';
 
     const db = firebase.firestore();
     const storage = firebase.storage();
+    // 您的 Firebase 路徑結構
     const APP_PATH = 'artifacts/kmldata-d22fb/public/data/kmlLayers';
     
     window.auditLayersState = {}; 
     const auditUnsubscribes = {};
     let bottomControl = null;
 
-    // --- [1. 基礎設施：自動建立 Leaflet 缺失的容器] ---
+    // --- [1. 基礎設施：自動建立 Leaflet 缺失的 bottomcenter 容器] ---
     function ensureLeafletContainer(mapInstance) {
         const name = 'bottomcenter';
         if (mapInstance._controlCorners && !mapInstance._controlCorners[name]) {
@@ -26,22 +26,24 @@
         }
     }
 
-    // --- [2. 狀態監聽與 UI 連動] ---
+    // --- [2. 狀態監聽：確保重新開啟網頁後能同步狀態] ---
     window.watchAuditStatus = function(kmlId) {
         if (auditUnsubscribes[kmlId]) return;
         const docRef = db.doc(`${APP_PATH}/${kmlId}`);
         auditUnsubscribes[kmlId] = docRef.onSnapshot((doc) => {
             if (!doc.exists) return;
             const data = doc.data();
+            // 更新全域狀態快取
             window.auditLayersState[kmlId] = data?.auditStamp || { enabled: false, targetCount: 2 };
             
+            // UI 連動更新
             updateMainMenuBtnStatus();
-            window.refreshMapLayers(kmlId);
+            if (window.refreshMapLayers) window.refreshMapLayers(kmlId);
             if (bottomControl) bottomControl.update();
         });
     };
 
-    // --- [3. 樣式與事件：紅/藍/粉 變色與導航觸發] ---
+    // --- [3. 地圖樣式：紅/藍/粉 變色邏輯] ---
     window.refreshMapLayers = function(targetKmlId = null) {
         if (typeof map === 'undefined') return;
         map.eachLayer(layer => {
@@ -55,13 +57,11 @@
                 // 設定顏色：未開啟(紅) / 開啟未查(藍) / 開啟已查(粉)
                 layer.setStyle(window.getAuditPointStyle(kmlId, hasRecord));
 
-                // 注入點擊監聽：觸發導航 + 喚醒底部選單
+                // 注入點擊監聽：導航 + 喚醒底部選單
                 if (!layer._auditListenerAttached) {
                     layer.on('click', function(e) {
                         L.DomEvent.stopPropagation(e);
-                        // A. 呼叫外部導航 (不修改其邏輯)
                         if (window.createNavButton) window.createNavButton(e.latlng, props.name);
-                        // B. 更新選中狀態
                         window.currentSelectedPoint = { id: props.id, kmlId: kmlId, props: props };
                         if (bottomControl) bottomControl.update();
                     });
@@ -74,8 +74,10 @@
 
     window.getAuditPointStyle = function(kmlId, hasRecord) {
         const config = window.auditLayersState[kmlId];
-        let color = "#e74c3c"; // 預設紅
-        if (config?.enabled) color = hasRecord ? "#ff85c0" : "#3498db";
+        let color = "#e74c3c"; // 預設紅 (未開啟清查)
+        if (config?.enabled) {
+            color = hasRecord ? "#ff85c0" : "#3498db"; // 已查(粉) / 未查(藍)
+        }
         return { fillColor: color, fillOpacity: 1, color: "#ffffff", weight: 2, radius: 8 };
     };
 
@@ -112,7 +114,7 @@
 
     window.initBottomAuditControl = function(mapInstance) {
         if (!bottomControl) {
-            ensureLeafletContainer(mapInstance); // 確保容器存在避免 insertBefore 報錯
+            ensureLeafletContainer(mapInstance); 
             bottomControl = new AuditBottomMenu().addTo(mapInstance);
             mapInstance.on('click', () => {
                 window.currentSelectedPoint = null;
@@ -121,47 +123,64 @@
         }
     };
 
-    // --- [5. 管理視窗：對接舊有 showAuditActionModal 接口] ---
-    window.showAuditActionModal = function(layers) {
-        const layerList = Array.isArray(layers) ? layers : [layers];
-        Swal.fire({
-            title: '圖層清查管理',
-            html: window.renderAuditModal(layerList),
-            showConfirmButton: false,
-            showCancelButton: true,
-            cancelButtonText: '取消',
-            width: '90%',
-            didOpen: () => {
-                layerList.forEach(l => window.watchAuditStatus(l.id));
+    // --- [5. 管理視窗：主動從 Firestore 抓取清單] ---
+    window.showAuditActionModal = async function() {
+        Swal.fire({ title: '讀取圖層清單中...', didOpen: () => Swal.showLoading() });
+
+        try {
+            const snapshot = await db.collection(APP_PATH).get();
+            const layers = [];
+            snapshot.forEach(doc => {
+                const data = doc.data();
+                layers.push({
+                    id: doc.id,
+                    name: data.name || data.KmlName || data.label || doc.id
+                });
+            });
+
+            if (layers.length === 0) {
+                Swal.fire("提醒", "資料庫中尚無 KML 圖層資料", "info");
+                return;
             }
-        });
+
+            Swal.fire({
+                title: '圖層清查管理',
+                html: window.renderAuditModal(layers),
+                showConfirmButton: false,
+                showCancelButton: true,
+                cancelButtonText: '取消',
+                width: '90%',
+                didOpen: () => {
+                    layers.forEach(l => window.watchAuditStatus(l.id));
+                }
+            });
+        } catch (error) {
+            console.error("抓取失敗:", error);
+            Swal.fire("錯誤", "無法獲取清單", "error");
+        }
     };
 
     window.renderAuditModal = function(layers) {
         let html = `<div style="text-align: left; max-height: 400px; overflow-y: auto;">`;
         layers.forEach(layer => {
             const state = window.auditLayersState[layer.id] || { enabled: false, targetCount: 2 };
-            
-            // ✨ 修正名稱抓取：相容 layer.name, layer.label 或 layer.title
-            const displayName = layer.name || layer.label || layer.title || "未命名圖層";
-            
             const tag = state.enabled ? ` <span style="color:#ff8533; font-weight:bold;">(清查中:${state.targetCount}張)</span>` : "";
             
             html += `
                 <div style="padding: 12px; border-bottom: 1px solid #eee; background: #fff;">
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <span style="font-size: 14px; flex: 1;">${displayName}${tag}</span>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <span style="font-size: 14px; flex: 1; font-weight: bold;">${layer.name}${tag}</span>
                         <div style="display: flex; gap: 5px;">
                             <button onclick="window.updateLayerAudit('${layer.id}', true)" 
-                                    style="padding: 5px 10px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer;" ${state.enabled ? 'disabled' : ''}>開啟</button>
+                                    style="padding: 5px 10px; background: #28a745; color: white; border: none; border-radius: 4px;" ${state.enabled ? 'disabled' : ''}>開啟</button>
                             <button onclick="window.updateLayerAudit('${layer.id}', false)" 
-                                    style="padding: 5px 10px; background: #dc3545; color: white; border: none; border-radius: 4px; cursor: pointer;" ${!state.enabled ? 'disabled' : ''}>關閉</button>
-                            <button onclick="window.downloadAuditZip('${layer.id}', '${displayName}')" 
-                                    class="download-btn" style="display: inline-block; padding: 5px 10px;">下載</button>
+                                    style="padding: 5px 10px; background: #dc3545; color: white; border: none; border-radius: 4px;" ${!state.enabled ? 'disabled' : ''}>關閉</button>
+                            <button onclick="window.downloadAuditZip('${layer.id}', '${layer.name}')" 
+                                    style="padding: 5px 10px; background: #6c757d; color: white; border: none; border-radius: 4px;">下載</button>
                         </div>
                     </div>
                     ${state.enabled ? `
-                    <div style="margin-top: 8px; font-size: 12px; color: #666; background: #f9f9f9; padding: 5px; border-radius: 4px;">
+                    <div style="margin-top: 8px; font-size: 12px; color: #666; background: #f9f9f9; padding: 8px; border-radius: 4px;">
                         設定張數 (2-10): <input type="number" value="${state.targetCount}" min="2" max="10" 
                                      onchange="window.updateLayerAuditCount('${layer.id}', this.value)" style="width:45px; text-align:center;">
                     </div>` : ''}
@@ -171,8 +190,13 @@
     };
 
     window.updateLayerAudit = async function(id, enable) {
+        const currentCount = window.auditLayersState[id]?.targetCount || 2;
         await db.doc(`${APP_PATH}/${id}`).set({ 
-            auditStamp: { enabled: enable, targetCount: 2, updatedAt: firebase.firestore.FieldValue.serverTimestamp() } 
+            auditStamp: { 
+                enabled: enable, 
+                targetCount: currentCount, 
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp() 
+            } 
         }, { merge: true });
     };
 
@@ -181,7 +205,7 @@
     };
 
     function updateMainMenuBtnStatus() {
-        const auditBtn = document.querySelector('.audit-btn');
+        const auditBtn = document.getElementById('auditKmlBtn');
         if (auditBtn) {
             const isAnyEnabled = Object.values(window.auditLayersState).some(s => s.enabled);
             isAnyEnabled ? auditBtn.classList.add('active') : auditBtn.classList.remove('active');
