@@ -1,18 +1,18 @@
 ﻿/**
- * audit-module.js - 2026 最新穩定版
- * 解決載入崩潰問題，並完整實作清查 UI 與狀態同步
+ * audit-module.js - 2026.04 更新版
+ * 修正對話框標題為點位號碼、強化底部按鈕顯示邏輯、維持立即變色
  */
 (function() {
     'use strict';
 
-    // 1. 安全初始化：避免 Firebase 尚未就緒導致整個模組崩潰
+    // 安全初始化：確保 Firebase 存在
     let db, storage;
     try {
         db = firebase.firestore();
         storage = firebase.storage();
     } catch (e) {
-        console.error("Firebase 初始化失敗，清查模組可能無法正常運作:", e);
-        return; // 若缺少 Firebase 則安全退出，不引發後續 undefined 錯誤
+        console.error("Firebase 初始化失敗，清查模組中止:", e);
+        return; 
     }
 
     const APP_PATH = 'artifacts/kmldata-d22fb/public/data/kmlLayers';
@@ -21,11 +21,10 @@
     let bottomControl = null;
 
     // ==========================================
-    // 需求 1 & 4：核心攔截器 (立即變色與文字同步)
+    // 1. 核心攔截器 (立即變色與文字同步)
     // ==========================================
     const originalAddGeoJson = window.addGeoJsonLayers;
     window.addGeoJsonLayers = function(geojsonFeatures) {
-        // 先執行原始的 map-logic.js 繪製邏輯
         if (typeof originalAddGeoJson === 'function') {
             originalAddGeoJson.apply(this, arguments);
         }
@@ -34,12 +33,10 @@
         const currentId = ns?.currentKmlLayerId;
         if (!ns || !currentId) return;
 
-        // 立即為新產生的 Marker 注入 ID 與點擊事件
         ns.markers.eachLayer(layer => {
             if (layer instanceof L.CircleMarker) {
                 layer.options.kmlId = currentId;
                 
-                // 覆蓋原本的點擊事件，同時喚醒清查按鈕與導航
                 layer.off('click').on('click', function(e) {
                     L.DomEvent.stopPropagation(e);
                     const props = layer.feature?.properties || {};
@@ -49,18 +46,17 @@
                         props: props 
                     };
                     
-                    // 呼叫原本的導航按鈕 (相容 map-logic.js)
                     if (typeof window.createNavButton === 'function') {
                         window.createNavButton(e.latlng, props.name || '未命名');
                     }
                     
-                    // 喚醒底部清查按鈕
+                    // 點選點位時，顯示底部按鈕
                     if (bottomControl) bottomControl.update();
                 });
             }
         });
 
-        // ✨ 需求 1：圖層一開啟，立即執行變色與選單文字加註
+        // 開啟圖層立即執行變色與選單文字加註
         window.refreshMapLayers(currentId);
         window.syncSelectMenuText();
     };
@@ -77,7 +73,6 @@
             const data = doc.data();
             window.auditLayersState[kmlId] = data?.auditStamp || { enabled: false, targetCount: 2 };
             
-            // 監聽到狀態改變時，即時更新地圖顏色與選單文字
             window.refreshMapLayers(kmlId);
             window.syncSelectMenuText();
             if (bottomControl) bottomControl.update();
@@ -89,13 +84,11 @@
     };
 
     window.syncSelectMenuText = function() {
-        // 同步所有可能的下拉選單
         const selects = [document.getElementById('kmlLayerSelect'), document.getElementById('kmlLayerSelectDashboard')];
-        
         selects.forEach(select => {
             if (!select) return;
             Array.from(select.options).forEach(opt => {
-                if (!opt.value) return; // 略過 "-- 請選擇 --"
+                if (!opt.value) return; 
                 
                 const state = window.auditLayersState[opt.value];
                 let rawName = opt.getAttribute('data-raw-name');
@@ -104,7 +97,6 @@
                     opt.setAttribute('data-raw-name', rawName);
                 }
 
-                // ✨ 需求 1：加註清查中文字
                 if (state && state.enabled) {
                     opt.textContent = `${rawName} (清查中:${state.targetCount}張)`;
                 } else {
@@ -127,7 +119,6 @@
                 const isDone = !!(props.auditStatus || props.auditPhotoCount);
                 const config = window.auditLayersState[kmlId];
                 
-                // ✨ 需求 1：開啟圖層立即顯示顏色 (紅=關閉, 藍=未查, 粉=已查)
                 let style = { fillColor: "#e74c3c", radius: 8 }; 
                 if (config?.enabled) {
                     style.fillColor = isDone ? "#ff85c0" : "#3498db"; 
@@ -139,7 +130,7 @@
     };
 
     // ==========================================
-    // 需求 2：底部控制面板 (縮小 2/3、文字簡化、自動隱藏)
+    // 2. 底部控制面板 (點擊空白處隱藏)
     // ==========================================
     const AuditBottomMenu = L.Control.extend({
         options: { position: 'bottomcenter' },
@@ -150,7 +141,6 @@
         },
         update: function() {
             const active = window.currentSelectedPoint;
-            // 無選取點位或未開啟清查時，隱藏按鈕
             if (!active || !window.auditLayersState[active.kmlId]?.enabled) {
                 this._container.style.display = 'none';
                 return;
@@ -159,7 +149,6 @@
             const isDone = !!(active.props.auditStatus || active.props.auditPhotoCount);
             this._container.style.display = 'block';
             
-            // 按鈕尺寸縮小，文字簡化為「清樁」或「修改」
             this._container.innerHTML = `
                 <button onclick="L.DomEvent.stopPropagation(event); window.openAuditEditor()" 
                         style="background: ${isDone ? '#ff85c0' : '#3498db'}; 
@@ -173,7 +162,7 @@
     });
 
     // ==========================================
-    // 需求 3：清查對話框內容 (我還記得！)
+    // 3. 清查對話框內容 (標題改為點位號碼)
     // ==========================================
     window.openAuditEditor = async function() {
         const point = window.currentSelectedPoint;
@@ -183,8 +172,10 @@
         const targetCount = config?.targetCount || 2;
         const currentStatus = point.props.auditStatus || '正常';
         const currentNote = point.props.auditNote || '';
+        
+        // 標題設定為點位名稱 (號碼)，若無則顯示 ID
+        const pointNumber = point.props.name || point.id;
 
-        // 建立照片上傳預覽網格
         let photoHtml = '';
         for (let i = 0; i < targetCount; i++) {
             const photoData = point.props.photos?.[i] || '';
@@ -199,7 +190,7 @@
         }
 
         const { value: formResult } = await Swal.fire({
-            title: `點位清查: ${point.props.name || '未命名'}`,
+            title: pointNumber, // 直接顯示點位號碼
             html: `
                 <div style="text-align:left; font-size: 14px;">
                     <label><b>1. 清查狀態</b></label>
@@ -231,11 +222,9 @@
         });
 
         if (formResult) {
-            // 將結果寫回當前選中點的屬性中 (實務上應加上寫入 Firebase 邏輯)
             point.props.auditStatus = formResult.status;
             point.props.auditNote = formResult.note;
             
-            // 儲存後立即更新地圖顏色與按鈕狀態
             window.refreshMapLayers(point.kmlId);
             if (bottomControl) bottomControl.update();
             Swal.fire({ icon: 'success', title: '儲存成功', timer: 1000, showConfirmButton: false });
@@ -251,7 +240,6 @@
                 if (img) { img.src = e.target.result; img.style.display = 'block'; }
                 if (icon) icon.style.display = 'none';
                 
-                // 暫存在當前點位屬性中
                 if (!window.currentSelectedPoint.props.photos) {
                     window.currentSelectedPoint.props.photos = [];
                 }
@@ -336,7 +324,7 @@
             }
             bottomControl = new AuditBottomMenu().addTo(map);
             
-            // 點擊地圖空白處，清除選取並隱藏按鈕
+            // 點擊地圖空白處，清除選取並關閉按鈕
             map.on('click', (e) => {
                 window.currentSelectedPoint = null;
                 bottomControl.update();
@@ -344,7 +332,6 @@
         }
     };
 
-    // 使用計時器等待地圖初始化完成
     const checkTimer = setInterval(() => {
         if (window.mapNamespace?.map) {
             initModule();
@@ -352,5 +339,4 @@
         }
     }, 1000);
 
-    console.log("✅ 清查模組 (audit-module.js) 載入完成並已導出所有方法。");
 })();
