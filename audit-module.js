@@ -1,17 +1,20 @@
 ﻿/**
- * audit-module.js - 2026.04 更新版
- * 修正對話框標題為點位號碼、強化底部按鈕顯示邏輯、維持立即變色
+ * audit-module.js - 2026.04.08 完整版
+ * 功能：
+ * 1. 點擊點位保留高亮與導航，僅在開啟清查時顯示底部按鈕。
+ * 2. 清查編輯框標題顯示點位號碼。
+ * 3. 開啟圖層立即依清查狀態變色 (藍/粉紅)。
+ * 4. 點擊地圖空白處自動隱藏清查按鈕。
  */
 (function() {
     'use strict';
 
-    // 安全初始化：確保 Firebase 存在
-    let db, storage;
+    // Firebase 初始化檢查
+    let db;
     try {
         db = firebase.firestore();
-        storage = firebase.storage();
     } catch (e) {
-        console.error("Firebase 初始化失敗，清查模組中止:", e);
+        console.error("Firebase Firestore 未就緒，清查模組無法執行:", e);
         return; 
     }
 
@@ -21,10 +24,11 @@
     let bottomControl = null;
 
     // ==========================================
-    // 1. 核心攔截器 (立即變色與文字同步)
+    // 1. 核心攔截器 (Monkey Patch)
     // ==========================================
     const originalAddGeoJson = window.addGeoJsonLayers;
     window.addGeoJsonLayers = function(geojsonFeatures) {
+        // 先執行原始渲染邏輯 (確保高亮與 Popup 綁定)
         if (typeof originalAddGeoJson === 'function') {
             originalAddGeoJson.apply(this, arguments);
         }
@@ -33,39 +37,38 @@
         const currentId = ns?.currentKmlLayerId;
         if (!ns || !currentId) return;
 
+        // 遍歷所有 CircleMarker，注入清查邏輯
         ns.markers.eachLayer(layer => {
             if (layer instanceof L.CircleMarker) {
                 layer.options.kmlId = currentId;
                 
-                layer.off('click').on('click', function(e) {
-                    //L.DomEvent.stopPropagation(e);
+                // 監聽點擊事件
+                layer.on('click', function(e) {
                     const props = layer.feature?.properties || {};
+                    
+                    // 設定全域選取資訊
                     window.currentSelectedPoint = { 
                         id: layer.feature?.id || `${e.latlng.lat}_${e.latlng.lng}`, 
                         kmlId: currentId, 
                         props: props 
                     };
                     
-                    if (typeof window.createNavButton === 'function') {
-                        window.createNavButton(e.latlng, props.name || '未命名');
-                    }
-                    
-                    // 點選點位時，顯示底部按鈕
+                    // 更新底部按鈕狀態 (如果圖層開啟清查，按鈕會出現)
                     if (bottomControl) bottomControl.update();
                 });
             }
         });
 
-        // 開啟圖層立即執行變色與選單文字加註
+        // 立即套用清查配色與同步下拉選單文字
         window.refreshMapLayers(currentId);
         window.syncSelectMenuText();
     };
 
     // ==========================================
-    // 狀態監聽與 UI 同步
+    // 2. 狀態監聽與地圖重新渲染
     // ==========================================
     window.watchAuditStatus = function(kmlId) {
-        if (!kmlId || kmlId === "undefined" || auditUnsubscribes[kmlId]) return;
+        if (!kmlId || auditUnsubscribes[kmlId]) return;
         
         const docRef = db.doc(`${APP_PATH}/${kmlId}`);
         auditUnsubscribes[kmlId] = docRef.onSnapshot((doc) => {
@@ -73,36 +76,10 @@
             const data = doc.data();
             window.auditLayersState[kmlId] = data?.auditStamp || { enabled: false, targetCount: 2 };
             
+            // 實時重繪地圖與 UI
             window.refreshMapLayers(kmlId);
             window.syncSelectMenuText();
             if (bottomControl) bottomControl.update();
-            
-            if (Swal.isVisible() && Swal.getTitle()?.innerText === '圖層清查管理') {
-                window.refreshAuditModalUI(false); 
-            }
-        });
-    };
-
-    window.syncSelectMenuText = function() {
-        const selects = [document.getElementById('kmlLayerSelect'), document.getElementById('kmlLayerSelectDashboard')];
-        selects.forEach(select => {
-            if (!select) return;
-            Array.from(select.options).forEach(opt => {
-                if (!opt.value) return; 
-                
-                const state = window.auditLayersState[opt.value];
-                let rawName = opt.getAttribute('data-raw-name');
-                if (!rawName) {
-                    rawName = opt.textContent.split(' (清查中')[0];
-                    opt.setAttribute('data-raw-name', rawName);
-                }
-
-                if (state && state.enabled) {
-                    opt.textContent = `${rawName} (清查中:${state.targetCount}張)`;
-                } else {
-                    opt.textContent = rawName;
-                }
-            });
         });
     };
 
@@ -119,28 +96,43 @@
                 const isDone = !!(props.auditStatus || props.auditPhotoCount);
                 const config = window.auditLayersState[kmlId];
                 
-                let style = { fillColor: "#e74c3c", radius: 8 }; 
-                if (config?.enabled) {
-                    style.fillColor = isDone ? "#ff85c0" : "#3498db"; 
-                    style.radius = 10;
+                if (config && config.enabled) {
+                    // 清查中的樣式
+                    layer.setStyle({ 
+                        fillColor: isDone ? "#ff85c0" : "#3498db", // 已清:粉紅, 待清:藍
+                        radius: 10, 
+                        fillOpacity: 1, 
+                        color: "#ffffff", 
+                        weight: 2 
+                    });
+                } else {
+                    // 原始樣式 (紅色)
+                    layer.setStyle({ 
+                        fillColor: "#e74c3c", 
+                        radius: 8, 
+                        fillOpacity: 1, 
+                        color: "#ffffff", 
+                        weight: 2 
+                    });
                 }
-                layer.setStyle({ ...style, fillOpacity: 1, color: "#ffffff", weight: 2 });
             }
         });
     };
 
     // ==========================================
-    // 2. 底部控制面板 (點擊空白處隱藏)
+    // 3. 底部按鈕控制 (Leaflet Custom Control)
     // ==========================================
     const AuditBottomMenu = L.Control.extend({
         options: { position: 'bottomcenter' },
         onAdd: function() {
             this._container = L.DomUtil.create('div', 'audit-bottom-menu-container');
-            this._container.style.cssText = "pointer-events: auto; display: none; margin-bottom: 20px;";
+            // 預設隱藏，不擋住地圖
+            this._container.style.cssText = "pointer-events: auto; display: none; margin-bottom: 25px;";
             return this._container;
         },
         update: function() {
             const active = window.currentSelectedPoint;
+            // 檢查：若未選取點位，或該圖層未開啟清查功能，則隱藏按鈕
             if (!active || !window.auditLayersState[active.kmlId]?.enabled) {
                 this._container.style.display = 'none';
                 return;
@@ -153,16 +145,16 @@
                 <button onclick="L.DomEvent.stopPropagation(event); window.openAuditEditor()" 
                         style="background: ${isDone ? '#ff85c0' : '#3498db'}; 
                                color: white; border: 2px solid #fff; 
-                               padding: 6px 16px; border-radius: 20px; 
-                               font-weight: bold; font-size: 14px; 
-                               box-shadow: 0 2px 8px rgba(0,0,0,0.3); cursor: pointer;">
-                    ${isDone ? '修改' : '清樁'}
+                               padding: 10px 24px; border-radius: 30px; 
+                               font-weight: bold; font-size: 15px; 
+                               box-shadow: 0 4px 12px rgba(0,0,0,0.4); cursor: pointer;">
+                    ${isDone ? '修改清查紀錄' : '編輯清查紀錄'}
                 </button>`;
         }
     });
 
     // ==========================================
-    // 3. 清查對話框內容 (標題改為點位號碼)
+    // 4. 清查對話框 (Swal)
     // ==========================================
     window.openAuditEditor = async function() {
         const point = window.currentSelectedPoint;
@@ -172,9 +164,7 @@
         const targetCount = config?.targetCount || 2;
         const currentStatus = point.props.auditStatus || '正常';
         const currentNote = point.props.auditNote || '';
-        
-        // 標題設定為點位名稱 (號碼)，若無則顯示 ID
-        const pointNumber = point.props.name || point.id;
+        const pointNumber = point.props.name || point.id; // 對話框標題改為點位號碼
 
         let photoHtml = '';
         for (let i = 0; i < targetCount; i++) {
@@ -190,7 +180,7 @@
         }
 
         const { value: formResult } = await Swal.fire({
-            title: pointNumber, // 直接顯示點位號碼
+            title: pointNumber,
             html: `
                 <div style="text-align:left; font-size: 14px;">
                     <label><b>1. 清查狀態</b></label>
@@ -222,6 +212,7 @@
         });
 
         if (formResult) {
+            // 寫回屬性 (實際專案中此處應連動 Firebase 儲存)
             point.props.auditStatus = formResult.status;
             point.props.auditNote = formResult.note;
             
@@ -240,9 +231,7 @@
                 if (img) { img.src = e.target.result; img.style.display = 'block'; }
                 if (icon) icon.style.display = 'none';
                 
-                if (!window.currentSelectedPoint.props.photos) {
-                    window.currentSelectedPoint.props.photos = [];
-                }
+                if (!window.currentSelectedPoint.props.photos) window.currentSelectedPoint.props.photos = [];
                 window.currentSelectedPoint.props.photos[index] = e.target.result;
             };
             reader.readAsDataURL(input.files[0]);
@@ -250,88 +239,46 @@
     };
 
     // ==========================================
-    // 清查管理對話框 (總覽與開關)
+    // 5. 下拉選單同步文字
     // ==========================================
-    window.showAuditActionModal = async function() {
-        Swal.fire({ title: '讀取中...', didOpen: () => Swal.showLoading() });
-        await window.refreshAuditModalUI(true);
-    };
-
-    window.refreshAuditModalUI = async function(firstOpen = false) {
-        try {
-            const snapshot = await db.collection(APP_PATH).get();
-            const layers = [];
-            snapshot.forEach(doc => {
-                const data = doc.data();
-                if (doc.id === "undefined" || !data || (!data.name && !data.KmlName)) return;
-                layers.push({ id: doc.id, name: data.name || data.KmlName });
-                window.watchAuditStatus(doc.id);
+    window.syncSelectMenuText = function() {
+        const selects = [document.getElementById('kmlLayerSelect'), document.getElementById('kmlLayerSelectDashboard')];
+        selects.forEach(select => {
+            if (!select) return;
+            Array.from(select.options).forEach(opt => {
+                if (!opt.value) return;
+                const state = window.auditLayersState[opt.value];
+                let rawName = opt.getAttribute('data-raw-name');
+                if (!rawName) {
+                    rawName = opt.textContent.split(' (清查中')[0];
+                    opt.setAttribute('data-raw-name', rawName);
+                }
+                opt.textContent = (state && state.enabled) ? `${rawName} (清查中:${state.targetCount}張)` : rawName;
             });
-
-            const html = window.renderAuditModal(layers);
-            if (firstOpen) {
-                Swal.fire({ title: '圖層清查管理', html: html, showConfirmButton: false, showCancelButton: true, cancelButtonText: '取消', width: '95%' });
-            } else {
-                Swal.update({ html: html });
-            }
-        } catch (e) { console.error(e); }
-    };
-
-    window.renderAuditModal = function(layers) {
-        let html = `<div style="text-align: left; max-height: 60vh; overflow-y: auto;">`;
-        layers.forEach(l => {
-            const state = window.auditLayersState[l.id] || { enabled: false, targetCount: 2 };
-            const tag = state.enabled ? ` <span style="color:#ff8533; font-weight:bold;">(清查中:${state.targetCount}張)</span>` : "";
-            html += `
-                <div style="padding: 12px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center;">
-                    <span style="font-weight:bold;">${l.name}${tag}</span>
-                    <div style="display: flex; gap: 5px;">
-                        <button onclick="window.updateLayerAudit('${l.id}', true)" style="background:#28a745; color:white; border:none; padding:6px 10px; border-radius:4px;" ${state.enabled ? 'disabled' : ''}>開啟</button>
-                        <button onclick="window.updateLayerAudit('${l.id}', false)" style="background:#dc3545; color:white; border:none; padding:6px 10px; border-radius:4px;" ${!state.enabled ? 'disabled' : ''}>關閉</button>
-                    </div>
-                </div>`;
         });
-        return html + `</div>`;
-    };
-
-    window.updateLayerAudit = async function(id, enable) {
-        if (enable) {
-            const { value: count } = await Swal.fire({
-                title: '設定清查張數',
-                text: '請輸入每個點位要求的照片張數 (2-10)',
-                input: 'number', inputValue: 2, inputAttributes: { min: 2, max: 10 },
-                showCancelButton: true
-            });
-            if (count) {
-                await db.doc(`${APP_PATH}/${id}`).set({ auditStamp: { enabled: true, targetCount: parseInt(count), updatedAt: firebase.firestore.FieldValue.serverTimestamp() }}, { merge: true });
-            }
-        } else {
-            const res = await Swal.fire({ title: '確定關閉？', text: '點位將變回紅色', icon: 'warning', showCancelButton: true });
-            if (res.isConfirmed) {
-                await db.doc(`${APP_PATH}/${id}`).set({ auditStamp: { enabled: false, targetCount: 2 }}, { merge: true });
-            }
-        }
     };
 
     // ==========================================
-    // 地圖控制項初始化與自動監控
+    // 初始化
     // ==========================================
     const initModule = () => {
         const map = window.mapNamespace?.map;
         if (map && !bottomControl) {
+            // 建立底部中央容器
             if (!map._controlCorners['bottomcenter']) {
                 map._controlCorners['bottomcenter'] = L.DomUtil.create('div', 'leaflet-bottomcenter', map._controlContainer);
             }
             bottomControl = new AuditBottomMenu().addTo(map);
             
-            // 點擊地圖空白處，清除選取並關閉按鈕
-            map.on('click', (e) => {
+            // 點擊地圖空白處：取消選取點位並隱藏按鈕
+            map.on('click', () => {
                 window.currentSelectedPoint = null;
                 bottomControl.update();
             });
         }
     };
 
+    // 輪詢等待地圖載入
     const checkTimer = setInterval(() => {
         if (window.mapNamespace?.map) {
             initModule();
