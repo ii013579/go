@@ -209,7 +209,7 @@
     const AuditBottomMenu = L.Control.extend({
         options: { position: 'bottomcenter' },
         onAdd: function() {
-            this._container = L.DomUtil.create('div', 'audit-bottom-menu');
+            this._container = L.DomUtil.create('div', 'audit-bottom-menu-container');
             this._container.style.display = 'none';
             return this._container;
         },
@@ -223,9 +223,9 @@
             const isDone = !!active.props.auditStatus;
             this._container.style.display = 'block';
             this._container.innerHTML = `
-                <button onclick="window.openAuditEditor('${active.id}', '${active.kmlId}')" 
-                        style="background: ${isDone ? '#ff85c0' : '#e74c3c'}; color: white; border: 2px solid #fff; padding: 12px 25px; border-radius: 50px; font-weight: bold; box-shadow: 0 4px 15px rgba(0,0,0,0.4);">
-                    ${isDone ? '修正清查紀錄' : '編輯清查紀錄'} (${config.targetCount}張)
+                <button onclick="event.stopPropagation(); window.openAuditEditor('${active.id}', '${active.kmlId}')" 
+                        style="background: ${isDone ? '#ff85c0' : '#3498db'}; color: white; border: 3px solid #fff; padding: 15px 30px; border-radius: 50px; font-weight: bold; font-size: 18px; box-shadow: 0 4px 15px rgba(0,0,0,0.5);">
+                    ${isDone ? '修正清查紀錄' : '編輯清查紀錄'}
                 </button>`;
         }
     });

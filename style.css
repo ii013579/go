@@ -798,21 +798,28 @@ canvas {
     z-index: 1000;
 }
 
-.leaflet-bottom.leaflet-center {
-    left: 50%;
-    transform: translateX(-50%);
-}
-
+/* 確保自定義的置中容器不阻擋地圖操作 */
 .leaflet-bottomcenter {
     position: absolute;
-    bottom: 0;
+    bottom: 20px; /* 稍微抬高，避免擋到手機系統導航列 */
     left: 50%;
     transform: translateX(-50%);
-    padding-bottom: 10px; /* 稍微留點空間 */
-    z-index: 1000;
-    pointer-events: none; /* 讓容器本身不擋住地圖點擊 */
+    z-index: 1000 !important;
+    pointer-events: none; 
+    display: flex;
+    justify-content: center;
+    width: 100%; /* 寬度撐滿才能真正 translateX 置中 */
 }
 
-.leaflet-bottomcenter .audit-bottom-menu {
-    pointer-events: auto; /* 讓按鈕可以點擊 */
+/* 讓按鈕區塊恢復點擊功能 */
+.leaflet-bottomcenter .audit-bottom-menu-container {
+    pointer-events: auto !important;
+    display: inline-block;
+}
+
+/* 針對手機按鈕樣式優化 */
+.audit-bottom-menu-container button {
+    -webkit-appearance: none; /* 移除 iOS 預設樣式 */
+    touch-action: manipulation; /* 優化觸控反應 */
+    cursor: pointer;
 }
