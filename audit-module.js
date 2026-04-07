@@ -38,7 +38,7 @@
                 layer.options.kmlId = currentId;
                 
                 layer.off('click').on('click', function(e) {
-                    L.DomEvent.stopPropagation(e);
+                    //L.DomEvent.stopPropagation(e);
                     const props = layer.feature?.properties || {};
                     window.currentSelectedPoint = { 
                         id: layer.feature?.id || `${e.latlng.lat}_${e.latlng.lng}`, 
