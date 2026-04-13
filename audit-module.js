@@ -1,32 +1,35 @@
 ﻿/**
- * audit-module.js - 2026.04.14 高相容最終版
- * 解決：載入錯誤、1024x768壓縮、Storage分層、顏色持續顯示
+ * audit-module.js - 2026.04.14 穩健整合版
+ * 功能：1024x768 強制壓縮、Storage 資料夾隔離、點位顏色同步、零侵入載入。
  */
 (function() {
     'use strict';
 
-    // 使用延遲初始化，防止 Firebase SDK 尚未就緒導致的報錯
+    // 延遲存取 Firebase，確保 firebase-init.js 已完成初始化
     const getDB = () => firebase.firestore();
     const getStorage = () => firebase.storage();
+    
+    // 配置路徑
     const APP_PATH = 'artifacts/kmldata-d22fb/public/data/kmlLayers';
     const STORAGE_ROOT = 'kmldata-d22fb/storage';
 
-    // 全域狀態與控制項
+    // 初始化狀態
     window.auditLayersState = window.auditLayersState || {}; 
     const auditUnsubscribes = {};
     let bottomControl = null;
 
     // ==========================================
-    // 1. 核心攔截 (AOP) - 這是解決「藍/粉紅點」顏色消失的關鍵
+    // 1. 核心攔截 (AOP) - 解決搜尋/縮放後顏色變回藍色的問題
     // ==========================================
     const originalAddGeoJsonLayers = window.addGeoJsonLayers;
     window.addGeoJsonLayers = function(features) {
         const ns = window.mapNamespace;
-        // 如果地圖環境尚未就緒，先跑原始函式
-        if (!ns) return originalAddGeoJsonLayers ? originalAddGeoJsonLayers.apply(this, arguments) : null;
+        if (!ns || !originalAddGeoJsonLayers) {
+            return originalAddGeoJsonLayers ? originalAddGeoJsonLayers.apply(this, arguments) : null;
+        }
 
         const kmlId = ns.currentKmlLayerId;
-        // 若有清查紀錄，強行將最新狀態注入 Feature 屬性
+        // 如果該圖層有清查數據，強行將最新狀態注入屬性
         if (kmlId && window.auditLayersState[kmlId]) {
             const records = window.auditLayersState[kmlId];
             features.forEach(function(f) {
@@ -44,13 +47,13 @@
     };
 
     // ==========================================
-    // 2. Firebase 監聽器 (由 auth-kml-management.js 調用)
+    // 2. Firebase 監聽器 - 供 auth-kml-management.js 呼叫
     // ==========================================
     window.initAuditListener = function(kmlId) {
         if (!kmlId) return;
         if (auditUnsubscribes[kmlId]) auditUnsubscribes[kmlId]();
 
-        console.log("[Audit] 啟動監聽: " + kmlId);
+        console.log("[Audit] 監聽啟動: " + kmlId);
         try {
             auditUnsubscribes[kmlId] = getDB().collection(APP_PATH).doc(kmlId).collection('auditRecords')
                 .onSnapshot(function(snapshot) {
@@ -58,22 +61,22 @@
                     snapshot.forEach(function(doc) { updates[doc.id] = doc.data(); });
                     window.auditLayersState[kmlId] = updates;
 
-                    // 當資料異動時，手動觸發地圖重新染色 (不更動 map-logic.js)
+                    // 當後端數據異動，立刻重新渲染地圖以更新顏色
                     const ns = window.mapNamespace;
                     if (ns && ns.currentKmlLayerId === kmlId && ns.allKmlFeatures) {
                         window.addGeoJsonLayers(ns.allKmlFeatures);
                     }
                     if (bottomControl && bottomControl.update) bottomControl.update();
                 }, function(err) {
-                    console.error("[Audit] 監聽發生錯誤:", err);
+                    console.error("[Audit] 監聽錯誤:", err);
                 });
         } catch (e) {
-            console.error("[Audit] 初始化監聽失敗:", e);
+            console.error("[Audit] 初始化失敗:", e);
         }
     };
 
     // ==========================================
-    // 3. 影像處理：強制壓縮至 1024x768
+    // 3. 影像處理：壓縮至 1024x768
     // ==========================================
     window.handleAuditPhotoPreview = function(input, index) {
         if (input.files && input.files[0]) {
@@ -86,9 +89,11 @@
                     canvas.height = 768;
                     const ctx = canvas.getContext('2d');
                     
-                    // 白色背景補底並繪製縮放圖片
+                    // 白色背景補底 (防止透明圖產生黑邊)
                     ctx.fillStyle = "#FFFFFF";
                     ctx.fillRect(0, 0, 1024, 768);
+                    
+                    // 強制拉伸/縮放繪製
                     ctx.drawImage(img, 0, 0, 1024, 768);
 
                     const base64 = canvas.toDataURL('image/jpeg', 0.85);
@@ -107,7 +112,7 @@
     };
 
     // ==========================================
-    // 4. 清查編輯對話框 (整合 Storage 路徑隔離)
+    // 4. 清查對話框 (整合分層儲存)
     // ==========================================
     window.openAuditEditor = async function() {
         const point = window.currentSelectedPoint;
@@ -142,7 +147,7 @@
                         <option value="遺失" ${currentStatus==='遺失'?'selected':''}>遺失</option>
                         <option value="被覆蓋" ${currentStatus==='被覆蓋'?'selected':''}>被覆蓋</option>
                     </select>
-                    <label><b>2. 現場照片</b></label>
+                    <label><b>2. 現場照片 (1024x768)</b></label>
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 10px 0 20px 0;">${photoHtml}</div>
                     <label><b>3. 備註</b></label>
                     <textarea id="swal-note" class="swal2-textarea" style="width:100%; height: 60px; margin: 0;">${currentNote}</textarea>
@@ -165,7 +170,7 @@
                 for (let i = 0; i < formResult.photos.length; i++) {
                     const data = formResult.photos[i];
                     if (data && data.startsWith('data:image')) {
-                        // 上傳路徑：/kmldata-d22fb/storage/{KML圖層ID}/{點位ID}_{序號}.jpg
+                        // 儲存路徑：storage/kmldata-d22fb/storage/{KML圖層ID}/{點位ID}_{序號}.jpg
                         const fileRef = getStorage().ref().child(STORAGE_ROOT + '/' + kmlId + '/' + featureId + '_' + i + '.jpg');
                         const blob = await (await fetch(data)).blob();
                         await fileRef.put(blob);
@@ -185,7 +190,7 @@
                 Swal.fire({ icon: 'success', title: '儲存成功', timer: 1000, showConfirmButton: false });
             } catch (e) {
                 console.error(e);
-                Swal.fire('上傳失敗', e.message, 'error');
+                Swal.fire('錯誤', '儲存失敗：' + e.message, 'error');
             }
         }
     };
@@ -214,7 +219,7 @@
                 this._container.innerHTML = 
                     '<button onclick="event.stopPropagation(); window.openAuditEditor()" ' +
                     'style="background: ' + (isDone ? '#ff85c0' : '#3498db') + '; color: white; border: 3px solid #fff; padding: 15px 30px; border-radius: 50px; font-weight: bold; font-size: 18px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); cursor: pointer;">' +
-                    (isDone ? '查看/修改紀錄' : '開始清查點位') +
+                    (isDone ? '修改清查紀錄' : '開始清查點位') +
                     '</button>';
             }
         });
