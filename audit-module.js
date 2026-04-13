@@ -8,6 +8,11 @@
  */
 (function() {
     'use strict';
+    
+    if (typeof firebase === 'undefined') {
+        console.error("[Audit] Firebase SDK 未載入，請檢查 HTML 順序");
+        return;
+    }
 
     const db = firebase.firestore();
     const storage = firebase.storage();
@@ -52,6 +57,7 @@
     // 2. Firebase 即時監聽與自動重繪
     // ==========================================
     window.initAuditListener = function(kmlId) {
+    	  console.log("[Audit] 監聽器啟動:", kmlId);
         if (!kmlId) return;
         if (auditUnsubscribes[kmlId]) auditUnsubscribes[kmlId]();
 
