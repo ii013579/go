@@ -1,35 +1,35 @@
 ﻿/**
- * audit-module.js - 2026.04.14 穩健整合版
- * 解決問題：
- * 1. 確保 1024x768 強制壓縮
- * 2. 解決藍/粉點顏色消失 (透過 AOP 攔截渲染)
- * 3. 修正載入錯誤 (使用更穩健的 window 宣告)
+ * audit-module.js - 2026.04.14 高相容最終版
+ * 解決：載入錯誤、1024x768壓縮、Storage分層、顏色持續顯示
  */
 (function() {
     'use strict';
 
-    // 延遲存取 Firebase，避免初始化順序錯誤
+    // 使用延遲初始化，防止 Firebase SDK 尚未就緒導致的報錯
     const getDB = () => firebase.firestore();
     const getStorage = () => firebase.storage();
     const APP_PATH = 'artifacts/kmldata-d22fb/public/data/kmlLayers';
     const STORAGE_ROOT = 'kmldata-d22fb/storage';
 
-    window.auditLayersState = {}; 
+    // 全域狀態與控制項
+    window.auditLayersState = window.auditLayersState || {}; 
     const auditUnsubscribes = {};
     let bottomControl = null;
 
     // ==========================================
-    // 1. 核心攔截 (AOP) - 解決顏色持續性
+    // 1. 核心攔截 (AOP) - 這是解決「藍/粉紅點」顏色消失的關鍵
     // ==========================================
     const originalAddGeoJsonLayers = window.addGeoJsonLayers;
     window.addGeoJsonLayers = function(features) {
         const ns = window.mapNamespace;
-        if (!ns) return originalAddGeoJsonLayers.apply(this, arguments);
+        // 如果地圖環境尚未就緒，先跑原始函式
+        if (!ns) return originalAddGeoJsonLayers ? originalAddGeoJsonLayers.apply(this, arguments) : null;
 
         const kmlId = ns.currentKmlLayerId;
+        // 若有清查紀錄，強行將最新狀態注入 Feature 屬性
         if (kmlId && window.auditLayersState[kmlId]) {
             const records = window.auditLayersState[kmlId];
-            features.forEach(f => {
+            features.forEach(function(f) {
                 const fid = f.properties.id || f.id;
                 const record = records[fid];
                 if (record) {
@@ -44,34 +44,36 @@
     };
 
     // ==========================================
-    // 2. Firebase 監聽器與同步
+    // 2. Firebase 監聽器 (由 auth-kml-management.js 調用)
     // ==========================================
     window.initAuditListener = function(kmlId) {
         if (!kmlId) return;
         if (auditUnsubscribes[kmlId]) auditUnsubscribes[kmlId]();
 
-        console.log("[Audit] 監聽啟動: " + kmlId);
+        console.log("[Audit] 啟動監聽: " + kmlId);
         try {
             auditUnsubscribes[kmlId] = getDB().collection(APP_PATH).doc(kmlId).collection('auditRecords')
-                .onSnapshot(snapshot => {
+                .onSnapshot(function(snapshot) {
                     const updates = {};
-                    snapshot.forEach(doc => { updates[doc.id] = doc.data(); });
+                    snapshot.forEach(function(doc) { updates[doc.id] = doc.data(); });
                     window.auditLayersState[kmlId] = updates;
 
-                    // 數據更新後，通知地圖重新渲染
+                    // 當資料異動時，手動觸發地圖重新染色 (不更動 map-logic.js)
                     const ns = window.mapNamespace;
                     if (ns && ns.currentKmlLayerId === kmlId && ns.allKmlFeatures) {
                         window.addGeoJsonLayers(ns.allKmlFeatures);
                     }
-                    if (bottomControl) bottomControl.update();
+                    if (bottomControl && bottomControl.update) bottomControl.update();
+                }, function(err) {
+                    console.error("[Audit] 監聽發生錯誤:", err);
                 });
         } catch (e) {
-            console.error("[Audit] 監聽錯誤:", e);
+            console.error("[Audit] 初始化監聽失敗:", e);
         }
     };
 
     // ==========================================
-    // 3. 影像處理：壓縮至 1024x768
+    // 3. 影像處理：強制壓縮至 1024x768
     // ==========================================
     window.handleAuditPhotoPreview = function(input, index) {
         if (input.files && input.files[0]) {
@@ -83,13 +85,15 @@
                     canvas.width = 1024;
                     canvas.height = 768;
                     const ctx = canvas.getContext('2d');
+                    
+                    // 白色背景補底並繪製縮放圖片
                     ctx.fillStyle = "#FFFFFF";
                     ctx.fillRect(0, 0, 1024, 768);
                     ctx.drawImage(img, 0, 0, 1024, 768);
 
                     const base64 = canvas.toDataURL('image/jpeg', 0.85);
-                    const prevImg = document.getElementById(`audit-prev-${index}`);
-                    const icon = document.getElementById(`audit-icon-${index}`);
+                    const prevImg = document.getElementById('audit-prev-' + index);
+                    const icon = document.getElementById('audit-icon-' + index);
                     if (prevImg) { prevImg.src = base64; prevImg.style.display = 'block'; }
                     if (icon) icon.style.display = 'none';
                     
@@ -103,7 +107,7 @@
     };
 
     // ==========================================
-    // 4. 清查編輯器 (整合 Storage 路徑隔離)
+    // 4. 清查編輯對話框 (整合 Storage 路徑隔離)
     // ==========================================
     window.openAuditEditor = async function() {
         const point = window.currentSelectedPoint;
@@ -119,7 +123,7 @@
         for (let i = 0; i < targetCount; i++) {
             const photoData = point.props.photos?.[i] || '';
             photoHtml += `
-                <div style="border: 2px dashed #ddd; height: 90px; position: relative; display: flex; align-items: center; justify-content: center; background: #fafafa; border-radius: 8px;">
+                <div style="border: 2px dashed #ddd; height: 90px; position: relative; display: flex; align-items: center; justify-content: center; background: #fafafa; border-radius: 8px; overflow: hidden;">
                     <input type="file" accept="image/*" capture="environment" onchange="window.handleAuditPhotoPreview(this, ${i})" 
                            style="position: absolute; width: 100%; height: 100%; opacity: 0; z-index: 2; cursor: pointer;">
                     <img id="audit-prev-${i}" src="${photoData}" style="width: 100%; height: 100%; object-fit: cover; display: ${photoData ? 'block' : 'none'}; z-index: 1;">
@@ -161,8 +165,8 @@
                 for (let i = 0; i < formResult.photos.length; i++) {
                     const data = formResult.photos[i];
                     if (data && data.startsWith('data:image')) {
-                        // 路徑：storage/kmldata-d22fb/storage/{KML圖層ID}/{點位ID}_{序號}.jpg
-                        const fileRef = getStorage().ref().child(`${STORAGE_ROOT}/${kmlId}/${featureId}_${i}.jpg`);
+                        // 上傳路徑：/kmldata-d22fb/storage/{KML圖層ID}/{點位ID}_{序號}.jpg
+                        const fileRef = getStorage().ref().child(STORAGE_ROOT + '/' + kmlId + '/' + featureId + '_' + i + '.jpg');
                         const blob = await (await fetch(data)).blob();
                         await fileRef.put(blob);
                         photoUrls.push(await fileRef.getDownloadURL());
@@ -178,10 +182,10 @@
                     updatedAt: firebase.firestore.FieldValue.serverTimestamp()
                 }, { merge: true });
 
-                Swal.fire({ icon: 'success', title: '儲存完成', timer: 1000, showConfirmButton: false });
+                Swal.fire({ icon: 'success', title: '儲存成功', timer: 1000, showConfirmButton: false });
             } catch (e) {
                 console.error(e);
-                Swal.fire('錯誤', '儲存失敗：' + e.message, 'error');
+                Swal.fire('上傳失敗', e.message, 'error');
             }
         }
     };
@@ -189,9 +193,9 @@
     // ==========================================
     // 5. 底部按鈕顯示邏輯
     // ==========================================
-    document.addEventListener('DOMContentLoaded', () => {
-        if (!window.mapNamespace || !window.mapNamespace.map) return;
-        
+    const initBottomMenu = function() {
+        if (!window.mapNamespace || !window.mapNamespace.map || bottomControl) return;
+
         const AuditBottomMenu = L.Control.extend({
             options: { position: 'bottomcenter' },
             onAdd: function() {
@@ -207,17 +211,24 @@
                 }
                 const isDone = !!active.props.auditStatus;
                 this._container.style.display = 'block';
-                this._container.innerHTML = `
-                    <button onclick="event.stopPropagation(); window.openAuditEditor()" 
-                            style="background: ${isDone ? '#ff85c0' : '#3498db'}; color: white; border: 3px solid #fff; padding: 15px 30px; border-radius: 50px; font-weight: bold; font-size: 18px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); cursor: pointer;">
-                        ${isDone ? '修改清查紀錄' : '開始清查點位'}
-                    </button>`;
+                this._container.innerHTML = 
+                    '<button onclick="event.stopPropagation(); window.openAuditEditor()" ' +
+                    'style="background: ' + (isDone ? '#ff85c0' : '#3498db') + '; color: white; border: 3px solid #fff; padding: 15px 30px; border-radius: 50px; font-weight: bold; font-size: 18px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); cursor: pointer;">' +
+                    (isDone ? '查看/修改紀錄' : '開始清查點位') +
+                    '</button>';
             }
         });
 
         bottomControl = new AuditBottomMenu();
         bottomControl.addTo(window.mapNamespace.map);
-    });
+    };
+
+    // 確保 DOM 載入後初始化選單
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initBottomMenu);
+    } else {
+        initBottomMenu();
+    }
 
     console.log("[Audit] 模組載入成功。");
 })();
