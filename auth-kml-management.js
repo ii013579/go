@@ -922,36 +922,12 @@ if (els.deleteSelectedKmlBtn) {
 const auditBtn = document.getElementById('auditKmlBtn');
 
 if (auditBtn) {
-    auditBtn.onclick = async () => {
-        // 1. 取得當前圖層 ID
-        const ns = window.mapNamespace;
-        const currentKmlId = ns ? ns.currentKmlLayerId : null;
-
-        if (!currentKmlId) {
-            window.showMessage?.('提示', '請先選擇並載入一個 KML 圖層才能啟動清查。');
-            return;
-        }
-
-        // 2. 核心修正：呼叫新版 audit-module.js 的接口
-        // 我們檢查 initAuditListener 是否存在
-        if (typeof window.initAuditListener === 'function') {
-            
-            // 點擊按鈕後切換 UI 狀態
-            auditBtn.classList.toggle('active');
-            const isActive = auditBtn.classList.contains('active');
-            auditBtn.textContent = isActive ? '關閉清查' : '開啟清查';
-            
-            if (isActive) {
-                // 啟動實時監聽與清查模式
-                window.initAuditListener(currentKmlId);
-                window.showMessage?.('清查模式', '清查功能已啟動，點擊地圖點位即可編輯紀錄。');
-            } else {
-                // 關閉模式 (刷新頁面或簡單提示)
-                location.reload(); 
-            }
+    auditBtn.onclick = () => {
+        // 什麼都不用管，直接交給模組處理
+        if (typeof window.showAuditActionModal === 'function') {
+            window.showAuditActionModal();
         } else {
-            // 如果還是找不到，彈出原本的錯誤訊息
-            Swal.fire('錯誤', '清查模組 (audit-module.js) 尚未載入，請檢查檔案路徑', 'error');
+            Swal.fire('錯誤', '清查模組 (audit-module.js) 尚未載入', 'error');
         }
     };
 }
