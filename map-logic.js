@@ -364,7 +364,7 @@
         });
     });
 
-    // ---------- 公開方法：添加 GeoJSON 圖層（v2.03 修正版） ----------
+    // ---------- 公開方法：添加 GeoJSON 圖層（v2.04 修正版） ----------
     window.addGeoJsonLayers = function (geojsonFeatures = []) {
         if (!ns.map) return;
     
@@ -373,13 +373,13 @@
         ns.markers.clearLayers();
         ns.navButtons.clearLayers();
     
-        // 定義「紅點白框」樣式 (同步自舊版 CSS)
-        const originalStyle = {
-            radius: 8,           // 半徑 8 (對應 iconSize [16,16])
-            fillColor: "#e74c3c", // 紅色填充
+        // 預設樣式 (若 properties 沒提供時使用)
+        const defaultStyle = {
+            radius: 8,
+            fillColor: "#e74c3c", // 預設紅色
             fillOpacity: 1,
-            color: "#ffffff",    // 白色外框
-            weight: 2,           // 外框寬度 2px
+            color: "#ffffff",     // 白色外框
+            weight: 2,
             opacity: 1,
             interactive: true
         };
@@ -397,21 +397,42 @@
                 const name = feature.properties?.name || '未命名';
                 const labelId = `label-${String(coords[1])}-${String(coords[0])}`.replace(/\./g, '_');
     
-                // 建立帶白框的紅點 (Canvas)
+                // --- 修正重點 1：合併樣式，優先使用 properties 內的設定 (藍/粉點關鍵) ---
+                const featureStyle = {
+                    ...defaultStyle,
+                    radius: feature.properties?.radius || defaultStyle.radius,
+                    fillColor: feature.properties?.fillColor || defaultStyle.fillColor,
+                    fillOpacity: feature.properties?.fillOpacity || defaultStyle.fillOpacity
+                };
+    
                 const dot = L.circleMarker(latlng, {
                     renderer: canvasRenderer,
-                    ...originalStyle
+                    ...featureStyle // 使用合併後的樣式
                 });
+    
+                // 將 feature 綁定到 dot 上，方便點擊時獲取資訊
+                dot.feature = feature;
     
                 dot.on('click', (e) => {
                     L.DomEvent.stopPropagation(e);
                     
-                    // 重置所有點回「紅點白框」
+                    // --- 修正重點 2：將選中的點存入全域，供 audit-module.js 顯示「清樁」按鈕 ---
+                    window.currentSelectedPoint = feature; 
+    
+                    // 重置所有點 (注意：這裡不能直接套用 originalStyle，否則藍點會變回紅點)
                     ns.markers.eachLayer(layer => {
-                        if (layer instanceof L.CircleMarker) layer.setStyle(originalStyle);
+                        if (layer instanceof L.CircleMarker && layer.feature) {
+                            const style = {
+                                ...defaultStyle,
+                                fillColor: layer.feature.properties?.fillColor || defaultStyle.fillColor
+                            };
+                            layer.setStyle(style);
+                        }
                     });
     
-                    // 高亮處理
+                    // 高亮當前點
+                    dot.setStyle({ weight: 4, color: '#ffff00' }); // 選中的點加粗黃框
+    
                     document.querySelectorAll('.marker-label span').forEach(s => s.classList.remove('label-active'));
                     const targetSpan = document.getElementById(labelId);
                     if (targetSpan) targetSpan.classList.add('label-active');
@@ -421,7 +442,7 @@
     
                 ns.markers.addLayer(dot);
     
-                // 標籤處理 (DOM)
+                // 標籤處理 (維持原樣)
                 const label = L.marker(latlng, {
                     icon: L.divIcon({
                         className: 'marker-label',
@@ -434,7 +455,7 @@
                 });
                 ns.markers.addLayer(label);
             }
-            // 處理線段與多邊形 (修正原本掉在函式外的邏輯)
+            // ... (處理線段與多邊形的邏輯維持不變) ...
             else if (type === 'LineString' || type === 'Polygon') {
                 const layer = L.geoJSON(feature, {
                     renderer: canvasRenderer,
@@ -443,6 +464,7 @@
     
                 layer.on('click', function (e) {
                     L.DomEvent.stopPropagation(e);
+                    window.currentSelectedPoint = feature; // 線段點擊也紀錄
                     let centerPoint = (type === 'Polygon') 
                         ? window.getPolygonCentroid(feature.geometry.coordinates[0])
                         : window.getLineStringMidpoint(feature.geometry.coordinates);
@@ -454,10 +476,16 @@
             }
         });
     
-        // 點擊空白處重置樣式
+        // 點擊空白處重置
         ns.map.off('click').on('click', () => {
+            window.currentSelectedPoint = null; // 清除選中狀態
             ns.markers.eachLayer(layer => {
-                if (layer instanceof L.CircleMarker) layer.setStyle(originalStyle);
+                if (layer instanceof L.CircleMarker && layer.feature) {
+                    layer.setStyle({
+                        ...defaultStyle,
+                        fillColor: layer.feature.properties?.fillColor || defaultStyle.fillColor
+                    });
+                }
             });
             document.querySelectorAll('.marker-label span').forEach(s => s.classList.remove('label-active'));
             ns.navButtons.clearLayers();
