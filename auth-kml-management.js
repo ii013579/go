@@ -922,12 +922,16 @@ if (els.deleteSelectedKmlBtn) {
 const auditBtn = document.getElementById('auditKmlBtn');
 
 if (auditBtn) {
-    auditBtn.onclick = () => {
-        // 什麼都不用管，直接交給模組處理
+    auditBtn.onclick = async () => {
+        // 先執行一次 UI 更新，確保 data-basename 有被寫入 option 屬性中
+        if (typeof window.updateKmlSelectUI === 'function') {
+            window.updateKmlSelectUI();
+        }
+
         if (typeof window.showAuditActionModal === 'function') {
-            window.showAuditActionModal();
+            window.showAuditActionModal(); 
         } else {
-            Swal.fire('錯誤', '清查模組 (audit-module.js) 尚未載入', 'error');
+            Swal.fire('錯誤', '清查模組尚未準備就緒', 'error');
         }
     };
 }
