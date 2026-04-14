@@ -823,3 +823,17 @@ canvas {
     touch-action: manipulation; /* 優化觸控反應 */
     cursor: pointer;
 }
+
+/* 修改底部控制項容器，確保按鈕置中且可點擊 */
+.audit-bottom-menu-container {
+    pointer-events: auto !important;
+    display: flex;
+    justify-content: center;
+    width: auto;
+}
+
+/* 讓 sweetalert 內的清單更美觀 */
+.swal2-html-container select.swal2-input {
+    margin: 10px auto;
+    font-size: 16px;
+}
