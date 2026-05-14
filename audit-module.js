@@ -1,13 +1,15 @@
 ﻿/**
- * audit-module.js - v2.17
- * 修正重點：
- * 1. 解決照片預覽區域顯示 CSS 原始碼的問題 (image_addec0.png 錯誤修復)
- * 2. 強化 HTML 字串引號處理，防止 UI 崩壞
- * 3. 延續 v2.16 所有的即時變色、人類可讀路徑與權限控管邏輯
+ * audit-module.js - v2.18
+ * 完整整合版：
+ * 1. 權限分級：User/Editor/Owner 可見清查狀態（藍/粉），Guest/Unapproved 僅見紅點。
+ * 2. 錯誤修復：修正 forceMapRefresh 作用域問題，解決 Uncaught ReferenceError。
+ * 3. UI 修復：解決照片預覽區域顯示 CSS 程式碼的問題。
+ * 4. 即時同步：上傳後立即翻轉顏色，並同步至 Firebase 供所有授權使用者查看。
  */
 (function() {
     'use strict';
 
+    // --- 全域變數定義 ---
     window.auditLayersState = window.auditLayersState || {};
     window.globalAuditConfigs = {}; 
     const auditUnsubscribes = {};
@@ -17,8 +19,26 @@
     const STORAGE_ROOT = 'kmldata-d22fb/storage';
 
     // ---------------------------------------------------------
-    // 1. 樣式與刷新邏輯
+    // 1. 樣式與刷新核心邏輯 (核心定義區)
     // ---------------------------------------------------------
+
+    /**
+     * 強制地圖刷新函式
+     * 放在頂層確保 startAuditDataListener 與 initListener 都能呼叫到
+     */
+    function forceMapRefresh() {
+        const ns = window.mapNamespace;
+        if (window.addGeoJsonLayers && ns?.allKmlFeatures) {
+            // 如果地圖上已有 KML 圖層，先移除以強制 Leaflet 重新渲染
+            if (ns.currentKmlLayer && ns.map) {
+                ns.map.removeLayer(ns.currentKmlLayer);
+            }
+            // 重新執行渲染邏輯
+            window.addGeoJsonLayers(ns.allKmlFeatures);
+            console.log("地圖樣式已重繪");
+        }
+    }
+
     const originalAddLayers = window.addGeoJsonLayers;
     window.addGeoJsonLayers = function(features) {
         const ns = window.mapNamespace;
@@ -26,16 +46,16 @@
         
         if (kmlId) {
             const config = window.globalAuditConfigs[kmlId];
-            // 取得該圖層的清查紀錄
             const records = window.auditLayersState[kmlId] || {};
-            // 檢查是否成功取得紀錄 (若為 Guest，這裡會因為 Rules 被拒絕而保持空值)
+            
+            // 判定是否具備讀取紀錄的權限（若 records 為空代表可能為 Guest 或尚未載入）
             const hasRecordAccess = Object.keys(records).length > 0;
 
             features.forEach(f => {
                 f.properties.kmlId = kmlId;
                 const fId = f.properties.id || f.id;
                 
-                // 只有「圖層開啟清查」且「目前使用者有權限讀取紀錄」時，才顯示藍/粉點
+                // 只有「圖層開啟清查」且「目前使用者有權限讀取紀錄」時，顯示藍/粉點
                 if (config && config.isAuditing === true && hasRecordAccess) {
                     const record = records[fId];
                     if (record) {
@@ -65,7 +85,7 @@
     };
 
     // ---------------------------------------------------------
-    // 2. 底部按鈕
+    // 2. 底部控制按鈕
     // ---------------------------------------------------------
     function updateBottomBtnState() {
         if (!bottomControl) return;
@@ -73,6 +93,7 @@
         const kmlId = window.mapNamespace?.currentKmlLayerId;
         const config = window.globalAuditConfigs[kmlId];
 
+        // 注意：這裡不阻擋 Guest 看到按鈕，由 openAuditEditor 內部的上傳權限與 Rules 判定
         if (active && config && config.isAuditing === true) {
             bottomControl._container.style.display = 'block';
             bottomControl._container.innerHTML = `
@@ -89,7 +110,7 @@
     window.addEventListener('click', () => { setTimeout(updateBottomBtnState, 200); });
 
     // ---------------------------------------------------------
-    // 3. 編輯與上傳 (核心修復區)
+    // 3. 清樁編輯與上傳核心
     // ---------------------------------------------------------
     window.openAuditEditor = async function() {
         const activePoint = window.currentSelectedPoint;
@@ -107,7 +128,7 @@
             ? [...activePoint.properties.photos] 
             : new Array(maxPhotos).fill('');
 
-        // 預覽壓縮函式
+        // 閉包預覽函式
         window._tempPreview = function(input, index) {
             if (input.files && input.files[0]) {
                 const reader = new FileReader();
@@ -122,7 +143,6 @@
                         const ctx = canvas.getContext('2d');
                         ctx.drawImage(img, 0, 0, w, h);
                         const b64 = canvas.toDataURL('image/jpeg', 0.75);
-                        
                         document.getElementById('audit-prev-'+index).src = b64;
                         document.getElementById('audit-prev-'+index).style.display = 'block';
                         document.getElementById('audit-icon-'+index).style.display = 'none';
@@ -134,7 +154,6 @@
             }
         };
 
-        // 【修正亮點】使用 Template Literals 確保引號嵌套正確，避免 image_addec0.png 的程式碼外露問題
         let photoHtml = '';
         for (let i = 0; i < maxPhotos; i++) {
             const photoData = currentPhotos[i] || '';
@@ -190,17 +209,22 @@
                     } else if (d) photoUrls.push(d);
                 }
                 
-                // 本地快取立即更新
+                // 本地快取立即更新 (Latency Compensation)
                 if (!window.auditLayersState[kmlId]) window.auditLayersState[kmlId] = {};
                 window.auditLayersState[kmlId][featureId] = { status: res.status, note: res.note, photos: photoUrls };
 
+                // 寫入 Firestore
                 await firebase.firestore().collection(APP_PATH).doc(kmlId).collection('auditRecords').doc(featureId).set({
                     status: res.status, note: res.note, photos: photoUrls, updatedAt: firebase.firestore.FieldValue.serverTimestamp()
                 }, { merge: true });
                 
                 Swal.fire({ icon: 'success', title: '成功', timer: 1000, showConfirmButton: false });
+                
+                // 強制翻轉顏色為粉紅
                 setTimeout(() => { forceMapRefresh(); updateBottomBtnState(); }, 100);
-            } catch (e) { Swal.fire('錯誤', e.message, 'error'); }
+            } catch (e) { 
+                Swal.fire('權限不足或上傳失敗', '只有 Editor 或 Owner 角色可以執行此操作。', 'error'); 
+            }
         }
     };
     
@@ -210,41 +234,37 @@
     function startAuditDataListener(kmlId) {
         if (auditUnsubscribes[kmlId]) return;
         
-        // 監聽清查紀錄集合
         auditUnsubscribes[kmlId] = firebase.firestore().collection(APP_PATH).doc(kmlId).collection('auditRecords')
             .onSnapshot(snapshot => {
                 const updates = {};
                 snapshot.forEach(doc => updates[doc.id] = doc.data());
                 window.auditLayersState[kmlId] = updates;
-                // 成功取得資料，刷新地圖顯示藍/粉點
                 forceMapRefresh();
             }, error => {
-                // 如果被 Firebase Rules 拒絕 (例如 Guest/Unapproved)
+                // 如果權限被 Rules 拒絕 (Guest/Unapproved)
                 if (error.code === 'permission-denied') {
-                    console.warn(`權限不足：使用者無法讀取 ${kmlId} 的清查內容，維持紅點顯示。`);
-                    window.auditLayersState[kmlId] = {}; // 確保清空狀態
-                    forceMapRefresh(); // 刷新地圖以確保顯示紅點
+                    window.auditLayersState[kmlId] = {}; 
+                    forceMapRefresh(); 
                 }
             });
     }
 
     const initListener = () => {
-        if (typeof firebase === 'undefined' || !firebase.apps.length) { setTimeout(initListener, 500); return; }
+        if (typeof firebase === 'undefined' || !firebase.apps.length) { 
+            setTimeout(initListener, 500); 
+            return; 
+        }
         
-        // 監聽圖層配置 (KML 是否開啟清查)
         firebase.firestore().collection(APP_PATH).onSnapshot(snapshot => {
             snapshot.forEach(doc => { 
                 window.globalAuditConfigs[doc.id] = doc.data(); 
-                if (doc.data().isAuditing) {
-                    startAuditDataListener(doc.id);
-                }
+                if (doc.data().isAuditing) startAuditDataListener(doc.id);
             });
             forceMapRefresh();
-        }, error => {
-            console.error("無法載入圖層配置:", error);
         });
     };
 
+    // 地圖載入後啟動
     document.addEventListener('DOMContentLoaded', () => {
         const check = setInterval(() => {
             if (window.mapNamespace?.map) {
