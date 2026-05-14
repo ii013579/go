@@ -65,11 +65,21 @@
 
     // 強制重新繪製 Leaflet 地圖圖層
     function forceMapRefresh() {
-        if (window.addGeoJsonLayers && window.mapNamespace?.allKmlFeatures) {
-            window.addGeoJsonLayers(window.mapNamespace.allKmlFeatures);
+        const ns = window.mapNamespace;
+        if (window.addGeoJsonLayers && ns?.allKmlFeatures) {
+            // 1. 如果地圖上有舊的 KML 圖層，先移除它以強制刷新
+            if (ns.currentKmlLayer && ns.map) {
+                ns.map.removeLayer(ns.currentKmlLayer);
+            }
+            
+            // 2. 重新執行圖層注入，這會觸發我們攔截的 addGeoJsonLayers 邏輯
+            // 此時邏輯會抓到新的 window.auditLayersState[kmlId]，進而將顏色設為粉紅
+            window.addGeoJsonLayers(ns.allKmlFeatures);
+            
+            console.log("地圖顏色已強制刷新");
         }
     }
-
+    
     // ---------------------------------------------------------
     // 2. 底部控制按鈕
     // ---------------------------------------------------------
