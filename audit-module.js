@@ -1,13 +1,11 @@
 ﻿/**
- * audit-module.js - v2.15 (手機浮空按鈕修正版)
+ * audit-module.js - v2.17 最終完美整合版
  * 整合功能：
- * 1. 自動注入樣式 (藍/粉/紅) 與即時色彩狀態刷新
- * 2. 底部「開始清樁」按鈕聯動與即時狀態更新 (修正手機端版面溢出問題)
- * 3. 強制狀態校驗與預設值設定
- * 4. 動態標題顯示點名標籤
- * 5. 閉包式相片壓縮預覽 (修正非同步提前刪除 bug)
- * 6. Storage 路徑與檔名優化：改為人類可讀路徑與 [點名_序號.jpg] 格式（自動去除了 .kml 後綴）
- * 7. 專屬 CSV 生成：上傳時自動在相同圖層資料夾下產生 (點名,設備狀態,照片1,照片2,...,備註) 檔案
+ * 1. 【手機顯示優化】強制使用 position: fixed，確保「開始清樁」按鈕在手機端絕不被擠出螢幕外。
+ * 2. 【預覽樣式修正】修復相機預覽框的內聯 CSS 斷行問題，使相機圖示與虛線框正常顯示。
+ * 3. 【乾淨資料夾路徑】自動去除圖層名稱的 .kml 後綴，建立人類可讀的乾淨儲存路徑。
+ * 4. 【自適應 CSV 總表】上傳時自動在相同圖層資料夾下產生 (點名,設備狀態,照片1,照片2,...,備註) 檔案。
+ * 5. 【狀態即時刷新】上傳完成後，地圖點位顏色（藍變粉）與底端按鈕狀態立即同步刷新。
  */
 (function() {
     'use strict';
@@ -72,7 +70,7 @@
     }
 
     // ---------------------------------------------------------
-    // 2. 底部控制按鈕 (核心優化：改為 fixed 固定浮空，防止手機端被推出去)
+    // 2. 底部控制按鈕 (解決手機端按鈕被推到螢幕外的問題)
     // ---------------------------------------------------------
     function updateBottomBtnState() {
         if (!bottomControl) return;
@@ -83,9 +81,9 @@
         if (active && config && config.isAuditing === true) {
             bottomControl._container.style.display = 'block';
             bottomControl._container.innerHTML = `
-                <div class="audit-bottom-menu-container" style="text-align: center; pointer-events: auto;">
+                <div style="text-align: center; pointer-events: auto;">
                     <button onclick="window.openAuditEditor()" 
-                            style="background: #3498db; color: white; border: 3px solid #ffffff; padding: 12px 45px; border-radius: 50px; font-weight: bold; font-size: 18px; box-shadow: 0 4px 20px rgba(0,0,0,0.4); cursor: pointer; transition: transform 0.2s;">
+                            style="background: #3498db; color: white; border: 3px solid #ffffff; padding: 12px 45px; border-radius: 50px; font-weight: bold; font-size: 18px; box-shadow: 0 4px 20px rgba(0,0,0,0.4); cursor: pointer;">
                         開始清樁
                     </button>
                 </div>`;
@@ -103,6 +101,7 @@
         const ns = window.mapNamespace;
         const features = ns?.allKmlFeatures || [];
 
+        // 標頭格式：點名,設備狀態,照片1,照片2,...,備註 (帶上 UTF-8 BOM 防止 Excel 亂碼)
         let headerArr = ["點名", "設備狀態"];
         for (let i = 1; i <= maxPhotos; i++) {
             headerArr.push(`照片${i}`);
@@ -111,6 +110,7 @@
         
         let csvContent = "\uFEFF" + headerArr.join(",") + "\n";
 
+        // 巡覽該圖層所有點位，確保未清查的也會在表單內留空，方便比對
         features.forEach(f => {
             const fId = f.properties.id || f.id;
             const pointName = f.properties?.name || "未命名點位";
@@ -121,6 +121,7 @@
 
             if (record) {
                 rowArr.push(`"${record.status || '正常'}"`);
+                // 填入各張照片的下載連結
                 for (let i = 0; i < maxPhotos; i++) {
                     const url = record.photos && record.photos[i] ? record.photos[i] : "";
                     rowArr.push(`"${url}"`);
@@ -128,6 +129,7 @@
                 const safeNote = (record.note || "").replace(/"/g, '""');
                 rowArr.push(`"${safeNote}"`);
             } else {
+                // 未清查點位則填空
                 rowArr.push('""');
                 for (let i = 0; i < maxPhotos; i++) rowArr.push('""');
                 rowArr.push('""');
@@ -213,6 +215,7 @@
             return;
         }
 
+        // 取得乾淨的圖層名稱（去除結尾的 .kml 確保資料夾路徑整潔）
         const selectEl = document.getElementById('kmlLayerSelect');
         const rawLayerName = selectEl?.options[selectEl.selectedIndex]?.getAttribute('data-basename') || '預設區域';
         const kmlLayerName = rawLayerName.replace(/\.kml$/i, '').trim(); 
@@ -223,10 +226,12 @@
         const config = window.globalAuditConfigs[kmlId] || { targetPhotos: 2 };
         const maxPhotos = config.targetPhotos;
 
+        // 深拷貝現有照片陣列
         const currentPhotos = Array.isArray(activePoint.properties.photos) 
             ? [...activePoint.properties.photos] 
             : new Array(maxPhotos).fill('');
 
+        // 安全閉包暫存預覽與圖片壓縮函式
         window._tempPreview = function(input, index) {
             if (input.files && input.files[0]) {
                 const reader = new FileReader();
@@ -261,6 +266,7 @@
             }
         };
 
+        // 建立相片上傳格子 (已修復內聯 CSS 斷行問題)
         let photoHtml = '';
         for (let i = 0; i < maxPhotos; i++) {
             const photoData = currentPhotos[i] || '';
@@ -304,8 +310,10 @@
             }
         });
 
+        // 關閉對話框後釋放記憶體
         delete window._tempPreview;
 
+        // 執行上傳程序與更新 CSV
         if (res) {
             Swal.fire({ title: '正在上傳並更新總表...', didOpen: () => Swal.showLoading(), allowOutsideClick: false });
             try {
@@ -314,16 +322,18 @@
                     const data = res.photos[i];
                     if (data && data.startsWith('data:image')) {
                         const photoIndexStr = String(i + 1).padStart(2, '0');
+                        // 結構化檔名與人類可讀儲存路徑： [STORAGE_ROOT]/[圖層名稱]/[點名_序號.jpg]
                         const customStoragePath = `${STORAGE_ROOT}/${kmlLayerName}/${pointName}_${photoIndexStr}.jpg`;
                         
                         const ref = firebase.storage().ref().child(customStoragePath);
                         await ref.put(await (await fetch(data)).blob());
                         photoUrls.push(await ref.getDownloadURL());
                     } else if (data) {
-                        photoUrls.push(data); 
+                        photoUrls.push(data); // 保留原有照片的網址
                     }
                 }
                 
+                // 更新本地快取
                 if (!window.auditLayersState[kmlId]) window.auditLayersState[kmlId] = {};
                 window.auditLayersState[kmlId][featureId] = {
                     status: res.status,
@@ -331,6 +341,7 @@
                     photos: photoUrls
                 };
 
+                // 寫入 Firestore 紀錄
                 await firebase.firestore().collection(APP_PATH).doc(kmlId).collection('auditRecords').doc(featureId).set({
                     status: res.status, 
                     note: res.note, 
@@ -338,10 +349,12 @@
                     updatedAt: firebase.firestore.FieldValue.serverTimestamp()
                 }, { merge: true });
                 
+                // 動態生成或更新該圖層獨立的 CSV 資料總表
                 await generateLayerCsvReport(kmlId, kmlLayerName, maxPhotos);
 
                 Swal.fire({ icon: 'success', title: '上傳與總表更新成功', timer: 1000, showConfirmButton: false });
                 
+                // 刷新地圖與按鈕狀態（藍點變粉紅點）
                 forceMapRefresh();
                 updateBottomBtnState();
             } catch (e) { 
@@ -352,7 +365,7 @@
     };
     
     // ---------------------------------------------------------
-    // 6. 資料初始化與即時監聽
+    // 6. 資料監聽與初始化
     // ---------------------------------------------------------
     const initGlobalConfigListener = () => {
         if (typeof firebase === 'undefined' || !firebase.apps.length) {
@@ -392,24 +405,23 @@
         });
     }
 
-    // --- 用自適應定時器載入地圖框架，並加入強大的 CSS 強制浮空定位 ---
+    // 異步計時載入控制項，並加上 CSS 強制浮空定位，避免被手機流排版壓出螢幕外
     const checkMapInterval = setInterval(() => {
         if (window.mapNamespace?.map && typeof L !== 'undefined') {
             clearInterval(checkMapInterval);
             
             const AuditMenu = L.Control.extend({
-                options: { position: 'bottomcenter' },
                 onAdd: function() {
                     this._container = L.DomUtil.create('div', 'audit-bottom-menu');
                     this._container.style.display = 'none';
                     
-                    // 【手機網頁關鍵修正】強制讓控制項容器固定浮空於螢幕最底層上方 30px 處，絕不被擠出螢幕外
+                    // 【關鍵修正】強制浮空於螢幕最下方，完全無視 Leaflet 預設容器排版
                     this._container.style.position = 'fixed';
-                    this._container.style.bottom = '30px';
+                    this._container.style.bottom = '35px';
                     this._container.style.left = '50%';
                     this._container.style.transform = 'translateX(-50%)';
-                    this._container.style.zIndex = '4000'; // 保證在地圖與其它圖資之上
-                    this._container.style.pointerEvents = 'none'; // 穿透地圖容器，避免阻擋點擊
+                    this._container.style.zIndex = '5000'; // 置於地圖最上層
+                    this._container.style.pointerEvents = 'none'; // 滑鼠/點擊事件穿透，不干擾地圖拖動
                     
                     return this._container;
                 }
