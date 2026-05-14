@@ -1,12 +1,12 @@
 ﻿/**
- * audit-module.js - v2.15 (圖層儲存 + 欄位自適應 CSV 產生版)
+ * audit-module.js - v2.15 (精密圖層路徑 + 介面修復版)
  * 整合功能：
  * 1. 自動注入樣式 (藍/粉/紅) 與即時色彩狀態刷新
  * 2. 底部「開始清樁」按鈕聯動與即時狀態更新
  * 3. 強制狀態校驗與預設值設定
  * 4. 動態標題顯示點名標籤
  * 5. 閉包式相片壓縮預覽 (修正非同步提前刪除 bug)
- * 6. Storage 路徑與檔名優化：改為人類可讀路徑與 [點名_序號.jpg] 格式（自動去除了 .kml 後綴）
+ * 6. Storage 路徑與檔名優化：精準綁定圖層名稱，防範出現「預設區域」，自動去除 .kml 後綴
  * 7. 專屬 CSV 生成：上傳時自動在相同圖層資料夾下產生 (點名,設備狀態,照片1,照片2,...,備註) 檔案
  */
 (function() {
@@ -96,7 +96,7 @@
     window.addEventListener('click', () => { setTimeout(updateBottomBtnState, 200); });
 
     // ---------------------------------------------------------
-    // 3. 專屬 CSV 總表動態生成產線 (核心新增)
+    // 3. 專屬 CSV 總表動態生成產線
     // ---------------------------------------------------------
     async function generateLayerCsvReport(kmlId, kmlLayerName, maxPhotos) {
         const records = window.auditLayersState[kmlId] || {};
@@ -112,7 +112,7 @@
         
         let csvContent = "\uFEFF" + headerArr.join(",") + "\n";
 
-        // 巡覽該圖層所有點位，確保未清查的也會在表單內留空，方便比對
+        // 巡覽該圖層所有點位
         features.forEach(f => {
             const fId = f.properties.id || f.id;
             const pointName = f.properties?.name || "未命名點位";
@@ -123,7 +123,6 @@
 
             if (record) {
                 rowArr.push(`"${record.status || '正常'}"`);
-                // 填入各張照片的下載連結
                 for (let i = 0; i < maxPhotos; i++) {
                     const url = record.photos && record.photos[i] ? record.photos[i] : "";
                     rowArr.push(`"${url}"`);
@@ -131,7 +130,6 @@
                 const safeNote = (record.note || "").replace(/"/g, '""');
                 rowArr.push(`"${safeNote}"`);
             } else {
-                // 未清查點位填空
                 rowArr.push('""');
                 for (let i = 0; i < maxPhotos; i++) rowArr.push('""');
                 rowArr.push('""');
@@ -217,18 +215,29 @@
             return;
         }
 
-        // 取得人類可讀的區域名稱與點位名稱 (去除結尾的 .kml 確保路徑整潔)
-        const selectEl = document.getElementById('kmlLayerSelect');
-        const rawLayerName = selectEl?.options[selectEl.selectedIndex]?.getAttribute('data-basename') || '預設區域';
-        const kmlLayerName = rawLayerName.replace(/\.kml$/i, '').trim(); 
-        
-        const pointName = activePoint.properties?.name || '未命名點位';
         const kmlId = activePoint.properties.kmlId || window.mapNamespace?.currentKmlLayerId;
+        const pointName = activePoint.properties?.name || '未命名點位';
         const featureId = activePoint.properties.id || activePoint.id;
         const config = window.globalAuditConfigs[kmlId] || { targetPhotos: 2 };
         const maxPhotos = config.targetPhotos;
 
-        // 深拷貝現有照片陣列，防範非同步操作汙染全域點位
+        // 【精準路徑改良】優先從當前選取點位的 KML 下拉選單中匹配對應 Option 屬性
+        let rawLayerName = '';
+        const selectEl = document.getElementById('kmlLayerSelect');
+        if (selectEl) {
+            const matchedOpt = Array.from(selectEl.options).find(opt => opt.value === kmlId);
+            if (matchedOpt) {
+                rawLayerName = matchedOpt.getAttribute('data-basename') || matchedOpt.textContent.split(' (')[0];
+            }
+        }
+        // 如果選單還沒對上，從全域配置的 config.name 或 kmlId 當作安全後援，確保不出現「預設區域」
+        if (!rawLayerName) {
+            rawLayerName = config.name || kmlId || '未分類圖層';
+        }
+        // 移除結尾的 .kml 與前後空格，確保資料夾名稱完美整潔
+        const kmlLayerName = rawLayerName.replace(/\.kml$/i, '').trim(); 
+
+        // 深拷貝現有照片陣列
         const currentPhotos = Array.isArray(activePoint.properties.photos) 
             ? [...activePoint.properties.photos] 
             : new Array(maxPhotos).fill('');
@@ -241,7 +250,6 @@
                     const img = new Image();
                     img.onload = () => {
                         const canvas = document.createElement('canvas');
-                        // 等比例等寬縮放，解決手機直橫拍相片變形壓扁問題
                         let width = img.width;
                         let height = img.height;
                         const max_size = 1000; 
@@ -269,6 +277,7 @@
             }
         };
 
+        // 修正：修正了 HTML 屬性包圍引號，修復相機圖示變成代碼的 Bug
         let photoHtml = '';
         for (let i = 0; i < maxPhotos; i++) {
             const photoData = currentPhotos[i] || '';
@@ -312,10 +321,8 @@
             }
         });
 
-        // 關閉對話框後安全釋放全域暫存
         delete window._tempPreview;
 
-        // D. 執行 Firebase 上傳程序
         if (res) {
             Swal.fire({ title: '正在上傳並更新總表...', didOpen: () => Swal.showLoading(), allowOutsideClick: false });
             try {
@@ -323,20 +330,17 @@
                 for (let i = 0; i < res.photos.length; i++) {
                     const data = res.photos[i];
                     if (data && data.startsWith('data:image')) {
-                        // 格式化相片序號 (2位數補零，例如 01, 02)
                         const photoIndexStr = String(i + 1).padStart(2, '0');
-                        // 建立人類可閱讀儲存路徑與結構化檔名： [區域路徑]/[點名_序號.jpg]
                         const customStoragePath = `${STORAGE_ROOT}/${kmlLayerName}/${pointName}_${photoIndexStr}.jpg`;
                         
                         const ref = firebase.storage().ref().child(customStoragePath);
                         await ref.put(await (await fetch(data)).blob());
                         photoUrls.push(await ref.getDownloadURL());
                     } else if (data) {
-                        photoUrls.push(data); // 若原先已有舊圖 URL 則直接保留
+                        photoUrls.push(data);
                     }
                 }
                 
-                // 【核心優化】上傳成功後，本地快取資料同步立即更新
                 if (!window.auditLayersState[kmlId]) window.auditLayersState[kmlId] = {};
                 window.auditLayersState[kmlId][featureId] = {
                     status: res.status,
@@ -344,7 +348,6 @@
                     photos: photoUrls
                 };
 
-                // 將同步資料寫入 Firestore 後台
                 await firebase.firestore().collection(APP_PATH).doc(kmlId).collection('auditRecords').doc(featureId).set({
                     status: res.status, 
                     note: res.note, 
@@ -352,12 +355,11 @@
                     updatedAt: firebase.firestore.FieldValue.serverTimestamp()
                 }, { merge: true });
                 
-                // 動態生成與覆蓋目前的 CSV 資料表至同一 Storage 資料夾下
+                // 動態生成與覆蓋目前的 CSV 資料表至精準的圖層名稱資料夾下
                 await generateLayerCsvReport(kmlId, kmlLayerName, maxPhotos);
 
                 Swal.fire({ icon: 'success', title: '上傳與總表更新成功', timer: 1000, showConfirmButton: false });
                 
-                // 立即觸發刷新：藍點立即變粉紅點
                 forceMapRefresh();
                 updateBottomBtnState();
             } catch (e) { 
@@ -408,7 +410,7 @@
         });
     }
 
-    // --- 安全異步計時器載入地圖框架，保證按鈕絕對能正確綁定 ---
+    // 安全異步計時器載入地圖框架
     const checkMapInterval = setInterval(() => {
         if (window.mapNamespace?.map && typeof L !== 'undefined') {
             clearInterval(checkMapInterval);
