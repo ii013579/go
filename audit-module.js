@@ -15,7 +15,7 @@
     const auditUnsubscribes = {};
     let bottomControl = null;
     
-    const APP_PATH = 'kmlLayers';
+    const APP_PATH = 'artifacts/kmldata-d22fb/public/data/kmlLayers';
     const STORAGE_ROOT = 'kmldata-d22fb/storage';
 
     // ---------------------------------------------------------
