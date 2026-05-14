@@ -1,12 +1,12 @@
 ﻿/**
- * audit-module.js - v2.15
+ * audit-module.js - v2.15 (完全恢復 + 穩定修正版)
  * 整合功能：
  * 1. 自動注入樣式 (藍/粉/紅) 與即時色彩狀態刷新
  * 2. 底部「開始清樁」按鈕聯動與即時狀態更新
  * 3. 強制狀態校驗與預設值設定
  * 4. 動態標題顯示點名標籤
  * 5. 閉包式相片壓縮預覽 (修正非同步提前刪除 bug)
- * 6. Storage 路徑與檔名優化：改為人類可讀路徑與 [點名_序號.jpg] 格式
+ * 6. Storage 路徑與檔名優化：改為人類可讀路徑與 [點名_序號.jpg] 格式（自動去除了 .kml 後綴）
  */
 (function() {
     'use strict';
@@ -161,9 +161,10 @@
             return;
         }
 
-        // 取得人類可讀的區域名稱與點位名稱
+        // 取得人類可讀的區域名稱與點位名稱 (去除結尾的 .kml 避免路徑出現資料夾異常)
         const selectEl = document.getElementById('kmlLayerSelect');
-        const kmlLayerName = selectEl?.options[selectEl.selectedIndex]?.getAttribute('data-basename') || '預設區域';
+        const rawLayerName = selectEl?.options[selectEl.selectedIndex]?.getAttribute('data-basename') || '預設區域';
+        const kmlLayerName = rawLayerName.replace(/\.kml$/i, '').trim(); 
         
         const pointName = activePoint.properties?.name || '未命名點位';
         const kmlId = activePoint.properties.kmlId || window.mapNamespace?.currentKmlLayerId;
@@ -348,22 +349,23 @@
         });
     }
 
-    document.addEventListener('DOMContentLoaded', () => {
-        const checkMap = setInterval(() => {
-            if (window.mapNamespace?.map) {
-                clearInterval(checkMap);
-                const AuditMenu = L.Control.extend({
-                    options: { position: 'bottomcenter' },
-                    onAdd: function() {
-                        this._container = L.DomUtil.create('div', 'audit-bottom-menu');
-                        this._container.style.display = 'none';
-                        return this._container;
-                    }
-                });
-                bottomControl = new AuditMenu();
-                bottomControl.addTo(window.mapNamespace.map);
-                initGlobalConfigListener();
-            }
-        }, 500);
-    });
+    // --- 穩定度修正：改用自適應定時器取代穩定度低的 DOMContentLoaded 監聽 ---
+    const checkMapInterval = setInterval(() => {
+        if (window.mapNamespace?.map && typeof L !== 'undefined') {
+            clearInterval(checkMapInterval);
+            
+            const AuditMenu = L.Control.extend({
+                options: { position: 'bottomcenter' },
+                onAdd: function() {
+                    this._container = L.DomUtil.create('div', 'audit-bottom-menu');
+                    this._container.style.display = 'none';
+                    return this._container;
+                }
+            });
+            bottomControl = new AuditMenu();
+            bottomControl.addTo(window.mapNamespace.map);
+            initGlobalConfigListener();
+        }
+    }, 500);
+
 })();
