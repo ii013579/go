@@ -157,17 +157,24 @@
     // 4. 清樁資料編輯與上傳邏輯
     // ---------------------------------------------------------
     window.openAuditEditor = async function() {
-        const point = window.currentSelectedPoint;
-        if (!point) return;
-
-        const kmlId = point.properties.kmlId || window.mapNamespace?.currentKmlLayerId;
-        const featureId = point.properties.id || point.id;
+        // 鎖定當前點位，確保在非同步操作中資料來源穩定
+        const activePoint = window.currentSelectedPoint;
+        if (!activePoint) {
+            Swal.fire('錯誤', '請先在地圖上點選點位', 'error');
+            return;
+        }
+    
+        const kmlId = activePoint.properties.kmlId || window.mapNamespace?.currentKmlLayerId;
+        const featureId = activePoint.properties.id || activePoint.id;
         const config = window.globalAuditConfigs[kmlId] || { targetPhotos: 2 };
         const maxPhotos = config.targetPhotos;
-
+    
+        // 初始化照片陣列
+        if (!activePoint.properties.photos) activePoint.properties.photos = [];
+    
         let photoHtml = '';
         for (let i = 0; i < maxPhotos; i++) {
-            const photoData = point.properties.photos?.[i] || '';
+            const photoData = activePoint.properties.photos[i] || '';
             photoHtml += `
                 <div style="border:2px dashed #ccc;height:85px;position:relative;display:flex;align-items:center;justify-content:center;background:#fafafa;border-radius:8px;overflow:hidden;">
                     <input type="file" accept="image/*" capture="environment" onchange="window.handleAuditPhotoPreview(this, ${i})" style="position:absolute;width:100%;height:100%;opacity:0;z-index:2;cursor:pointer;">
@@ -175,35 +182,46 @@
                     <span id="audit-icon-${i}" style="font-size:24px;color:#bbb;display:${photoData?'none':'block'};z-index:1;">📷</span>
                 </div>`;
         }
-
+    
         const { value: res } = await Swal.fire({
             title: `清樁紀錄 (需拍${maxPhotos}張)`,
             html: `<div style="text-align:left;">
-                <label><b>設備狀態</b></label>
+                <label><b>設備狀態 <span style="color:red;">*必選</span></b></label>
                 <select id="swal-status" class="swal2-input" style="width:100%;margin:10px 0 15px 0;">
-                    <option value="正常" ${point.properties.auditStatus==='正常'?'selected':''}>正常</option>
-                    <option value="毀損" ${point.properties.auditStatus==='毀損'?'selected':''}>毀損</option>
-                    <option value="遺失" ${point.properties.auditStatus==='遺失'?'selected':''}>遺失</option>
+                    <option value="" ${!activePoint.properties.auditStatus ? 'selected' : ''}>--- 請選擇 ---</option>
+                    <option value="正常" ${activePoint.properties.auditStatus==='正常'?'selected':''}>正常</option>
+                    <option value="毀損" ${activePoint.properties.auditStatus==='毀損'?'selected':''}>毀損</option>
+                    <option value="遺失" ${activePoint.properties.auditStatus==='遺失'?'selected':''}>遺失</option>
                 </select>
                 <div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(80px, 1fr));gap:8px;margin-bottom:15px;">${photoHtml}</div>
-                <textarea id="swal-note" class="swal2-textarea" style="width:100%;height:60px;margin:0;" placeholder="輸入備註事項...">${point.properties.auditNote || ''}</textarea>
+                <textarea id="swal-note" class="swal2-textarea" style="width:100%;height:60px;margin:0;" placeholder="輸入備註事項...">${activePoint.properties.auditNote || ''}</textarea>
             </div>`,
             showCancelButton: true,
             confirmButtonText: '確認上傳',
             preConfirm: () => {
-                const photos = window.currentSelectedPoint.properties.photos || [];
+                const statusValue = document.getElementById('swal-status').value;
+                const photos = activePoint.properties.photos || [];
+    
+                // 驗證 1：檢查是否已選擇有效的設備狀態
+                if (!statusValue) {
+                    Swal.showValidationMessage('請選擇設備狀態 (正常、毀損或遺失)');
+                    return false;
+                }
+    
+                // 驗證 2：檢查照片張數是否足夠
                 if (photos.filter(p => p).length < maxPhotos) {
                     Swal.showValidationMessage(`請拍滿 ${maxPhotos} 張照片`);
                     return false;
                 }
+    
                 return {
-                    status: document.getElementById('swal-status').value,
+                    status: statusValue,
                     note: document.getElementById('swal-note').value,
                     photos: photos
                 };
             }
         });
-
+    
         if (res) {
             Swal.fire({ title: '正在上傳資料...', didOpen: () => Swal.showLoading(), allowOutsideClick: false });
             try {
@@ -211,39 +229,29 @@
                 for (let i = 0; i < res.photos.length; i++) {
                     const data = res.photos[i];
                     if (data && data.startsWith('data:image')) {
+                        // 上傳新照片到 Firebase Storage
                         const ref = firebase.storage().ref().child(`${STORAGE_ROOT}/${kmlId}/${featureId}_${i}.jpg`);
                         await ref.put(await (await fetch(data)).blob());
                         photoUrls.push(await ref.getDownloadURL());
-                    } else if (data) photoUrls.push(data);
+                    } else if (data) {
+                        // 保留既有的照片 URL
+                        photoUrls.push(data);
+                    }
                 }
+                
+                // 更新 Firestore 中的清查紀錄
                 await firebase.firestore().collection(APP_PATH).doc(kmlId).collection('auditRecords').doc(featureId).set({
-                    status: res.status, note: res.note, photos: photoUrls, updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                    status: res.status, 
+                    note: res.note, 
+                    photos: photoUrls, 
+                    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
                 }, { merge: true });
+    
                 Swal.fire({ icon: 'success', title: '上傳成功', timer: 1000, showConfirmButton: false });
-            } catch (e) { Swal.fire('錯誤', e.message, 'error'); }
-        }
-    };
-
-    window.handleAuditPhotoPreview = function(input, index) {
-        if (input.files && input.files[0]) {
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                const img = new Image();
-                img.onload = () => {
-                    const canvas = document.createElement('canvas');
-                    canvas.width = 800; canvas.height = 600; // 壓縮至 800x600
-                    const ctx = canvas.getContext('2d');
-                    ctx.drawImage(img, 0, 0, 800, 600);
-                    const base64 = canvas.toDataURL('image/jpeg', 0.8);
-                    document.getElementById('audit-prev-' + index).src = base64;
-                    document.getElementById('audit-prev-' + index).style.display = 'block';
-                    document.getElementById('audit-icon-' + index).style.display = 'none';
-                    if (!window.currentSelectedPoint.properties.photos) window.currentSelectedPoint.properties.photos = [];
-                    window.currentSelectedPoint.properties.photos[index] = base64;
-                };
-                img.src = e.target.result;
-            };
-            reader.readAsDataURL(input.files[0]);
+            } catch (e) { 
+                console.error("上傳失敗:", e);
+                Swal.fire('錯誤', '上傳失敗：' + e.message, 'error'); 
+            }
         }
     };
 
