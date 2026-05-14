@@ -1,10 +1,8 @@
 ﻿/**
- * audit-module.js - v2.18
- * 完整整合版：
- * 1. 權限分級：User/Editor/Owner 可見清查狀態（藍/粉），Guest/Unapproved 僅見紅點。
- * 2. 錯誤修復：修正 forceMapRefresh 作用域問題，解決 Uncaught ReferenceError。
- * 3. UI 修復：解決照片預覽區域顯示 CSS 程式碼的問題。
- * 4. 即時同步：上傳後立即翻轉顏色，並同步至 Firebase 供所有授權使用者查看。
+ * audit-module.js - v2.22
+ * 基於 v2.18 恢復並修正：
+ * 1. 自動修正 Storage 路徑（移除 .kml 副檔名）。
+ * 2. 每次上傳後自動產出該區域 CSV 總表並寫入 Storage。
  */
 (function() {
     'use strict';
@@ -19,21 +17,15 @@
     const STORAGE_ROOT = 'kmldata-d22fb/storage';
 
     // ---------------------------------------------------------
-    // 1. 樣式與刷新核心邏輯 (核心定義區)
+    // 1. 樣式與刷新核心邏輯
     // ---------------------------------------------------------
 
-    /**
-     * 強制地圖刷新函式
-     * 放在頂層確保 startAuditDataListener 與 initListener 都能呼叫到
-     */
     function forceMapRefresh() {
         const ns = window.mapNamespace;
         if (window.addGeoJsonLayers && ns?.allKmlFeatures) {
-            // 如果地圖上已有 KML 圖層，先移除以強制 Leaflet 重新渲染
             if (ns.currentKmlLayer && ns.map) {
                 ns.map.removeLayer(ns.currentKmlLayer);
             }
-            // 重新執行渲染邏輯
             window.addGeoJsonLayers(ns.allKmlFeatures);
             console.log("地圖樣式已重繪");
         }
@@ -47,26 +39,21 @@
         if (kmlId) {
             const config = window.globalAuditConfigs[kmlId];
             const records = window.auditLayersState[kmlId] || {};
-            
-            // 判定是否具備讀取紀錄的權限（若 records 為空代表可能為 Guest 或尚未載入）
             const hasRecordAccess = Object.keys(records).length > 0;
 
             features.forEach(f => {
                 f.properties.kmlId = kmlId;
                 const fId = f.properties.id || f.id;
                 
-                // 只有「圖層開啟清查」且「目前使用者有權限讀取紀錄」時，顯示藍/粉點
                 if (config && config.isAuditing === true && hasRecordAccess) {
                     const record = records[fId];
                     if (record) {
-                        // 已清查：粉紅色
                         f.properties.auditStatus = record.status;
                         f.properties.auditNote = record.note;
                         f.properties.photos = record.photos || [];
                         f.properties.fillColor = "#ff85c0"; 
                         f.properties.radius = 10;
                     } else {
-                        // 未清查：藍色
                         f.properties.auditStatus = null;
                         f.properties.fillColor = "#3498db"; 
                         f.properties.radius = 10;
@@ -74,7 +61,6 @@
                     f.properties.color = "#ffffff";
                     f.properties.fillOpacity = 0.9;
                 } else {
-                    // Guest、Unapproved 或未開啟清查時：一律顯示原始紅點
                     f.properties.fillColor = "#e74c3c"; 
                     f.properties.radius = 8;
                     delete f.properties.auditStatus;
@@ -85,7 +71,41 @@
     };
 
     // ---------------------------------------------------------
-    // 2. 底部控制按鈕
+    // 2. CSV 總表生成函式
+    // ---------------------------------------------------------
+    async function updateAreaSummaryCsv(kmlId, folderName) {
+        const records = window.auditLayersState[kmlId];
+        if (!records) return;
+
+        const ns = window.mapNamespace;
+        const features = ns?.allKmlFeatures || [];
+        
+        // CSV 標頭 (含 BOM 防止 Excel 中文亂碼)
+        let csvContent = "\uFEFF點名,狀態,備註,照片連結串接\n"; 
+        
+        features.forEach(f => {
+            const fId = f.properties.id || f.id;
+            const name = f.properties.name || "未命名";
+            const rec = records[fId];
+            if (rec) {
+                const note = (rec.note || "").replace(/"/g, '""'); // 處理 CSV 引號轉義
+                const photoStr = (rec.photos || []).join(" | ");
+                csvContent += `"${name}","${rec.status}","${note}","${photoStr}"\n`;
+            }
+        });
+
+        try {
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const csvPath = `${STORAGE_ROOT}/${folderName}/_區域清查總表_${folderName}.csv`;
+            await firebase.storage().ref().child(csvPath).put(blob);
+            console.log(`CSV 總表已更新: ${csvPath}`);
+        } catch (e) {
+            console.error("生成 CSV 總表失敗", e);
+        }
+    }
+
+    // ---------------------------------------------------------
+    // 3. 底部控制按鈕
     // ---------------------------------------------------------
     function updateBottomBtnState() {
         if (!bottomControl) return;
@@ -93,7 +113,6 @@
         const kmlId = window.mapNamespace?.currentKmlLayerId;
         const config = window.globalAuditConfigs[kmlId];
 
-        // 注意：這裡不阻擋 Guest 看到按鈕，由 openAuditEditor 內部的上傳權限與 Rules 判定
         if (active && config && config.isAuditing === true) {
             bottomControl._container.style.display = 'block';
             bottomControl._container.innerHTML = `
@@ -110,14 +129,17 @@
     window.addEventListener('click', () => { setTimeout(updateBottomBtnState, 200); });
 
     // ---------------------------------------------------------
-    // 3. 清樁編輯與上傳核心
+    // 4. 清樁編輯與上傳核心
     // ---------------------------------------------------------
     window.openAuditEditor = async function() {
         const activePoint = window.currentSelectedPoint;
         if (!activePoint) return;
 
         const selectEl = document.getElementById('kmlLayerSelect');
-        const kmlLayerName = selectEl?.options[selectEl.selectedIndex]?.getAttribute('data-basename') || '區域';
+        const rawName = selectEl?.options[selectEl.selectedIndex]?.getAttribute('data-basename') || '區域';
+        // 【修正】移除檔名中的 .kml 以作為資料夾名稱
+        const kmlLayerName = rawName.replace(/\.kml$/i, '').trim();
+        
         const pointName = activePoint.properties?.name || '未命名';
         const kmlId = activePoint.properties.kmlId || window.mapNamespace?.currentKmlLayerId;
         const featureId = activePoint.properties.id || activePoint.id;
@@ -128,7 +150,6 @@
             ? [...activePoint.properties.photos] 
             : new Array(maxPhotos).fill('');
 
-        // 閉包預覽函式
         window._tempPreview = function(input, index) {
             if (input.files && input.files[0]) {
                 const reader = new FileReader();
@@ -137,12 +158,11 @@
                     img.onload = () => {
                         const canvas = document.createElement('canvas');
                         let w = img.width, h = img.height;
-                        if (w > h) { if (w > 1000) { h *= 1000/w; w = 1000; } }
-                        else { if (h > 1000) { w *= 1000/h; h = 1000; } }
+                        if (w > h) { if (w > 1024) { h *= 1024/w; w = 1024; } }
+                        else { if (h > 1024) { w *= 1024/h; h = 1024; } }
                         canvas.width = w; canvas.height = h;
-                        const ctx = canvas.getContext('2d');
-                        ctx.drawImage(img, 0, 0, w, h);
-                        const b64 = canvas.toDataURL('image/jpeg', 0.75);
+                        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+                        const b64 = canvas.toDataURL('image/jpeg', 0.8);
                         document.getElementById('audit-prev-'+index).src = b64;
                         document.getElementById('audit-prev-'+index).style.display = 'block';
                         document.getElementById('audit-icon-'+index).style.display = 'none';
@@ -196,7 +216,7 @@
         delete window._tempPreview;
 
         if (res) {
-            Swal.fire({ title: '正在上傳...', didOpen: () => Swal.showLoading(), allowOutsideClick: false });
+            Swal.fire({ title: '正在上傳資料與更新總表...', didOpen: () => Swal.showLoading(), allowOutsideClick: false });
             try {
                 const photoUrls = [];
                 for (let i = 0; i < res.photos.length; i++) {
@@ -209,31 +229,36 @@
                     } else if (d) photoUrls.push(d);
                 }
                 
-                // 本地快取立即更新 (Latency Compensation)
-                if (!window.auditLayersState[kmlId]) window.auditLayersState[kmlId] = {};
-                window.auditLayersState[kmlId][featureId] = { status: res.status, note: res.note, photos: photoUrls };
+                const recordData = { 
+                    status: res.status, 
+                    note: res.note, 
+                    photos: photoUrls, 
+                    updatedAt: firebase.firestore.FieldValue.serverTimestamp() 
+                };
 
-                // 寫入 Firestore
-                await firebase.firestore().collection(APP_PATH).doc(kmlId).collection('auditRecords').doc(featureId).set({
-                    status: res.status, note: res.note, photos: photoUrls, updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-                }, { merge: true });
+                // 1. 寫入 Firestore
+                await firebase.firestore().collection(APP_PATH).doc(kmlId).collection('auditRecords').doc(featureId).set(recordData, { merge: true });
                 
-                Swal.fire({ icon: 'success', title: '成功', timer: 1000, showConfirmButton: false });
+                // 2. 本地快取立即更新以確保 CSV 包含最新資料
+                if (!window.auditLayersState[kmlId]) window.auditLayersState[kmlId] = {};
+                window.auditLayersState[kmlId][featureId] = recordData;
+
+                // 3. 更新該圖層的 CSV 總表
+                await updateAreaSummaryCsv(kmlId, kmlLayerName);
                 
-                // 強制翻轉顏色為粉紅
+                Swal.fire({ icon: 'success', title: '上傳成功', timer: 1000, showConfirmButton: false });
                 setTimeout(() => { forceMapRefresh(); updateBottomBtnState(); }, 100);
             } catch (e) { 
-                Swal.fire('權限不足或上傳失敗', '只有 Editor 或 Owner 角色可以執行此操作。', 'error'); 
+                Swal.fire('權限不足或上傳失敗', '只有專案成員可以執行此操作。', 'error'); 
             }
         }
     };
     
     // ---------------------------------------------------------
-    // 4. 初始化與監聽
+    // 5. 初始化與監聽
     // ---------------------------------------------------------
     function startAuditDataListener(kmlId) {
         if (auditUnsubscribes[kmlId]) return;
-        
         auditUnsubscribes[kmlId] = firebase.firestore().collection(APP_PATH).doc(kmlId).collection('auditRecords')
             .onSnapshot(snapshot => {
                 const updates = {};
@@ -241,7 +266,6 @@
                 window.auditLayersState[kmlId] = updates;
                 forceMapRefresh();
             }, error => {
-                // 如果權限被 Rules 拒絕 (Guest/Unapproved)
                 if (error.code === 'permission-denied') {
                     window.auditLayersState[kmlId] = {}; 
                     forceMapRefresh(); 
@@ -251,10 +275,8 @@
 
     const initListener = () => {
         if (typeof firebase === 'undefined' || !firebase.apps.length) { 
-            setTimeout(initListener, 500); 
-            return; 
+            setTimeout(initListener, 500); return; 
         }
-        
         firebase.firestore().collection(APP_PATH).onSnapshot(snapshot => {
             snapshot.forEach(doc => { 
                 window.globalAuditConfigs[doc.id] = doc.data(); 
@@ -264,23 +286,20 @@
         });
     };
 
-    // 地圖載入後啟動
-    document.addEventListener('DOMContentLoaded', () => {
-        const check = setInterval(() => {
-            if (window.mapNamespace?.map) {
-                clearInterval(check);
-                const M = L.Control.extend({
-                    options: { position: 'bottomcenter' },
-                    onAdd: function() {
-                        this._container = L.DomUtil.create('div', 'audit-bottom-menu');
-                        this._container.style.display = 'none';
-                        return this._container;
-                    }
-                });
-                bottomControl = new M();
-                bottomControl.addTo(window.mapNamespace.map);
-                initListener();
-            }
-        }, 500);
-    });
+    const checkReady = setInterval(() => {
+        if (window.mapNamespace?.map && typeof L !== 'undefined') {
+            clearInterval(checkReady);
+            const M = L.Control.extend({
+                options: { position: 'bottomcenter' },
+                onAdd: function() {
+                    this._container = L.DomUtil.create('div', 'audit-bottom-menu');
+                    this._container.style.display = 'none';
+                    return this._container;
+                }
+            });
+            bottomControl = new M();
+            bottomControl.addTo(window.mapNamespace.map);
+            initListener();
+        }
+    }, 500);
 })();
