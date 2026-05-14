@@ -1,5 +1,5 @@
 ﻿/**
- * audit-module.js - v2.15 (完全恢復 + 穩定修正版)
+ * audit-module.js - v2.15 (圖層儲存 + 欄位自適應 CSV 產生版)
  * 整合功能：
  * 1. 自動注入樣式 (藍/粉/紅) 與即時色彩狀態刷新
  * 2. 底部「開始清樁」按鈕聯動與即時狀態更新
@@ -7,6 +7,7 @@
  * 4. 動態標題顯示點名標籤
  * 5. 閉包式相片壓縮預覽 (修正非同步提前刪除 bug)
  * 6. Storage 路徑與檔名優化：改為人類可讀路徑與 [點名_序號.jpg] 格式（自動去除了 .kml 後綴）
+ * 7. 專屬 CSV 生成：上傳時自動在相同圖層資料夾下產生 (點名,設備狀態,照片1,照片2,...,備註) 檔案
  */
 (function() {
     'use strict';
@@ -95,7 +96,62 @@
     window.addEventListener('click', () => { setTimeout(updateBottomBtnState, 200); });
 
     // ---------------------------------------------------------
-    // 3. 清查管理對話框 (圖層管理切換)
+    // 3. 專屬 CSV 總表動態生成產線 (核心新增)
+    // ---------------------------------------------------------
+    async function generateLayerCsvReport(kmlId, kmlLayerName, maxPhotos) {
+        const records = window.auditLayersState[kmlId] || {};
+        const ns = window.mapNamespace;
+        const features = ns?.allKmlFeatures || [];
+
+        // 標頭：點名,設備狀態,照片1,照片2,...,備註 (帶上 UTF-8 BOM 防止 Excel 亂碼)
+        let headerArr = ["點名", "設備狀態"];
+        for (let i = 1; i <= maxPhotos; i++) {
+            headerArr.push(`照片${i}`);
+        }
+        headerArr.push("備註");
+        
+        let csvContent = "\uFEFF" + headerArr.join(",") + "\n";
+
+        // 巡覽該圖層所有點位，確保未清查的也會在表單內留空，方便比對
+        features.forEach(f => {
+            const fId = f.properties.id || f.id;
+            const pointName = f.properties?.name || "未命名點位";
+            const record = records[fId];
+
+            let rowArr = [];
+            rowArr.push(`"${pointName.replace(/"/g, '""')}"`);
+
+            if (record) {
+                rowArr.push(`"${record.status || '正常'}"`);
+                // 填入各張照片的下載連結
+                for (let i = 0; i < maxPhotos; i++) {
+                    const url = record.photos && record.photos[i] ? record.photos[i] : "";
+                    rowArr.push(`"${url}"`);
+                }
+                const safeNote = (record.note || "").replace(/"/g, '""');
+                rowArr.push(`"${safeNote}"`);
+            } else {
+                // 未清查點位填空
+                rowArr.push('""');
+                for (let i = 0; i < maxPhotos; i++) rowArr.push('""');
+                rowArr.push('""');
+            }
+
+            csvContent += rowArr.join(",") + "\n";
+        });
+
+        try {
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const csvStoragePath = `${STORAGE_ROOT}/${kmlLayerName}/${kmlLayerName}_清查總表.csv`;
+            await firebase.storage().ref().child(csvStoragePath).put(blob);
+            console.log(`[CSV 產生成功] 路徑: ${csvStoragePath}`);
+        } catch (err) {
+            console.error("產生區域 CSV 總表失敗:", err);
+        }
+    }
+
+    // ---------------------------------------------------------
+    // 4. 清查管理對話框 (圖層管理切換)
     // ---------------------------------------------------------
     window.showAuditActionModal = async function() {
         const select = document.getElementById('kmlLayerSelect');
@@ -152,7 +208,7 @@
     };
 
     // ---------------------------------------------------------
-    // 4. 清樁資料編輯與上傳邏輯
+    // 5. 清樁資料編輯與上傳邏輯
     // ---------------------------------------------------------
     window.openAuditEditor = async function() {
         const activePoint = window.currentSelectedPoint;
@@ -161,7 +217,7 @@
             return;
         }
 
-        // 取得人類可讀的區域名稱與點位名稱 (去除結尾的 .kml 避免路徑出現資料夾異常)
+        // 取得人類可讀的區域名稱與點位名稱 (去除結尾的 .kml 確保路徑整潔)
         const selectEl = document.getElementById('kmlLayerSelect');
         const rawLayerName = selectEl?.options[selectEl.selectedIndex]?.getAttribute('data-basename') || '預設區域';
         const kmlLayerName = rawLayerName.replace(/\.kml$/i, '').trim(); 
@@ -261,7 +317,7 @@
 
         // D. 執行 Firebase 上傳程序
         if (res) {
-            Swal.fire({ title: '正在上傳...', didOpen: () => Swal.showLoading(), allowOutsideClick: false });
+            Swal.fire({ title: '正在上傳並更新總表...', didOpen: () => Swal.showLoading(), allowOutsideClick: false });
             try {
                 const photoUrls = [];
                 for (let i = 0; i < res.photos.length; i++) {
@@ -296,7 +352,10 @@
                     updatedAt: firebase.firestore.FieldValue.serverTimestamp()
                 }, { merge: true });
                 
-                Swal.fire({ icon: 'success', title: '上傳成功', timer: 1000, showConfirmButton: false });
+                // 動態生成與覆蓋目前的 CSV 資料表至同一 Storage 資料夾下
+                await generateLayerCsvReport(kmlId, kmlLayerName, maxPhotos);
+
+                Swal.fire({ icon: 'success', title: '上傳與總表更新成功', timer: 1000, showConfirmButton: false });
                 
                 // 立即觸發刷新：藍點立即變粉紅點
                 forceMapRefresh();
@@ -309,7 +368,7 @@
     };
     
     // ---------------------------------------------------------
-    // 5. 資料初始化與即時監聽
+    // 6. 資料初始化與即時監聽
     // ---------------------------------------------------------
     const initGlobalConfigListener = () => {
         if (typeof firebase === 'undefined' || !firebase.apps.length) {
@@ -349,7 +408,7 @@
         });
     }
 
-    // --- 穩定度修正：改用自適應定時器取代穩定度低的 DOMContentLoaded 監聽 ---
+    // --- 安全異步計時器載入地圖框架，保證按鈕絕對能正確綁定 ---
     const checkMapInterval = setInterval(() => {
         if (window.mapNamespace?.map && typeof L !== 'undefined') {
             clearInterval(checkMapInterval);
