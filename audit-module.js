@@ -1,5 +1,5 @@
 ﻿/**
- * audit-module.js - 最終全功能整合版 (完全修復點位同步與重複文件問題)
+ * audit-module.js - 最終同步優化版 (確保欄位完整寫入與 Leaflet 強制重繪變色)
  */
 (function() {
     'use strict';
@@ -32,7 +32,7 @@
     }
 
     // ---------------------------------------------------------
-    // 1. 樣式攔截器 (修正：讀取與比對機制完全統一使用人類可讀「點名」)
+    // 1. 樣式攔截器 (修正：雙重綁定機制，直接暴力修改 Leaflet 圖層實體外觀)
     // ---------------------------------------------------------
     const originalAddLayers = window.addGeoJsonLayers;
     window.addGeoJsonLayers = function(features) {
@@ -45,20 +45,18 @@
 
             features.forEach(f => {
                 f.properties.kmlId = kmlId;
-                
-                // 【核心修正】統一使用點名(name)作為地圖渲染端比對的 Key
                 const pointName = f.properties.name || f.properties.title || f.properties.id || f.id;
                 
                 if (config && config.isAuditing === true) {
-                    const record = records[pointName]; // 使用點名在即時快照中尋找紀錄
+                    const record = records[pointName]; 
                     
-                    if (record && record.status) {
-                        // 【已清查點位】：變更為粉紅色，並擴大半徑
-                        f.properties.auditStatus = record.status;
+                    if (record && (record.status === "已完成" || record.auditStatus === "已完成")) {
+                        // 【已清查點位】：記憶體屬性定義
+                        f.properties.auditStatus = "已完成";
                         f.properties.auditNote = record.note;
                         f.properties.photos = record.photos || [];
                         f.properties.isAudited = true;
-                        f.properties.fillColor = "#ff85c0"; // 粉紅色 Pink
+                        f.properties.fillColor = "#ff85c0"; // 粉紅色
                         f.properties.radius = 10;
                     } else {
                         // 【未清查點位】：保持預設藍色
@@ -70,7 +68,6 @@
                     f.properties.color = "#ffffff";
                     f.properties.fillOpacity = 0.9;
                 } else {
-                    // 未開啟清查模式：預設原始紅色
                     f.properties.fillColor = "#e74c3c"; 
                     f.properties.radius = 8;
                     f.properties.isAudited = false;
@@ -81,10 +78,60 @@
         if (originalAddLayers) return originalAddLayers.apply(this, arguments);
     };
 
-    // 強制重新繪製 Leaflet 地圖圖層
+    /**
+     * 【核心修正】暴力實時變色功能
+     * 除了依賴原本的 addGeoJsonLayers，在資料庫更新時，
+     * 直接把 Leaflet 目前呈現在地圖上的實體圓點（Layer）撈出來強行塗上粉紅色。
+     */
     function forceMapRefresh() {
-        if (window.addGeoJsonLayers && window.mapNamespace?.allKmlFeatures) {
-            window.addGeoJsonLayers(window.mapNamespace.allKmlFeatures);
+        const ns = window.mapNamespace;
+        const kmlId = ns?.currentKmlLayerId;
+        if (!ns?.map || !kmlId) return;
+
+        const records = window.auditLayersState[kmlId] || {};
+
+        // 遍歷當前地圖上所有的 Leaflet 圖層實體
+        ns.map.eachLayer(function(layer) {
+            // 檢查這是不是一個點位圖層，並且有沒有 properties 屬性
+            if (layer.feature && layer.feature.properties) {
+                const props = layer.feature.properties;
+                const pointName = props.name || props.title || props.id;
+                
+                const record = records[pointName];
+                if (record && (record.status === "已完成" || record.auditStatus === "已完成")) {
+                    // 同步寫入點位運行記憶體
+                    props.isAudited = true;
+                    props.auditStatus = "已完成";
+                    props.photos = record.photos || [];
+                    props.auditNote = record.note;
+
+                    // 1. 如果是 CircleMarker (圓圈點)，直接更換樣式成粉紅色
+                    if (typeof layer.setStyle === 'function') {
+                        layer.setStyle({
+                            fillColor: "#ff85c0", // 粉紅
+                            color: "#ffffff",
+                            weight: 2,
+                            fillOpacity: 0.9,
+                            radius: 10
+                        });
+                    }
+                    // 2. 如果是 L.marker (大頭針/Icon點)
+                    else if (typeof layer.setIcon === 'function') {
+                        const pinkIcon = L.divIcon({
+                            className: 'custom-pink-point',
+                            html: `<div style="background-color: #ff85c0; width: 14px; height: 14px; border: 2px solid #ffffff; border-radius: 50%; box-shadow: 0 0 4px rgba(0,0,0,0.4);"></div>`,
+                            iconSize: [14, 14],
+                            iconAnchor: [7, 7]
+                        });
+                        layer.setIcon(pinkIcon);
+                    }
+                }
+            }
+        });
+
+        // 觸發重新繪製
+        if (window.addGeoJsonLayers && ns.allKmlFeatures) {
+            window.addGeoJsonLayers(ns.allKmlFeatures);
         }
     }
 
@@ -104,13 +151,12 @@
         const config = window.globalAuditConfigs[kmlId];
 
         if (active && config && config.isAuditing === true) {
-            // 安全向下抓取點位的 GeoJSON 屬性
             const layerProps = active.feature?.properties || active.properties || {};
             const pointName = layerProps.name || layerProps.title || "未知點位";
             
-            // 從我們統一的全域狀態快照中判定是否已清查，防止 Leaflet 內部屬性更新延遲
             const currentRecords = window.auditLayersState[kmlId] || {};
-            const isAudited = currentRecords[pointName] !== undefined;
+            const record = currentRecords[pointName];
+            const isAudited = record !== undefined && (record.status === "已完成" || record.auditStatus === "已完成");
 
             let lat = 0, lng = 0;
             if (active.getLatLng) {
@@ -126,8 +172,8 @@
             if (isAudited) {
                 actionBtnHtml = `
                     <button onclick="window.viewAuditDetailOnly('${pointName}')" 
-                            style="background: #95a5a6; color: white; border: 2px solid #ffffff; padding: 12px 25px; border-radius: 50px; font-weight: bold; font-size: 16px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); cursor: pointer;">
-                        查看紀錄
+                            style="background: #e91e63; color: white; border: 2px solid #ffffff; padding: 12px 25px; border-radius: 50px; font-weight: bold; font-size: 16px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); cursor: pointer;">
+                        查看紀錄 (粉紅)
                     </button>`;
             } else {
                 actionBtnHtml = `
@@ -175,7 +221,7 @@
             rowArr.push(`"${pointName.replace(/"/g, '""')}"`);
 
             if (record) {
-                rowArr.push(`"${record.status || '正常'}"`);
+                rowArr.push(`"${record.deviceStatus || '正常'}"`);
                 for (let i = 0; i < maxPhotos; i++) {
                     const url = record.photos && record.photos[i] ? record.photos[i] : "";
                     rowArr.push(`"${url}"`);
@@ -200,18 +246,12 @@
     }
 
     // ---------------------------------------------------------
-    // 4. 清查狀態圖層管理對話框
+    // 4. 清查狀態圖層管理
     // ---------------------------------------------------------
     window.showAuditActionModal = async function() {
-        if (!checkHasAuditPermission()) {
-            Swal.fire('權限不足', '您的帳號角色不允許管理清查狀態！', 'warning');
-            return;
-        }
-
+        if (!checkHasAuditPermission()) return;
         const select = document.getElementById('kmlLayerSelect');
-        if (!select || select.options.length <= 1) {
-            Swal.fire('載入中', '圖層清單讀取中...', 'info'); return;
-        }
+        if (!select || select.options.length <= 1) return;
 
         let listHtml = '<div style="max-height: 350px; overflow-y: auto; text-align: left;">';
         Array.from(select.options).forEach(opt => {
@@ -221,18 +261,13 @@
             const targetPhotos = config.targetPhotos || 2;
             const baseName = opt.getAttribute('data-basename') || opt.textContent.split(' (')[0];
             
-            const statusInfo = isAuditing 
-                ? `<div style="color: #e67e22; font-size: 12px;">清查中：需拍照 ${targetPhotos} 張</div>`
-                : `<div style="color: #999; font-size: 12px;">未開啟清查</div>`;
-
             listHtml += `
                 <div style="display:flex; align-items:center; justify-content:space-between; padding:12px; border-bottom:1px solid #eee;">
                     <div>
                         <div style="font-weight:bold; font-size:14px;">${baseName}</div>
-                        ${statusInfo}
+                        ${isAuditing?`<div style="color: #e67e22; font-size:12px;">清查中：需照片 ${targetPhotos} 張</div>`:`<div style="color: #999; font-size: 12px;">未開啟清查</div>`}
                     </div>
-                    <button onclick="window.toggleAuditStatus('${opt.value}', ${!isAuditing})" 
-                            style="background:${isAuditing?'#666':'#3498db'}; color:white; border:none; padding:6px 15px; border-radius:4px; cursor:pointer; font-weight:bold;">
+                    <button onclick="window.toggleAuditStatus('${opt.value}', ${!isAuditing})" style="background:${isAuditing?'#666':'#3498db'}; color:white; border:none; padding:6px 15px; border-radius:4px; cursor:pointer;">
                         ${isAuditing ? '關閉' : '開啟'}
                     </button>
                 </div>`;
@@ -243,18 +278,12 @@
 
     window.toggleAuditStatus = async function(kmlId, status) {
         if (!checkHasAuditPermission()) return;
-
         if (status) {
             const { value: count } = await Swal.fire({
-                title: '設定必填照片張數',
-                input: 'select',
-                inputOptions: { '2':'2張','3':'3張','5':'5張','10':'10張' },
-                inputValue: '2'
+                title: '設定必填照片張數', input: 'select', inputOptions: { '2':'2張','3':'3張','5':'5張' }, inputValue: '2'
             });
             if (count) {
-                await firebase.firestore().collection(APP_PATH).doc(kmlId).set({
-                    isAuditing: true, targetPhotos: parseInt(count)
-                }, { merge: true });
+                await firebase.firestore().collection(APP_PATH).doc(kmlId).set({ isAuditing: true, targetPhotos: parseInt(count) }, { merge: true });
                 setTimeout(window.showAuditActionModal, 500); 
             }
         } else {
@@ -264,26 +293,15 @@
     };
 
     // ---------------------------------------------------------
-    // 5. 清樁資料編輯與上傳邏輯 (解決重複建立文件與無法變色核心)
+    // 5. 清樁資料編輯與上傳邏輯 (修正：寫入詳盡欄位以利抓取)
     // ---------------------------------------------------------
     window.openAuditEditor = async function() {
-        if (!checkHasAuditPermission()) {
-            Swal.fire('權限不足', '訪客或未核可帳號無法編輯與儲存清樁資料。', 'error');
-            return;
-        }
-
+        if (!checkHasAuditPermission()) return;
         const activePoint = window.currentSelectedPoint;
-        if (!activePoint) {
-            Swal.fire('錯誤', '請先在地圖上選取一個點位', 'error');
-            return;
-        }
+        if (!activePoint) return;
 
-        // 精準抓取點位屬性
         const layerProps = activePoint.feature?.properties || activePoint.properties || {};
-        
-        // 【核心修正】強制作為寫入與比對的 Document ID
         const pointName = layerProps.name || layerProps.title || '未命名點位'; 
-        
         const kmlId = layerProps.kmlId || window.mapNamespace?.currentKmlLayerId;
         const config = window.globalAuditConfigs[kmlId] || { targetPhotos: 2 };
         const maxPhotos = config.targetPhotos;
@@ -292,9 +310,7 @@
         const rawLayerName = selectEl?.options[selectEl.selectedIndex]?.getAttribute('data-basename') || '預設區域';
         const kmlLayerName = rawLayerName.replace(/\.kml$/i, '').trim(); 
 
-        const currentPhotos = Array.isArray(layerProps.photos) 
-            ? [...layerProps.photos] 
-            : new Array(maxPhotos).fill('');
+        const currentPhotos = Array.isArray(layerProps.photos) ? [...layerProps.photos] : new Array(maxPhotos).fill('');
 
         window._tempPreview = function(input, index) {
             if (input.files && input.files[0]) {
@@ -303,21 +319,17 @@
                     const img = new Image();
                     img.onload = () => {
                         const canvas = document.createElement('canvas');
-                        let width = img.width; let height = img.height;
-                        const max_size = 1000; 
+                        let width = img.width, height = img.height;
+                        const max_size = 1000;
                         if (width > height) { if (width > max_size) { height *= max_size / width; width = max_size; } } 
                         else { if (height > max_size) { width *= max_size / height; height = max_size; } }
                         canvas.width = width; canvas.height = height;
-                        
-                        const ctx = canvas.getContext('2d');
-                        ctx.drawImage(img, 0, 0, width, height);
+                        canvas.getContext('2d').drawImage(img, 0, 0, width, height);
                         const base64 = canvas.toDataURL('image/jpeg', 0.75);
                         
-                        const prevImg = document.getElementById('audit-prev-' + index);
-                        const prevIcon = document.getElementById('audit-icon-' + index);
-                        if (prevImg) { prevImg.src = base64; prevImg.style.display = 'block'; }
-                        if (prevIcon) { prevIcon.style.display = 'none'; }
-
+                        document.getElementById('audit-prev-' + index).src = base64;
+                        document.getElementById('audit-prev-' + index).style.display = 'block';
+                        document.getElementById('audit-icon-' + index).style.display = 'none';
                         currentPhotos[index] = base64;
                     };
                     img.src = e.target.result;
@@ -331,9 +343,7 @@
             const photoData = currentPhotos[i] || '';
             photoHtml += `
                 <div style="border:2px dashed #ccc;height:85px;position:relative;display:flex;align-items:center;justify-content:center;background:#fafafa;border-radius:8px;overflow:hidden;">
-                    <input type="file" accept="image/*" capture="environment" 
-                           onchange="window._tempPreview(this, ${i})" 
-                           style="position:absolute;width:100%;height:100%;opacity:0;z-index:2;cursor:pointer;">
+                    <input type="file" accept="image/*" capture="environment" onchange="window._tempPreview(this, ${i})" style="position:absolute;width:100%;height:100%;opacity:0;z-index:2;cursor:pointer;">
                     <img id="audit-prev-${i}" src="${photoData}" style="width:100%;height:100%;object-fit:cover;display:${photoData?'block':'none'};z-index:1;">
                     <span id="audit-icon-${i}" style="font-size:24px;color:#bbb;display:${photoData?'none':'block'};z-index:1;">📷</span>
                 </div>`;
@@ -374,7 +384,6 @@
                     if (data && data.startsWith('data:image')) {
                         const photoIndexStr = String(i + 1).padStart(2, '0');
                         const customStoragePath = `${STORAGE_ROOT}/${kmlLayerName}/${pointName}_${photoIndexStr}.jpg`;
-                        
                         const ref = firebase.storage().ref().child(customStoragePath);
                         await ref.put(await (await fetch(data)).blob());
                         photoUrls.push(await ref.getDownloadURL());
@@ -383,38 +392,35 @@
                     }
                 }
                 
-                if (!window.auditLayersState[kmlId]) window.auditLayersState[kmlId] = {};
-                
-                // 1. 同步更新記憶體快照
-                window.auditLayersState[kmlId][pointName] = {
-                    status: res.status,
-                    note: res.note,
-                    photos: photoUrls
+                // 【核心修正】寫入本地快照與 Firebase 文件完整欄位
+                const structuredData = {
+                    pointName: pointName,       // 補齊點位名稱
+                    status: "已完成",           // 核心清查進度狀態
+                    auditStatus: "已完成",      // 備用防護狀態欄位
+                    deviceStatus: res.status,   // 設備真實狀態(正常/毀損)
+                    note: res.note, 
+                    photos: photoUrls, 
+                    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
                 };
 
-                // 2. 【核心修正】強制使用點名作 .doc(pointName) 的唯一文件 ID。
-                // 這樣再次點擊同一點位上傳時，只會覆蓋更新(Overwrite)，絕不重複建立隨機文件！
+                if (!window.auditLayersState[kmlId]) window.auditLayersState[kmlId] = {};
+                window.auditLayersState[kmlId][pointName] = structuredData;
+
                 await firebase.firestore()
                     .collection(APP_PATH)
                     .doc(kmlId)
                     .collection('auditRecords')
                     .doc(pointName) 
-                    .set({
-                        status: res.status, 
-                        note: res.note, 
-                        photos: photoUrls, 
-                        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-                    }, { merge: true });
+                    .set(structuredData, { merge: true });
                 
                 await generateLayerCsvReport(kmlId, kmlLayerName, maxPhotos);
 
                 Swal.fire({ icon: 'success', title: '上傳與總表更新成功', timer: 1000, showConfirmButton: false });
                 
-                // 立即重新渲染點位與底部按鈕外觀
+                // 執行強力暴力刷色，杜絕 Leaflet 緩存問題
                 forceMapRefresh();
                 setTimeout(updateBottomBtnState, 300);
             } catch (e) { 
-                console.error(e);
                 Swal.fire('錯誤', e.message, 'error'); 
             }
         }
@@ -426,32 +432,23 @@
     window.viewAuditDetailOnly = function(pointName) {
         const kmlId = window.mapNamespace?.currentKmlLayerId;
         const record = window.auditLayersState[kmlId]?.[pointName];
-
-        if (!record) {
-            Swal.fire('提示', '找不到對應的清查紀錄資料。', 'info');
-            return;
-        }
+        if (!record) return;
 
         let imagesHtml = '';
         if (Array.isArray(record.photos)) {
             record.photos.forEach(url => {
-                if (url) {
-                    imagesHtml += `<img src="${url}" style="width:45%; margin:2%; max-height:120px; object-fit:cover; border-radius:6px; border:1px solid #ccc;">`;
-                }
+                if (url) imagesHtml += `<img src="${url}" style="width:45%; margin:2%; max-height:120px; object-fit:cover; border-radius:6px;">`;
             });
         }
 
         Swal.fire({
             title: `清查紀錄：${pointName}`,
-            html: `
-                <div style="text-align: left; font-size:14px;">
-                    <p><b>設備狀況：</b><span style="color:#ff85c0; font-weight:bold;">🟢 ${record.status || '正常'}</span></p>
-                    <p><b>現場備註：</b><br>${record.note || '無備註'}</p>
-                    <p><b>現場照片：</b></p>
-                    <div style="display:flex; flex-wrap:wrap; justify-content:flex-start;">
-                        ${imagesHtml || '無照片'}
-                    </div>
-                </div>`,
+            html: `<div style="text-align: left; font-size:14px;">
+                <p><b>設備狀況：</b><span style="color:#ff85c0; font-weight:bold;">🟢 ${record.deviceStatus || '正常'}</span></p>
+                <p><b>現場備註：</b><br>${record.note || '無備註'}</p>
+                <p><b>現場照片：</b></p>
+                <div style="display:flex; flex-wrap:wrap;">${imagesHtml || '無照片'}</div>
+            </div>`,
             confirmButtonText: '關閉'
         });
     };
@@ -479,12 +476,12 @@
         auditUnsubscribes[kmlId] = firebase.firestore().collection(APP_PATH).doc(kmlId).collection('auditRecords')
             .onSnapshot(snapshot => {
                 const updates = {};
-                // 【核心修正】資料庫回傳時，以 doc.id (點名) 作為快照記憶體的 Key
                 snapshot.forEach(doc => {
                     updates[doc.id] = doc.data();
                 });
                 window.auditLayersState[kmlId] = updates;
-                forceMapRefresh(); // 資料一有變動，立即觸發點位粉紅色重繪！
+                // 一收到 Firebase 通知，立即進行暴力刷色
+                forceMapRefresh(); 
             });
     }
 
@@ -508,14 +505,12 @@
                 onAdd: function() {
                     this._container = L.DomUtil.create('div', 'audit-bottom-menu');
                     this._container.style.display = 'none';
-                    
                     this._container.style.position = 'fixed';
                     this._container.style.bottom = '35px';
                     this._container.style.left = '50%';
                     this._container.style.transform = 'translateX(-50%)';
                     this._container.style.zIndex = '5000'; 
                     this._container.style.pointerEvents = 'none';
-                    
                     return this._container;
                 }
             });
