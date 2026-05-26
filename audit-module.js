@@ -1,12 +1,5 @@
 ﻿/**
- * audit-module.js - 最終全功能整合版 (修正版)
- * 整合功能：
- * 1. 【動態變色】清查完成的點位即時渲染為粉紅色 (#ff85c0)；未清查為藍色 (#3498db)；未開啟清查為紅色。
- * 2. 【自動產線】上傳成功後，自動於 Firebase Storage 相同圖層資料夾內動態生成/更新「清查總表.csv」。
- * 3. 【權限防護】guest 與 unapproved 角色無法看到「開始清樁」按鈕，且強行呼叫時會被阻斷，但保留瀏覽功能。
- * 4. 【手機顯示優化】強制使用 position: fixed，確保按鈕在手機端絕不被擠出螢幕外。
- * 5. 【儲存路徑優化】自動去除圖層名稱的 .kml 後綴，建立人類可讀的乾淨儲存路徑與結構化檔名 (點名_序號.jpg)。
- * 6. 【雙鈕齊發】選取點位時，底部的「導航」與「清樁/查看紀錄」按鈕同時並排顯現。
+ * audit-module.js - 最終全功能整合版 (完全修復點位同步與重複文件問題)
  */
 (function() {
     'use strict';
@@ -20,14 +13,14 @@
     const STORAGE_ROOT = 'kmldata-d22fb/storage';
 
     // ---------------------------------------------------------
-    // 0. 權限防護檢查機制 (guest、unapproved 不執行行為)
+    // 0. 權限防護檢查機制
     // ---------------------------------------------------------
     function getUserRole() {
         return window.currentUserRole || 
                window.userRole || 
                localStorage.getItem('userRole') || 
                sessionStorage.getItem('userRole') || 
-               'guest'; // 預設查無身分時一律視為 guest 唯讀
+               'guest';
     }
 
     function checkHasAuditPermission() {
@@ -39,7 +32,7 @@
     }
 
     // ---------------------------------------------------------
-    // 1. 樣式攔截器 (負責將清查狀況渲染顏色：未清查:藍色、已清查:粉紅)
+    // 1. 樣式攔截器 (修正：讀取與比對機制完全統一使用人類可讀「點名」)
     // ---------------------------------------------------------
     const originalAddLayers = window.addGeoJsonLayers;
     window.addGeoJsonLayers = function(features) {
@@ -52,21 +45,23 @@
 
             features.forEach(f => {
                 f.properties.kmlId = kmlId;
-                // 統一修正：使用點名(name)作為資料庫文件的 Key 來判別狀態，確保多端同步
+                
+                // 【核心修正】統一使用點名(name)作為地圖渲染端比對的 Key
                 const pointName = f.properties.name || f.properties.title || f.properties.id || f.id;
                 
                 if (config && config.isAuditing === true) {
-                    const record = records[pointName]; // 改用 pointName 判別
-                    if (record) {
-                        // 【已清查點位】：變更為粉紅色，並擴大半徑凸顯
+                    const record = records[pointName]; // 使用點名在即時快照中尋找紀錄
+                    
+                    if (record && record.status) {
+                        // 【已清查點位】：變更為粉紅色，並擴大半徑
                         f.properties.auditStatus = record.status;
                         f.properties.auditNote = record.note;
                         f.properties.photos = record.photos || [];
                         f.properties.isAudited = true;
-                        f.properties.fillColor = "#ff85c0"; // 粉紅色
+                        f.properties.fillColor = "#ff85c0"; // 粉紅色 Pink
                         f.properties.radius = 10;
                     } else {
-                        // 【未清查點位】：預設藍色
+                        // 【未清查點位】：保持預設藍色
                         f.properties.auditStatus = null;
                         f.properties.isAudited = false;
                         f.properties.fillColor = "#3498db"; // 藍色
@@ -86,7 +81,7 @@
         if (originalAddLayers) return originalAddLayers.apply(this, arguments);
     };
 
-    // 強制重新繪製 Leaflet 地圖圖層 (促使點位動態重繪變色)
+    // 強制重新繪製 Leaflet 地圖圖層
     function forceMapRefresh() {
         if (window.addGeoJsonLayers && window.mapNamespace?.allKmlFeatures) {
             window.addGeoJsonLayers(window.mapNamespace.allKmlFeatures);
@@ -94,12 +89,11 @@
     }
 
     // ---------------------------------------------------------
-    // 2. 底部控制按鈕 (修正：選取點位時，導航按鈕與清查按鈕同時出現)
+    // 2. 底部控制按鈕 (選取點位時，導航按鈕與清查按鈕同時出現)
     // ---------------------------------------------------------
     function updateBottomBtnState() {
         if (!bottomControl) return;
 
-        // 規則 1：guest、unapproved 不執行行為也不顯示控制鈕
         if (!checkHasAuditPermission()) {
             bottomControl._container.style.display = 'none';
             return;
@@ -110,10 +104,13 @@
         const config = window.globalAuditConfigs[kmlId];
 
         if (active && config && config.isAuditing === true) {
-            // 安全抓取圖層點位的 GeoJSON 屬性與經緯度
+            // 安全向下抓取點位的 GeoJSON 屬性
             const layerProps = active.feature?.properties || active.properties || {};
             const pointName = layerProps.name || layerProps.title || "未知點位";
-            const isAudited = layerProps.isAudited === true;
+            
+            // 從我們統一的全域狀態快照中判定是否已清查，防止 Leaflet 內部屬性更新延遲
+            const currentRecords = window.auditLayersState[kmlId] || {};
+            const isAudited = currentRecords[pointName] !== undefined;
 
             let lat = 0, lng = 0;
             if (active.getLatLng) {
@@ -125,7 +122,6 @@
                 lat = active.feature.geometry.coordinates[1];
             }
 
-            // 決定右側按鈕的外觀與文字
             let actionBtnHtml = '';
             if (isAudited) {
                 actionBtnHtml = `
@@ -141,7 +137,6 @@
                     </button>`;
             }
 
-            // 規則 2：導航按鈕與清查功能按鈕同時並排出現
             bottomControl._container.style.display = 'block';
             bottomControl._container.innerHTML = `
                 <div style="text-align: center; pointer-events: auto; display: flex; gap: 12px; justify-content: center; background: rgba(0,0,0,0.6); padding: 10px 20px; border-radius: 50px; backdrop-filter: blur(5px);">
@@ -156,7 +151,6 @@
         }
     }
     
-    // 點擊地圖時延遲觸發 UI 刷新，確保全域選取變數已指派
     window.addEventListener('click', () => { setTimeout(updateBottomBtnState, 200); });
 
     // ---------------------------------------------------------
@@ -175,7 +169,7 @@
 
         features.forEach(f => {
             const pointName = f.properties?.name || f.properties?.title || "未命名點位";
-            const record = records[pointName]; // 改用點名比對
+            const record = records[pointName]; 
 
             let rowArr = [];
             rowArr.push(`"${pointName.replace(/"/g, '""')}"`);
@@ -270,7 +264,7 @@
     };
 
     // ---------------------------------------------------------
-    // 5. 清樁資料編輯與上傳邏輯 (修正：人類可讀路徑與點名_序號.jpg檔名)
+    // 5. 清樁資料編輯與上傳邏輯 (解決重複建立文件與無法變色核心)
     // ---------------------------------------------------------
     window.openAuditEditor = async function() {
         if (!checkHasAuditPermission()) {
@@ -284,9 +278,12 @@
             return;
         }
 
-        // 修正點：改由選取層級深層向下抓取 properties 物件，防止 null 報錯
+        // 精準抓取點位屬性
         const layerProps = activePoint.feature?.properties || activePoint.properties || {};
-        const pointName = layerProps.name || layerProps.title || '未命名點位';
+        
+        // 【核心修正】強制作為寫入與比對的 Document ID
+        const pointName = layerProps.name || layerProps.title || '未命名點位'; 
+        
         const kmlId = layerProps.kmlId || window.mapNamespace?.currentKmlLayerId;
         const config = window.globalAuditConfigs[kmlId] || { targetPhotos: 2 };
         const maxPhotos = config.targetPhotos;
@@ -375,7 +372,6 @@
                 for (let i = 0; i < res.photos.length; i++) {
                     const data = res.photos[i];
                     if (data && data.startsWith('data:image')) {
-                        // 修正點：產出人類能閱讀的實體檔名：[點名]_[二位數序號].jpg (如 A001_01.jpg)
                         const photoIndexStr = String(i + 1).padStart(2, '0');
                         const customStoragePath = `${STORAGE_ROOT}/${kmlLayerName}/${pointName}_${photoIndexStr}.jpg`;
                         
@@ -388,25 +384,33 @@
                 }
                 
                 if (!window.auditLayersState[kmlId]) window.auditLayersState[kmlId] = {};
-                // 修正點：使用 pointName 寫入本地 State 與 Firestore 文件，徹底擊碎權限報錯
+                
+                // 1. 同步更新記憶體快照
                 window.auditLayersState[kmlId][pointName] = {
                     status: res.status,
                     note: res.note,
                     photos: photoUrls
                 };
 
-                await firebase.firestore().collection(APP_PATH).doc(kmlId).collection('auditRecords').doc(pointName).set({
-                    status: res.status, 
-                    note: res.note, 
-                    photos: photoUrls, 
-                    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-                }, { merge: true });
+                // 2. 【核心修正】強制使用點名作 .doc(pointName) 的唯一文件 ID。
+                // 這樣再次點擊同一點位上傳時，只會覆蓋更新(Overwrite)，絕不重複建立隨機文件！
+                await firebase.firestore()
+                    .collection(APP_PATH)
+                    .doc(kmlId)
+                    .collection('auditRecords')
+                    .doc(pointName) 
+                    .set({
+                        status: res.status, 
+                        note: res.note, 
+                        photos: photoUrls, 
+                        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                    }, { merge: true });
                 
                 await generateLayerCsvReport(kmlId, kmlLayerName, maxPhotos);
 
                 Swal.fire({ icon: 'success', title: '上傳與總表更新成功', timer: 1000, showConfirmButton: false });
                 
-                // 立即重繪點位變更為粉紅色，並連動按鈕狀態刷新
+                // 立即重新渲染點位與底部按鈕外觀
                 forceMapRefresh();
                 setTimeout(updateBottomBtnState, 300);
             } catch (e) { 
@@ -453,7 +457,7 @@
     };
     
     // ---------------------------------------------------------
-    // 7. 資料監聽與動態初始化
+    // 7. 資料監聽與動態即時初始化 (Real-time Sync)
     // ---------------------------------------------------------
     const initGlobalConfigListener = () => {
         if (typeof firebase === 'undefined' || !firebase.apps.length) {
@@ -475,9 +479,12 @@
         auditUnsubscribes[kmlId] = firebase.firestore().collection(APP_PATH).doc(kmlId).collection('auditRecords')
             .onSnapshot(snapshot => {
                 const updates = {};
-                snapshot.forEach(doc => updates[doc.id] = doc.data());
+                // 【核心修正】資料庫回傳時，以 doc.id (點名) 作為快照記憶體的 Key
+                snapshot.forEach(doc => {
+                    updates[doc.id] = doc.data();
+                });
                 window.auditLayersState[kmlId] = updates;
-                forceMapRefresh();
+                forceMapRefresh(); // 資料一有變動，立即觸發點位粉紅色重繪！
             });
     }
 
