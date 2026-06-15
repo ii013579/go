@@ -275,10 +275,11 @@
         if (!checkHasAuditPermission()) return;
         
         try {
+            // 先關閉原本的「圖層清查管理」主選單，避免 DOM 焦點與多層彈窗衝突
+            Swal.close(); 
+
             if (status) {
-                // 先行關閉前一個管理彈窗，避免 Swal DOM 衝突卡死
-                Swal.close(); 
-                
+                // 【開啟清查模式】
                 const { value: count } = await Swal.fire({
                     title: '設定必填照片張數', 
                     input: 'select', 
@@ -288,36 +289,48 @@
                 });
                 
                 if (count) {
-                    // 顯示動態處理遮罩
+                    // 顯示動態處理中遮罩
                     Swal.fire({ title: '正在開啟清查...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
                     
+                    // 同步寫入 Firestore
                     await firebase.firestore().collection(APP_PATH).doc(kmlId).set({ 
                         isAuditing: true, 
                         targetPhotos: parseInt(count) 
                     }, { merge: true });
                     
-                    // 稍微延時重開管理面板，確保資料已同步
-                    setTimeout(window.showAuditActionModal, 300); 
+                    // 【成功優化】提示 1 秒後完全自動關閉所有視窗介面，不打擾地圖操作
+                    Swal.fire({ icon: 'success', title: '已開啟清查模式', timer: 1000, showConfirmButton: false });
                 } else {
-                    // 使用者按取消，則直接退回原本的管理視窗
+                    // 如果使用者點選「取消」，則退回原本的「圖層清查管理」主選單
                     window.showAuditActionModal();
                 }
             } else {
-                // 關閉清查模式
+                // 【關閉清查模式】
                 Swal.fire({ title: '正在關閉清查...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
                 
+                // 同步寫入 Firestore
                 await firebase.firestore().collection(APP_PATH).doc(kmlId).set({ 
                     isAuditing: false 
                 }, { merge: true });
                 
-                setTimeout(window.showAuditActionModal, 300);
+                // 【成功優化】提示 1 秒後完全自動關閉所有視窗介面
+                Swal.fire({ icon: 'success', title: '已關閉清查模式', timer: 1000, showConfirmButton: false });
             }
         } catch (error) {
-            console.error("切換清查狀態時發生錯誤:", error);
-            Swal.fire('操作失敗', `更新資料庫時出錯: ${error.message}`, 'error');
+            console.error("切換清查狀態失敗，詳細錯誤原因:", error);
+            
+            // 例外防護：若發生連線被阻擋或無權限，彈出錯誤提示，並允許使用者點擊返回主選單
+            Swal.fire({
+                icon: 'error',
+                title: '同步至資料庫失敗',
+                text: `請檢查是否開啟了 AdBlock/uBlock 等廣告阻擋外掛，或確認帳號權限。\n(錯誤代碼: ${error.message})`,
+                confirmButtonText: '返回管理視窗'
+            }).then(() => {
+                window.showAuditActionModal();
+            });
         }
     };
-
+    
     // ---------------------------------------------------------
     // 5. 清查資料編輯與上傳邏輯 (支援歷史紀錄覆蓋修改)
     // ---------------------------------------------------------
