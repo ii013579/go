@@ -32,8 +32,15 @@
     }
 
     // ---------------------------------------------------------
-    // 1. 樣式攔截器與強力重繪機制 (解決不變色、避免 undefined 錯誤)
+    // 1. 樣式攔截器與強力重繪機制 (解決不變色、避免 undefined 錯誤，且僅限特定角色看見變色)
     // ---------------------------------------------------------
+    
+    // 內部輔助函式：判斷目前使用者是否屬於可觀看或操作清查點的角色
+    function canSeeAuditColors() {
+        const role = getUserRole().toLowerCase().trim();
+        return role === 'owner' || role === 'editor' || role === 'user';
+    }
+
     const originalAddLayers = window.addGeoJsonLayers;
     window.addGeoJsonLayers = function(features) {
         const ns = window.mapNamespace;
@@ -50,10 +57,11 @@
                 const pointKey = f.properties.name || f.properties.title || f.properties.id || f.id || "未知點位";
                 f.properties.auditPointKey = pointKey; 
 
-                if (config && config.isAuditing === true) {
+                // 【核心權限修正】除了圖層開啟清查外，必須是 owner, editor, user 角色才能看見藍/粉紅變色
+                if (config && config.isAuditing === true && canSeeAuditColors()) {
                     const record = records[pointKey];
                     if (record) {
-                        // 【已清查點位】：記憶體屬性定義
+                        // 【已清查點位】：記憶體屬性定義 (特定角色顯示粉紅色)
                         f.properties.auditStatus = record.deviceStatus || "正常";
                         f.properties.auditNote = record.note;
                         f.properties.photos = record.photos || [];
@@ -70,10 +78,11 @@
                     f.properties.color = "#ffffff";
                     f.properties.fillOpacity = 0.9;
                 } else {
-                    // 未開啟清查模式：預設原始紅色
+                    // 未開啟清查模式，或角色為 guest/unapproved：一律強制維持原始紅色點
                     f.properties.fillColor = "#e74c3c"; 
                     f.properties.radius = 8;
                     f.properties.isAudited = false;
+                    f.properties.fillOpacity = 0.85;
                     delete f.properties.auditStatus;
                 }
             });
@@ -88,36 +97,53 @@
         if (!ns?.map || !kmlId) return;
 
         const records = window.auditLayersState[kmlId] || {};
+        
+        // 【核心權限修正】判斷當前環境是否允許渲染清查樣式
+        const showAuditMode = window.globalAuditConfigs[kmlId]?.isAuditing && canSeeAuditColors();
 
         ns.map.eachLayer(function(layer) {
             if (layer.feature && layer.feature.properties) {
                 const props = layer.feature.properties;
                 const pointKey = props.name || props.title || props.id;
                 
-                const record = records[pointKey];
-                if (record) {
-                    props.isAudited = true;
-                    props.auditStatus = record.deviceStatus || "正常";
-                    props.photos = record.photos || [];
-                    props.auditNote = record.note;
+                if (showAuditMode) {
+                    const record = records[pointKey];
+                    if (record) {
+                        props.isAudited = true;
+                        props.auditStatus = record.deviceStatus || "正常";
+                        props.photos = record.photos || [];
+                        props.auditNote = record.note;
 
-                    if (typeof layer.setStyle === 'function') {
-                        layer.setStyle({
-                            fillColor: "#ff85c0", // 強制渲染粉紅
-                            color: "#ffffff",
-                            weight: 2,
-                            fillOpacity: 0.9,
-                            radius: 10
-                        });
+                        if (typeof layer.setStyle === 'function') {
+                            layer.setStyle({
+                                fillColor: "#ff85c0", // 有權限：已完成顯示粉紅
+                                color: "#ffffff",
+                                weight: 2,
+                                fillOpacity: 0.9,
+                                radius: 10
+                            });
+                        }
+                    } else {
+                        props.isAudited = false;
+                        if (typeof layer.setStyle === 'function') {
+                            layer.setStyle({
+                                fillColor: "#3498db", // 有權限：未完成顯示藍色
+                                color: "#ffffff",
+                                weight: 2,
+                                fillOpacity: 0.9,
+                                radius: 10
+                            });
+                        }
                     }
                 } else {
-                    if (window.globalAuditConfigs[kmlId]?.isAuditing && typeof layer.setStyle === 'function') {
+                    // 無權限者（如 guest）或未開啟清查：強迫所有點位在地圖上重繪成規格一致的紅點
+                    if (typeof layer.setStyle === 'function') {
                         layer.setStyle({
-                            fillColor: "#3498db", // 還原藍色
+                            fillColor: "#e74c3c", // 還原原始紅色
                             color: "#ffffff",
-                            weight: 2,
-                            fillOpacity: 0.9,
-                            radius: 10
+                            weight: 1.5,
+                            fillOpacity: 0.85,
+                            radius: 8
                         });
                     }
                 }
@@ -130,12 +156,13 @@
     }
 
     // ---------------------------------------------------------
-    // 2. 底部控制按鈕面板 (取消導航、區分藍點與粉紅點切換)
+    // 2. 底部控制按鈕面板 (取消導航、區分藍點與粉紅點切換，且限擁有巡檢權限者顯示)
     // ---------------------------------------------------------
     function updateBottomBtnState() {
         if (!bottomControl) return;
 
-        if (!checkHasAuditPermission()) {
+        // 【核心權限修正】除了原本的基礎防護，必須是 owner, editor, user 角色才放行顯示底部按鈕
+        if (!checkHasAuditPermission() || !canSeeAuditColors()) {
             bottomControl._container.style.display = 'none';
             return;
         }
