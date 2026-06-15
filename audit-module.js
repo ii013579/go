@@ -231,7 +231,7 @@
     }
 
     // ---------------------------------------------------------
-    // 4. 清查管理對話框 (優化容錯)
+    // 4. 清查管理對話框 (修正引號與異步卡死優化版)
     // ---------------------------------------------------------
     window.showAuditActionModal = async function() {
         if (!checkHasAuditPermission()) {
@@ -249,34 +249,72 @@
             const targetPhotos = config.targetPhotos || 2;
             const baseName = opt.getAttribute('data-basename') || opt.textContent.split(' (')[0];
             
+            // 【修正重點】將 '${opt.value}' 的單引號在字串中確實包好，避免變數未定義錯誤
             listHtml += `
                 <div style="display:flex; align-items:center; justify-content:space-between; padding:12px; border-bottom:1px solid #eee;">
                     <div>
                         <div style="font-weight:bold; font-size:14px;">${baseName}</div>
-                        ${isAuditing?`<div style="color: #e67e22; font-size:12px;">清查中：需照片 ${targetPhotos} 張</div>`:`<div style="color: #999; font-size: 12px;">未開啟清查</div>`}
+                        ${isAuditing ? `<div style="color: #e67e22; font-size:12px;">清查中：需照片 ${targetPhotos} 張</div>` : `<div style="color: #999; font-size: 12px;">未開啟清查</div>`}
                     </div>
-                    <button onclick="window.toggleAuditStatus('${opt.value}', ${!isAuditing})" style="background:${isAuditing?'#666':'#3498db'}; color:white; border:none; padding:6px 15px; border-radius:4px; cursor:pointer;">
+                    <button onclick="window.toggleAuditStatus('${opt.value}', ${!isAuditing})" style="background:${isAuditing ? '#666' : '#3498db'}; color:white; border:none; padding:6px 15px; border-radius:4px; cursor:pointer;">
                         ${isAuditing ? '關閉' : '開啟'}
                     </button>
                 </div>`;
         });
         listHtml += '</div>';
-        Swal.fire({ title: '圖層清查管理', html: listHtml, showConfirmButton: false, showCloseButton: true });
+        
+        Swal.fire({ 
+            title: '圖層清查管理', 
+            html: listHtml, 
+            showConfirmButton: false, 
+            showCloseButton: true 
+        });
     };
 
     window.toggleAuditStatus = async function(kmlId, status) {
         if (!checkHasAuditPermission()) return;
-        if (status) {
-            const { value: count } = await Swal.fire({
-                title: '設定必填照片張數', input: 'select', inputOptions: { '2':'2張','3':'3張','5':'5張' }, inputValue: '2'
-            });
-            if (count) {
-                await firebase.firestore().collection(APP_PATH).doc(kmlId).set({ isAuditing: true, targetPhotos: parseInt(count) }, { merge: true });
-                setTimeout(window.showAuditActionModal, 500); 
+        
+        try {
+            if (status) {
+                // 先行關閉前一個管理彈窗，避免 Swal DOM 衝突卡死
+                Swal.close(); 
+                
+                const { value: count } = await Swal.fire({
+                    title: '設定必填照片張數', 
+                    input: 'select', 
+                    inputOptions: { '2':'2張','3':'3張','5':'5張' }, 
+                    inputValue: '2',
+                    showCancelButton: true
+                });
+                
+                if (count) {
+                    // 顯示動態處理遮罩
+                    Swal.fire({ title: '正在開啟清查...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+                    
+                    await firebase.firestore().collection(APP_PATH).doc(kmlId).set({ 
+                        isAuditing: true, 
+                        targetPhotos: parseInt(count) 
+                    }, { merge: true });
+                    
+                    // 稍微延時重開管理面板，確保資料已同步
+                    setTimeout(window.showAuditActionModal, 300); 
+                } else {
+                    // 使用者按取消，則直接退回原本的管理視窗
+                    window.showAuditActionModal();
+                }
+            } else {
+                // 關閉清查模式
+                Swal.fire({ title: '正在關閉清查...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+                
+                await firebase.firestore().collection(APP_PATH).doc(kmlId).set({ 
+                    isAuditing: false 
+                }, { merge: true });
+                
+                setTimeout(window.showAuditActionModal, 300);
             }
-        } else {
-            await firebase.firestore().collection(APP_PATH).doc(kmlId).set({ isAuditing: false }, { merge: true });
-            setTimeout(window.showAuditActionModal, 500);
+        } catch (error) {
+            console.error("切換清查狀態時發生錯誤:", error);
+            Swal.fire('操作失敗', `更新資料庫時出錯: ${error.message}`, 'error');
         }
     };
 
