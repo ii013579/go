@@ -422,8 +422,8 @@
                 <select id="swal-status" class="swal2-input" style="width:100%;margin:5px 0 15px 0;">
                     <option value="" ${!currentStatus ? 'selected' : ''}>--- 請選擇狀態 ---</option>
                     <option value="正常" ${currentStatus==='正常'?'selected':''}>正常</option>
-                    <option value="微創" ${currentStatus==='微創'?'selected':''}>微創</option>
-                    <option value="覆蓋" ${currentStatus==='覆蓋'?'selected':''}>覆蓋</option>
+                    <option value="微創" ${currentStatus==='毀損'?'selected':''}>微創</option>
+                    <option value="遺失" ${currentStatus==='遺失'?'selected':''}>遺失</option>
                 </select>
                 <label style="font-size:14px;"><b>現場照片 (需拍${maxPhotos}張)</b></label>
                 <div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(80px, 1fr));gap:8px;margin:5px 0 15px 0;">${photoHtml}</div>
@@ -518,11 +518,11 @@
     };
 
     // ---------------------------------------------------------
-    // 7. [v3.06 全新] 打包並下載特定圖層的所有照片為 ZIP 檔
+    // 7. 打包照片為 ZIP 檔 (v3.08 免設定 CORS 萬用版)
     // ---------------------------------------------------------
     window.downloadAuditPhotosZip = async function(kmlId) {
         if (typeof JSZip === 'undefined' || typeof saveAs === 'undefined') {
-            Swal.fire('套件缺失', '請確保已在 HTML 中引入 JSZip 與 FileSaver 套件！', 'error');
+            Swal.fire('套件缺失', '請確保 HTML 已引入 JSZip 與 FileSaver 套件！', 'error');
             return;
         }
 
@@ -534,12 +534,8 @@
             const record = records[pointKey];
             if (Array.isArray(record.photos)) {
                 record.photos.forEach((url, idx) => {
-                    if (url && (url.startsWith('http://') || url.startsWith('https://'))) {
-                        photoTasks.push({
-                            pointKey: pointKey,
-                            url: url,
-                            photoIndex: idx + 1
-                        });
+                    if (url && url.length > 0) {
+                        photoTasks.push({ pointKey: pointKey, url: url, photoIndex: idx + 1 });
                     }
                 });
             }
@@ -550,6 +546,7 @@
             return;
         }
 
+        // 取得圖層名稱
         const selectEl = document.getElementById('kmlLayerSelect');
         let layerName = '清查照片';
         if (selectEl) {
@@ -561,58 +558,83 @@
         }
 
         Swal.fire({
-            title: '正在下載並打包照片...',
+            title: '正在打包照片...',
             html: `<div id="zip-progress-text" style="font-size:14px; margin-top:10px;">準備中... (0/${photoTasks.length})</div>`,
             allowOutsideClick: false,
             didOpen: () => Swal.showLoading()
         });
 
+        // 輔助函式：透過 Image 物件載入圖片並轉為 Base64 (可繞過部分 fetch CORS 限制)
+        const urlToBase64 = (url) => new Promise((resolve, reject) => {
+            const img = new Image();
+            img.crossOrigin = 'Anonymous';
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                canvas.width = img.naturalWidth || img.width;
+                canvas.height = img.naturalHeight || img.height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0);
+                const base64 = canvas.toDataURL('image/jpeg', 0.9);
+                resolve(base64.split(',')[1]); // 只要 base64 內容
+            };
+            img.onerror = () => reject(new Error('圖片載入失敗'));
+            img.src = url;
+        });
+
         const zip = new JSZip();
         const folder = zip.folder(layerName);
         let completedCount = 0;
+        let failCount = 0;
 
-        try {
-            await Promise.all(photoTasks.map(async (task) => {
-                try {
-                    const response = await fetch(task.url);
-                    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-                    const blob = await response.blob();
-                    
-                    const photoIdxStr = String(task.photoIndex).padStart(2, '0');
-                    const safePointKey = task.pointKey.replace(/[\\/:*?"<>|]/g, '_');
-                    const fileName = `${safePointKey}/${safePointKey}_${photoIdxStr}.jpg`;
+        for (const task of photoTasks) {
+            const photoIdxStr = String(task.photoIndex).padStart(2, '0');
+            const safePointKey = task.pointKey.replace(/[\\/:*?"<>|]/g, '_');
+            const fileName = `${safePointKey}/${safePointKey}_${photoIdxStr}.jpg`;
 
-                    folder.file(fileName, blob);
-                } catch (err) {
-                    console.warn(`圖片抓取失敗 (${task.pointKey}_${task.photoIndex}):`, err);
-                } finally {
-                    completedCount++;
-                    const progressEl = document.getElementById('zip-progress-text');
-                    if (progressEl) {
-                        progressEl.textContent = `正在抓取圖片... (${completedCount}/${photoTasks.length})`;
+            try {
+                if (task.url.startsWith('data:image')) {
+                    // 原本就是 Base64
+                    const base64Data = task.url.split(',')[1];
+                    folder.file(fileName, base64Data, { base64: true });
+                } else {
+                    // 嘗試直接抓取，失敗則改用 Canvas 轉譯
+                    try {
+                        const response = await fetch(task.url);
+                        if (!response.ok) throw new Error();
+                        const blob = await response.blob();
+                        folder.file(fileName, blob);
+                    } catch (e) {
+                        const base64Content = await urlToBase64(task.url);
+                        folder.file(fileName, base64Content, { base64: true });
                     }
                 }
-            }));
-
-            const progressEl = document.getElementById('zip-progress-text');
-            if (progressEl) progressEl.textContent = '圖片抓取完成，正在壓縮 ZIP 檔案...';
-
-            const zipBlob = await zip.generateAsync({ type: 'blob' });
-            saveAs(zipBlob, `${layerName}_清查照片總集.zip`);
-
-            Swal.fire({
-                icon: 'success',
-                title: '打包下載完成！',
-                text: `共成功打包 ${completedCount} 張照片`,
-                timer: 2000,
-                showConfirmButton: false
-            });
-        } catch (error) {
-            console.error('ZIP 打包失敗:', error);
-            Swal.fire('下載失敗', `打包過程發生錯誤: ${error.message}`, 'error');
+            } catch (err) {
+                failCount++;
+                console.warn(`照片處理失敗 (${task.pointKey}_${task.photoIndex}):`, err);
+            } finally {
+                completedCount++;
+                const progressEl = document.getElementById('zip-progress-text');
+                if (progressEl) {
+                    progressEl.textContent = `處理中... (${completedCount}/${photoTasks.length})`;
+                }
+            }
         }
+
+        const progressEl = document.getElementById('zip-progress-text');
+        if (progressEl) progressEl.textContent = '圖片處理完成，正在壓縮 ZIP 檔案...';
+
+        const zipBlob = await zip.generateAsync({ type: 'blob' });
+        saveAs(zipBlob, `${layerName}_清查照片總集.zip`);
+
+        Swal.fire({
+            icon: 'success',
+            title: '打包下載完成！',
+            text: `已成功打包 ${completedCount - failCount} 張照片`,
+            timer: 2000,
+            showConfirmButton: false
+        });
     };
-    
+        
     // ---------------------------------------------------------
     // 8. 資料動態監聽與安全退場機制
     // ---------------------------------------------------------
