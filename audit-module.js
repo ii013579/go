@@ -517,8 +517,12 @@
         });
     };
 
+    
+    
+
+
     // ---------------------------------------------------------
-    // 7. 直接打包 Firebase Storage 指定資料夾 (v3.11 Storage SDK 直讀版)
+    // 7. 直接打包 Firebase Storage 指定資料夾 (v3.12 kmlLayerName 路徑版)
     // ---------------------------------------------------------
     window.downloadAuditPhotosZip = async function(kmlId) {
         if (typeof JSZip === 'undefined' || typeof saveAs === 'undefined') {
@@ -526,17 +530,26 @@
             return;
         }
 
-        // 取得圖層顯示名稱 (作為下載 ZIP 的檔名)
+        // 1. 取得圖層名稱 (用來作為 Storage 資料夾名稱與下載 ZIP 檔名)
         const selectEl = document.getElementById('kmlLayerSelect');
-        let layerName = kmlId;
+        let kmlLayerName = '';
+        
         if (selectEl) {
             const opt = Array.from(selectEl.options).find(o => o.value === kmlId);
             if (opt) {
+                // 優先拿 data-basename 或從下拉選單選項目抓取完整檔名/名稱
                 const rawName = opt.getAttribute('data-basename') || opt.textContent.split(' (')[0];
-                layerName = rawName.replace(/\.kml$/i, '').trim();
+                kmlLayerName = rawName.trim();
             }
         }
 
+        // 備用防呆：如果抓不到選單名稱，嘗試從全域狀態拿或提示錯誤
+        if (!kmlLayerName) {
+            Swal.fire('錯誤', '無法辨識當前圖層名稱，請確認圖層選單狀態。', 'error');
+            return;
+        }
+
+        // 顯示解凍/下載中提示
         Swal.fire({
             title: '正在掃描照片資料夾...',
             html: `<div id="zip-progress-text" style="font-size:14px; margin-top:10px;">請稍候...</div>`,
@@ -545,20 +558,20 @@
         });
 
         try {
-            // 定義 Firebase Storage 的目標資料夾路徑
+            // 【正確路徑】 STORAGE_ROOT / kmlLayerName
             const STORAGE_ROOT = 'kmldata-d22fb/storage';
             const targetFolderPath = `${STORAGE_ROOT}/${kmlLayerName}`;
             const folderRef = firebase.storage().ref().child(targetFolderPath);
 
-            // 遞迴掃描資料夾內所有檔案 (包含所有點位的子資料夾)
+            // 遞迴掃描資料夾內所有檔案 (包含各點位的子資料夾)
             async function fetchAllStorageFiles(dirRef) {
                 let files = [];
                 const res = await dirRef.listAll();
 
-                // 收集當前目錄下的所有檔案
+                // 收集當前目錄下的檔案
                 files = files.concat(res.items);
 
-                // 若有子資料夾，遞迴往下層撈取
+                // 若有子目錄，遞迴繼續掃描
                 for (const subFolder of res.prefixes) {
                     const subFiles = await fetchAllStorageFiles(subFolder);
                     files = files.concat(subFiles);
@@ -567,28 +580,50 @@
             }
 
             const progressEl = document.getElementById('zip-progress-text');
-            if (progressEl) progressEl.textContent = '正在搜尋 Storage 照片清單...';
+            if (progressEl) progressEl.textContent = `搜尋路徑: ${targetFolderPath}...`;
 
-            // 執行資料夾掃描
+            // 執行 Storage 資料夾掃描
             const allFiles = await fetchAllStorageFiles(folderRef);
 
             if (allFiles.length === 0) {
-                Swal.fire('提示', `在 Storage 路徑 (${targetFolderPath}) 下找不到任何上傳的照片。`, 'info');
+                // 去掉 .kml 副檔名再試一次 (防呆: 預防上傳時資料夾名稱有去副檔名)
+                const cleanLayerName = kmlLayerName.replace(/\.kml$/i, '');
+                if (cleanLayerName !== kmlLayerName) {
+                    const altFolderPath = `${STORAGE_ROOT}/${cleanLayerName}`;
+                    const altFolderRef = firebase.storage().ref().child(altFolderPath);
+                    const altFiles = await fetchAllStorageFiles(altFolderRef);
+                    
+                    if (altFiles.length > 0) {
+                        return proceedDownload(altFiles, altFolderPath, cleanLayerName);
+                    }
+                }
+
+                Swal.fire('提示', `在 Storage 路徑 (${targetFolderPath}) 下找不到上傳的照片。`, 'info');
                 return;
             }
 
-            // 開始打包 ZIP
+            await proceedDownload(allFiles, targetFolderPath, kmlLayerName.replace(/\.kml$/i, ''));
+
+        } catch (error) {
+            console.error('Storage 資料夾打包失敗:', error);
+            Swal.fire('打包失敗', error.message, 'error');
+        }
+
+        // 核心下載與 ZIP 壓縮處理函式
+        async function proceedDownload(files, folderPath, zipName) {
             const zip = new JSZip();
-            const rootFolder = zip.folder(layerName);
+            const rootFolder = zip.folder(zipName);
             let completedCount = 0;
             let failCount = 0;
 
-            for (const fileRef of allFiles) {
-                // 保持 Storage 內的相對目錄結構 (如: A508_台電(圓)_1/A508_台電(圓)_1_01.jpg)
-                const relativePath = fileRef.fullPath.replace(`${targetFolderPath}/`, '');
+            const progressEl = document.getElementById('zip-progress-text');
+
+            for (const fileRef of files) {
+                // 計算相對路徑 (保留 Storage 裡的點位資料夾目錄結構)
+                const relativePath = fileRef.fullPath.replace(`${folderPath}/`, '');
 
                 try {
-                    // 使用 Firebase SDK 原生 getBytes 讀取 ArrayBuffer (最大支援單檔 20MB)
+                    // 使用 Firebase SDK 原生 getBytes 直讀二進位資料 (單檔上限 20MB)
                     const arrayBuffer = await fileRef.getBytes(20 * 1024 * 1024);
                     rootFolder.file(relativePath, arrayBuffer);
                 } catch (err) {
@@ -597,19 +632,19 @@
                 } finally {
                     completedCount++;
                     if (progressEl) {
-                        progressEl.textContent = `下載照片中... (${completedCount}/${allFiles.length})`;
+                        progressEl.textContent = `下載照片中... (${completedCount}/${files.length})`;
                     }
                 }
             }
 
             if (completedCount - failCount === 0) {
-                throw new Error('讀取檔案失敗，請確認 Storage 存取權限。');
+                throw new Error('讀取檔案失敗，請確認 Storage Rules 存取權限。');
             }
 
             if (progressEl) progressEl.textContent = '照片下載完成，正在壓縮 ZIP 檔案...';
 
             const zipBlob = await zip.generateAsync({ type: 'blob' });
-            saveAs(zipBlob, `${layerName}_清查照片總集.zip`);
+            saveAs(zipBlob, `${zipName}_清查照片總集.zip`);
 
             Swal.fire({
                 icon: failCount > 0 ? 'warning' : 'success',
@@ -620,10 +655,6 @@
                 timer: 2000,
                 showConfirmButton: false
             });
-
-        } catch (error) {
-            console.error('Storage 資料夾打包失敗:', error);
-            Swal.fire('打包失敗', error.message, 'error');
         }
     };
         
