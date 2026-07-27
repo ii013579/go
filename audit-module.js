@@ -422,8 +422,8 @@
                 <select id="swal-status" class="swal2-input" style="width:100%;margin:5px 0 15px 0;">
                     <option value="" ${!currentStatus ? 'selected' : ''}>--- 請選擇狀態 ---</option>
                     <option value="正常" ${currentStatus==='正常'?'selected':''}>正常</option>
-                    <option value="毀損" ${currentStatus==='毀損'?'selected':''}>毀損</option>
-                    <option value="遺失" ${currentStatus==='遺失'?'selected':''}>遺失</option>
+                    <option value="微創" ${currentStatus==='微創'?'selected':''}>微創</option>
+                    <option value="覆蓋" ${currentStatus==='覆蓋'?'selected':''}>覆蓋</option>
                 </select>
                 <label style="font-size:14px;"><b>現場照片 (需拍${maxPhotos}張)</b></label>
                 <div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(80px, 1fr));gap:8px;margin:5px 0 15px 0;">${photoHtml}</div>
