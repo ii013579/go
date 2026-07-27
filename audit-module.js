@@ -1,5 +1,5 @@
 ﻿/**
- * audit-module.js - 清查與修改覆蓋整合優化版 (高效能與強健度增強版)
+ * audit-module.js - 清查與修改覆蓋整合優化版 (v3.06 批次 ZIP 照片下載與效能增強版)
  */
 (function() {
     'use strict';
@@ -14,7 +14,7 @@
     const STORAGE_ROOT = 'kmldata-d22fb/storage';
 
     // ---------------------------------------------------------
-    // 0. 權限防護檢查機制
+    // 0. 權限防護與安全轉義機制
     // ---------------------------------------------------------
     function getUserRole() {
         return window.currentUserRole || 
@@ -34,7 +34,6 @@
         return ['owner', 'editor', 'user'].includes(role);
     }
 
-    // 安全字元轉義 (防止 XSS 與 UI 破壞)
     function escapeHtml(str) {
         if (!str) return '';
         return String(str)
@@ -61,11 +60,9 @@
                 if (!f.properties) f.properties = {};
                 f.properties.kmlId = kmlId;
                 
-                // 優先解析唯一識別碼
                 const pointKey = f.properties.name || f.properties.title || f.properties.id || f.id || "未知點位";
                 f.properties.auditPointKey = pointKey; 
 
-                // 判斷是否呈現清查狀態配色
                 if (config && config.isAuditing === true && canSeeAuditColors()) {
                     const record = records[pointKey];
                     if (record) {
@@ -73,18 +70,18 @@
                         f.properties.auditNote = record.note;
                         f.properties.photos = record.photos || [];
                         f.properties.isAudited = true;
-                        f.properties.fillColor = "#ff85c0"; // 已清查：粉紅色
+                        f.properties.fillColor = "#ff85c0"; // 粉紅色 (已清查)
                         f.properties.radius = 10;
                     } else {
                         f.properties.isAudited = false;
                         f.properties.auditStatus = null;
-                        f.properties.fillColor = "#3498db"; // 未清查：藍色
+                        f.properties.fillColor = "#3498db"; // 藍色 (未清查)
                         f.properties.radius = 10;
                     }
                     f.properties.color = "#ffffff";
                     f.properties.fillOpacity = 0.9;
                 } else {
-                    f.properties.fillColor = "#e74c3c"; // 預設/無權限：紅色
+                    f.properties.fillColor = "#e74c3c"; // 紅色 (預設)
                     f.properties.radius = 8;
                     f.properties.isAudited = false;
                     f.properties.fillOpacity = 0.85;
@@ -210,7 +207,6 @@
         }
     }
 
-    // 防抖事件監聽，避免點擊時過度觸發
     window.addEventListener('click', () => { 
         clearTimeout(clickDebounceTimer);
         clickDebounceTimer = setTimeout(updateBottomBtnState, 150); 
@@ -262,7 +258,7 @@
     }
 
     // ---------------------------------------------------------
-    // 4. 清查管理對話框
+    // 4. 清查管理對話框 (整合 ZIP 打包按鈕)
     // ---------------------------------------------------------
     window.showAuditActionModal = async function() {
         if (!checkHasAuditPermission()) {
@@ -272,7 +268,7 @@
         const select = document.getElementById('kmlLayerSelect');
         if (!select || select.options.length <= 1) return;
 
-        let listHtml = '<div style="max-height: 350px; overflow-y: auto; text-align: left;">';
+        let listHtml = '<div style="max-height: 380px; overflow-y: auto; text-align: left;">';
         Array.from(select.options).forEach(opt => {
             if (!opt.value) return;
             const config = window.globalAuditConfigs[opt.value] || {};
@@ -287,15 +283,22 @@
                         <div style="font-weight:bold; font-size:14px;">${escapeHtml(baseName)}</div>
                         ${isAuditing ? `<div style="color: #e67e22; font-size:12px;">清查中：需照片 ${targetPhotos} 張</div>` : `<div style="color: #999; font-size: 12px;">未開啟清查</div>`}
                     </div>
-                    <button onclick="window.toggleAuditStatus('${safeValue}', ${!isAuditing})" style="background:${isAuditing ? '#666' : '#3498db'}; color:white; border:none; padding:6px 15px; border-radius:4px; cursor:pointer;">
-                        ${isAuditing ? '關閉' : '開啟'}
-                    </button>
+                    <div style="display:flex; gap:6px;">
+                        ${isAuditing ? `
+                            <button onclick="window.downloadAuditPhotosZip('${safeValue}')" title="下載此圖層所有照片為 ZIP" style="background:#8e44ad; color:white; border:none; padding:6px 10px; border-radius:4px; cursor:pointer; font-size:12px;">
+                                📦 下載照片
+                            </button>
+                        ` : ''}
+                        <button onclick="window.toggleAuditStatus('${safeValue}', ${!isAuditing})" style="background:${isAuditing ? '#666' : '#3498db'}; color:white; border:none; padding:6px 12px; border-radius:4px; cursor:pointer; font-size:12px;">
+                            ${isAuditing ? '關閉' : '開啟'}
+                        </button>
+                    </div>
                 </div>`;
         });
         listHtml += '</div>';
         
         Swal.fire({ 
-            title: '圖層清查管理', 
+            title: '圖層清查管理 (v3.06)', 
             html: listHtml, 
             showConfirmButton: false, 
             showCloseButton: true 
@@ -343,7 +346,7 @@
             Swal.fire({
                 icon: 'error',
                 title: '同步至資料庫失敗',
-                text: `請檢查網路連線或確認帳號權限。\n(錯誤原因: ${error.message})`,
+                text: `請檢查網路連線或權限設定。\n(${error.message})`,
                 confirmButtonText: '返回管理視窗'
             }).then(() => {
                 window.showAuditActionModal();
@@ -352,7 +355,7 @@
     };
     
     // ---------------------------------------------------------
-    // 5. 清查資料編輯與併發上傳邏輯 (效能優化版)
+    // 5. 清查資料編輯與上傳邏輯
     // ---------------------------------------------------------
     window.openAuditEditor = async function(isModifyMode = false) {
         if (!checkHasAuditPermission()) return;
@@ -441,7 +444,6 @@
         if (res) {
             Swal.fire({ title: '正在處理並上傳資料...', didOpen: () => Swal.showLoading(), allowOutsideClick: false });
             try {
-                // 【併發優化】使用 Promise.all 同步上傳圖片
                 const uploadPromises = res.photos.map(async (data, i) => {
                     if (data && data.startsWith('data:image')) {
                         const photoIndexStr = String(i + 1).padStart(2, '0');
@@ -514,9 +516,105 @@
             confirmButtonText: '關閉'
         });
     };
+
+    // ---------------------------------------------------------
+    // 7. [v3.06 全新] 打包並下載特定圖層的所有照片為 ZIP 檔
+    // ---------------------------------------------------------
+    window.downloadAuditPhotosZip = async function(kmlId) {
+        if (typeof JSZip === 'undefined' || typeof saveAs === 'undefined') {
+            Swal.fire('套件缺失', '請確保已在 HTML 中引入 JSZip 與 FileSaver 套件！', 'error');
+            return;
+        }
+
+        const records = window.auditLayersState[kmlId] || {};
+        const pointKeys = Object.keys(records);
+
+        const photoTasks = [];
+        pointKeys.forEach(pointKey => {
+            const record = records[pointKey];
+            if (Array.isArray(record.photos)) {
+                record.photos.forEach((url, idx) => {
+                    if (url && (url.startsWith('http://') || url.startsWith('https://'))) {
+                        photoTasks.push({
+                            pointKey: pointKey,
+                            url: url,
+                            photoIndex: idx + 1
+                        });
+                    }
+                });
+            }
+        });
+
+        if (photoTasks.length === 0) {
+            Swal.fire('提示', '目前圖層尚無已上傳的照片可供下載。', 'info');
+            return;
+        }
+
+        const selectEl = document.getElementById('kmlLayerSelect');
+        let layerName = '清查照片';
+        if (selectEl) {
+            const opt = Array.from(selectEl.options).find(o => o.value === kmlId);
+            if (opt) {
+                const rawName = opt.getAttribute('data-basename') || opt.textContent.split(' (')[0];
+                layerName = rawName.replace(/\.kml$/i, '').trim();
+            }
+        }
+
+        Swal.fire({
+            title: '正在下載並打包照片...',
+            html: `<div id="zip-progress-text" style="font-size:14px; margin-top:10px;">準備中... (0/${photoTasks.length})</div>`,
+            allowOutsideClick: false,
+            didOpen: () => Swal.showLoading()
+        });
+
+        const zip = new JSZip();
+        const folder = zip.folder(layerName);
+        let completedCount = 0;
+
+        try {
+            await Promise.all(photoTasks.map(async (task) => {
+                try {
+                    const response = await fetch(task.url);
+                    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                    const blob = await response.blob();
+                    
+                    const photoIdxStr = String(task.photoIndex).padStart(2, '0');
+                    const safePointKey = task.pointKey.replace(/[\\/:*?"<>|]/g, '_');
+                    const fileName = `${safePointKey}/${safePointKey}_${photoIdxStr}.jpg`;
+
+                    folder.file(fileName, blob);
+                } catch (err) {
+                    console.warn(`圖片抓取失敗 (${task.pointKey}_${task.photoIndex}):`, err);
+                } finally {
+                    completedCount++;
+                    const progressEl = document.getElementById('zip-progress-text');
+                    if (progressEl) {
+                        progressEl.textContent = `正在抓取圖片... (${completedCount}/${photoTasks.length})`;
+                    }
+                }
+            }));
+
+            const progressEl = document.getElementById('zip-progress-text');
+            if (progressEl) progressEl.textContent = '圖片抓取完成，正在壓縮 ZIP 檔案...';
+
+            const zipBlob = await zip.generateAsync({ type: 'blob' });
+            saveAs(zipBlob, `${layerName}_清查照片總集.zip`);
+
+            Swal.fire({
+                icon: 'success',
+                title: '打包下載完成！',
+                text: `共成功打包 ${completedCount} 張照片`,
+                timer: 2000,
+                showConfirmButton: false
+            });
+        } catch (error) {
+            console.error('ZIP 打包失敗:', error);
+            Swal.fire('下載失敗', `打包過程發生錯誤: ${error.message}`, 'error');
+        }
+    };
     
     // ---------------------------------------------------------
-    // 7. 資料動態監聽與安全退場機制
+    // 8. 資料動態監聽與安全退場機制
     // ---------------------------------------------------------
     const initGlobalConfigListener = () => {
         if (typeof firebase === 'undefined' || !firebase.apps.length) {
@@ -551,7 +649,6 @@
             });
     }
 
-    // 提供頁面銷毀時解除所有 Firestore 監聽的輔助函式
     window.cleanupAuditListeners = function() {
         Object.keys(auditUnsubscribes).forEach(key => {
             if (typeof auditUnsubscribes[key] === 'function') {
@@ -573,9 +670,11 @@
         });
     }
 
-    // 8. Leaflet 地圖初始化掛載 (限定最大輪詢次數)
+    // ---------------------------------------------------------
+    // 9. Leaflet 地圖初始化掛載 (輪詢檢查)
+    // ---------------------------------------------------------
     let checkAttempts = 0;
-    const maxAttempts = 30; // 最多重試 15 秒
+    const maxAttempts = 30; 
     const checkMapInterval = setInterval(() => {
         checkAttempts++;
         if (window.mapNamespace?.map && typeof L !== 'undefined') {
