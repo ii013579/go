@@ -518,7 +518,7 @@
     };
 
     // ---------------------------------------------------------
-    // 7. 打包照片為 ZIP 檔 (v3.08 免設定 CORS 萬用版)
+    // 7. 打包照片為 ZIP 檔 (v3.09 Firebase SDK 直讀免 CORS 版)
     // ---------------------------------------------------------
     window.downloadAuditPhotosZip = async function(kmlId) {
         if (typeof JSZip === 'undefined' || typeof saveAs === 'undefined') {
@@ -546,7 +546,6 @@
             return;
         }
 
-        // 取得圖層名稱
         const selectEl = document.getElementById('kmlLayerSelect');
         let layerName = '清查照片';
         if (selectEl) {
@@ -558,27 +557,10 @@
         }
 
         Swal.fire({
-            title: '正在打包照片...',
+            title: '正在從 Firebase 下載照片...',
             html: `<div id="zip-progress-text" style="font-size:14px; margin-top:10px;">準備中... (0/${photoTasks.length})</div>`,
             allowOutsideClick: false,
             didOpen: () => Swal.showLoading()
-        });
-
-        // 輔助函式：透過 Image 物件載入圖片並轉為 Base64 (可繞過部分 fetch CORS 限制)
-        const urlToBase64 = (url) => new Promise((resolve, reject) => {
-            const img = new Image();
-            img.crossOrigin = 'Anonymous';
-            img.onload = () => {
-                const canvas = document.createElement('canvas');
-                canvas.width = img.naturalWidth || img.width;
-                canvas.height = img.naturalHeight || img.height;
-                const ctx = canvas.getContext('2d');
-                ctx.drawImage(img, 0, 0);
-                const base64 = canvas.toDataURL('image/jpeg', 0.9);
-                resolve(base64.split(',')[1]); // 只要 base64 內容
-            };
-            img.onerror = () => reject(new Error('圖片載入失敗'));
-            img.src = url;
         });
 
         const zip = new JSZip();
@@ -593,43 +575,46 @@
 
             try {
                 if (task.url.startsWith('data:image')) {
-                    // 原本就是 Base64
+                    // 若為 Base64 格式
                     const base64Data = task.url.split(',')[1];
                     folder.file(fileName, base64Data, { base64: true });
                 } else {
-                    // 嘗試直接抓取，失敗則改用 Canvas 轉譯
-                    try {
-                        const response = await fetch(task.url);
-                        if (!response.ok) throw new Error();
-                        const blob = await response.blob();
-                        folder.file(fileName, blob);
-                    } catch (e) {
-                        const base64Content = await urlToBase64(task.url);
-                        folder.file(fileName, base64Content, { base64: true });
-                    }
+                    // 【關鍵修正】透過 Firebase SDK refFromURL 直接讀取 Storage 檔案 ArrayBuffer
+                    const storageRef = firebase.storage().refFromURL(task.url);
+                    
+                    // 限定最大讀取大小 10MB (10 * 1024 * 1024 bytes)
+                    const arrayBuffer = await storageRef.getBytes(10 * 1024 * 1024);
+                    folder.file(fileName, arrayBuffer);
                 }
             } catch (err) {
                 failCount++;
-                console.warn(`照片處理失敗 (${task.pointKey}_${task.photoIndex}):`, err);
+                console.warn(`Firebase Storage 讀取失敗 (${task.pointKey}_${task.photoIndex}):`, err);
             } finally {
                 completedCount++;
                 const progressEl = document.getElementById('zip-progress-text');
                 if (progressEl) {
-                    progressEl.textContent = `處理中... (${completedCount}/${photoTasks.length})`;
+                    progressEl.textContent = `下載進度... (${completedCount}/${photoTasks.length})`;
                 }
             }
         }
 
+        if (completedCount - failCount === 0) {
+            Swal.fire('下載失敗', '無法從 Firebase 讀取照片，請確認帳號是否有 Storage 讀取權限。', 'error');
+            return;
+        }
+
         const progressEl = document.getElementById('zip-progress-text');
-        if (progressEl) progressEl.textContent = '圖片處理完成，正在壓縮 ZIP 檔案...';
+        if (progressEl) progressEl.textContent = '照片下載完成，正在壓縮 ZIP 檔案...';
 
         const zipBlob = await zip.generateAsync({ type: 'blob' });
         saveAs(zipBlob, `${layerName}_清查照片總集.zip`);
 
         Swal.fire({
-            icon: 'success',
+            icon: failCount > 0 ? 'warning' : 'success',
             title: '打包下載完成！',
-            text: `已成功打包 ${completedCount - failCount} 張照片`,
+            text: failCount > 0 
+                ? `成功打包 ${completedCount - failCount} 張，失敗 ${failCount} 張`
+                : `已成功打包 ${completedCount} 張照片`,
             timer: 2000,
             showConfirmButton: false
         });
