@@ -547,7 +547,7 @@
         try {
             // 定義 Firebase Storage 的目標資料夾路徑
             const STORAGE_ROOT = 'kmldata-d22fb/storage';
-            const targetFolderPath = `${STORAGE_ROOT}/${kmlId}`;
+            const targetFolderPath = `${STORAGE_ROOT}/${kmlLayerName}`;
             const folderRef = firebase.storage().ref().child(targetFolderPath);
 
             // 遞迴掃描資料夾內所有檔案 (包含所有點位的子資料夾)
