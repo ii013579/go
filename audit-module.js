@@ -543,14 +543,14 @@
     };
 
     // ---------------------------------------------------------
-    // 7. 打包照片總集 (方案一：直接從 Firestore 讀取 Base64，完全無 CORS 限制)
+    // 讀取 Firestore 取得照片 URL 並透過 Proxy 免 CORS 下載打包
     // ---------------------------------------------------------
     window.downloadAuditPhotosZip = async function(kmlId) {
         if (typeof JSZip === 'undefined' || typeof saveAs === 'undefined') {
             Swal.fire('套件缺失', '請確保 HTML 已引入 JSZip 與 FileSaver 套件！', 'error');
             return;
         }
-
+    
         const selectEl = document.getElementById('kmlLayerSelect');
         let kmlLayerName = '';
         if (selectEl) {
@@ -560,103 +560,123 @@
                 kmlLayerName = rawName.trim();
             }
         }
-
+    
         if (!kmlLayerName) {
             Swal.fire('錯誤', '無法辨識當前圖層名稱，請確認選單狀態。', 'error');
             return;
         }
-
+    
         const cleanLayerName = kmlLayerName.replace(/\.kml$/i, '');
-
+    
         Swal.fire({
-            title: '正在從資料庫讀取清查照片...',
+            title: '正在讀取資料庫紀錄...',
             html: `<div id="zip-progress-text" style="font-size:14px; margin-top:10px;">請稍候...</div>`,
             allowOutsideClick: false,
             didOpen: () => Swal.showLoading()
         });
-
+    
         const progressEl = document.getElementById('zip-progress-text');
-
+    
         try {
-            // 1. 從 Firestore 搜尋屬於該圖層的清查紀錄 (請依據你的 Collection 名稱調整，這裡假設為 'auditRecords')
-            if (progressEl) progressEl.textContent = '搜尋 Firestore 紀錄中...';
-            
-            // 嘗試多種可能的欄位比對 (kmlId 或 layerName)
             const db = firebase.firestore();
-            let snapshot = await db.collection('auditRecords').where('kmlId', '==', kmlId).get();
             
+            // 依據你的資料庫結構抓取 auditRecords (路徑為 /public/data/kmlLayers/{kmlId}/auditRecords)
+            const snapshot = await db.collection('public')
+                .doc('data')
+                .collection('kmlLayers')
+                .doc(kmlId)
+                .collection('auditRecords')
+                .get();
+    
             if (snapshot.empty) {
-                snapshot = await db.collection('auditRecords').where('layerName', '==', cleanLayerName).get();
-            }
-
-            if (snapshot.empty) {
-                Swal.fire('提示', `在資料庫中找不到與圖層 [${cleanLayerName}] 相關的清查紀錄。`, 'info');
+                Swal.fire('提示', `找不到 [${cleanLayerName}] 的清查紀錄。`, 'info');
                 return;
             }
-
-            const zip = new JSZip();
-            const rootFolder = zip.folder(cleanLayerName);
-            let photoCount = 0;
-            let recordCount = 0;
-
-            if (progressEl) progressEl.textContent = `找到 ${snapshot.size} 筆紀錄，解析照片中...`;
-
-            // 2. 歷遍所有清查紀錄，取出裡面的 Base64 照片
+    
+            const photosToDownload = [];
+    
+            // 整理所有照片 URL
             snapshot.forEach(doc => {
                 const data = doc.data();
-                const recordId = data.deviceId || data.pointId || doc.id;
-                
+                const pointName = data.pointName || doc.id;
                 if (data.photos && Array.isArray(data.photos) && data.photos.length > 0) {
-                    recordCount++;
-                    data.photos.forEach((photoStr, index) => {
-                        if (photoStr && typeof photoStr === 'string') {
-                            let base64Data = photoStr;
-                            let ext = 'jpg';
-
-                            // 解析 Data URL 格式 (例如: data:image/png;base64,...)
-                            if (photoStr.includes(';base64,')) {
-                                const parts = photoStr.split(';base64,');
-                                const match = parts[0].match(/data:image\/(a?png|p?jpeg|webp|gif)/i);
-                                if (match) ext = match[1] === 'jpeg' ? 'jpg' : match[1];
-                                base64Data = parts[1];
-                            }
-
-                            // 檔名命名規則：點號ID_照片編號.jpg
-                            const fileName = `${recordId}_照片${index + 1}.${ext}`;
-                            
-                            // 利用 JSZip 原生 Base64 功能加入檔案 (免去 HTTP 下載，零 CORS 問題)
-                            rootFolder.file(fileName, base64Data, { base64: true });
-                            photoCount++;
+                    data.photos.forEach((url, idx) => {
+                        if (url && typeof url === 'string' && url.startsWith('http')) {
+                            photosToDownload.push({
+                                fileName: `${pointName}_照片${idx + 1}.jpg`,
+                                url: url
+                            });
                         }
                     });
                 }
             });
-
-            if (photoCount === 0) {
-                Swal.fire('提示', '找到清查紀錄，但紀錄中沒有任何 Base64 照片資料。', 'info');
+    
+            if (photosToDownload.length === 0) {
+                Swal.fire('提示', '紀錄中沒有任何照片 URL 網址。', 'info');
                 return;
             }
-
-            if (progressEl) progressEl.textContent = `共 ${photoCount} 張照片，正在壓縮打包成 ZIP...`;
-
-            // 3. 壓成 ZIP 檔案並下載
+    
+            const zip = new JSZip();
+            const rootFolder = zip.folder(cleanLayerName);
+            let completedCount = 0;
+            let failCount = 0;
+    
+            if (progressEl) progressEl.textContent = `找到 ${photosToDownload.length} 張照片，開始繞過 CORS 下載...`;
+    
+            // 免 CORS 讀取 ArrayBuffer 的函式 (透過 CorsProxy)
+            async function fetchImageBuffer(imageUrl) {
+                const proxyUrl = 'https://corsproxy.io/?' + encodeURIComponent(imageUrl);
+                const resp = await fetch(proxyUrl);
+                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                return await resp.arrayBuffer();
+            }
+    
+            // 分批平行下載 (一次 4 張)
+            const BATCH_SIZE = 4;
+            for (let i = 0; i < photosToDownload.length; i += BATCH_SIZE) {
+                const batch = photosToDownload.slice(i, i + BATCH_SIZE);
+                
+                await Promise.all(batch.map(async (item) => {
+                    try {
+                        const buffer = await fetchImageBuffer(item.url);
+                        rootFolder.file(item.fileName, buffer);
+                    } catch (err) {
+                        failCount++;
+                        console.warn(`下載失敗 (${item.fileName}):`, err);
+                    } finally {
+                        completedCount++;
+                        if (progressEl) {
+                            progressEl.textContent = `下載進度: (${completedCount}/${photosToDownload.length})`;
+                        }
+                    }
+                }));
+            }
+    
+            if (completedCount - failCount === 0) {
+                throw new Error('所有照片皆下載失敗，請檢查網路狀況。');
+            }
+    
+            if (progressEl) progressEl.textContent = '照片下載完成，正在打包 ZIP...';
+    
             const zipBlob = await zip.generateAsync({ type: 'blob' });
             saveAs(zipBlob, `${cleanLayerName}_清查照片總集.zip`);
-
+    
             Swal.fire({
-                icon: 'success',
+                icon: failCount > 0 ? 'warning' : 'success',
                 title: '打包下載完成！',
-                text: `已成功從 ${recordCount} 筆紀錄中打包 ${photoCount} 張照片`,
-                timer: 2200,
+                text: failCount > 0 
+                    ? `成功打包 ${completedCount - failCount} 張，失敗 ${failCount} 張`
+                    : `已成功打包 ${completedCount} 張照片`,
+                timer: 2000,
                 showConfirmButton: false
             });
-
+    
         } catch (error) {
-            console.error('打包過程發生錯誤:', error);
+            console.error('打包失敗:', error);
             Swal.fire({
                 icon: 'error',
                 title: '打包失敗',
-                text: error.message || '讀取 Firestore 照片失敗'
+                text: error.message || '發生未知錯誤'
             });
         }
     };
