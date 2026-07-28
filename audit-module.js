@@ -406,33 +406,22 @@
 
         let photoHtml = '';
         
-        // 每列放置照片上傳框 (利用 Flexbox 平分寬度)
-        photoHtml += `
-        <div style="display: grid; grid-template-columns: repeat(5, minmax(85px, 1fr)); gap: 10px;">
-            ${Array.from({ length: maxPhotos }).map((_, i) => {
-                const photoData = (currentPhotos && currentPhotos[i]) ? currentPhotos[i] : '';
-                return `
-                    <div style="flex: 1; min-width: 0;">
-                        <div style="border: 2px dashed #ccc; height: 85px; position: relative; display: flex; align-items: center; justify-content: center; background: #fafafa; border-radius: 8px; overflow: visible;">
-                            <!-- 1. 預覽圖 -->
-                            <img id="audit-prev-${i}" src="${photoData}" style="width:100%; height:100%; object-fit:cover; display:${photoData ? 'block' : 'none'}; border-radius:6px; position:absolute; top:0; left:0; z-index:1;">
-                            
-                            <!-- 2. 預設相機圖示 -->
-                            <span id="audit-icon-${i}" style="font-size:24px; color:#bbb; display:${photoData ? 'none' : 'block'}; z-index:1;">📷</span>
+        // 加上外層 grid 容器，避免卡片擠在一塊
+        let photoHtml = '<div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(85px, 1fr)); gap:10px;">';
         
-                            <!-- 3. 主區域：拍照 Input (全框點擊) -->
-                            <input type="file" accept="image/*" capture="environment" onchange="window._tempPreview(this, ${i})" style="position:absolute; top:0; left:0; width:100%; height:100%; opacity:0; z-index:2; cursor:pointer;" title="現場拍照">
+        for (let i = 0; i < maxPhotos; i++) {
+            // 取得舊檔資料（若無則為空字串）
+            const photoData = (currentPhotos && currentPhotos[i]) ? currentPhotos[i] : '';
         
-                            <!-- 4. 下方懸浮舊檔按鈕 -->
-                            <label style="position:absolute; left:50%; transform:translateX(-50%); bottom:-12px; z-index:3; background:#555; color:#fff; font-size:11px; padding:3px 10px; border-radius:10px; cursor:pointer; display:flex; align-items:center; gap:3px; box-shadow:0 2px 4px rgba(0,0,0,0.2); white-space:nowrap; border:1px solid #777; margin:0;">
-                                <span>🖼️</span> 舊檔
-                                <input type="file" accept="image/*" onchange="window._tempPreview(this, ${i})" style="display:none;">
-                            </label>
-                        </div>
-                    </div>
-                `;
-            }).join('')}
-        </div>`;
+            photoHtml += `
+                <div style="border:2px dashed #ccc;height:85px;position:relative;display:flex;align-items:center;justify-content:center;background:#fafafa;border-radius:8px;overflow:hidden;">
+                    <input type="file" accept="image/*" capture="environment" onchange="window._tempPreview(this, ${i})" style="position:absolute;width:100%;height:100%;opacity:0;z-index:2;cursor:pointer;">
+                    <img id="audit-prev-${i}" src="${photoData}" style="width:100%;height:100%;object-fit:cover;display:${photoData ? 'block' : 'none'};z-index:1;">
+                    <span id="audit-icon-${i}" style="font-size:24px;color:#bbb;display:${photoData ? 'none' : 'block'};z-index:1;">📷</span>
+                </div>`;
+        }
+        
+        photoHtml += '</div>';
 
         const { value: res } = await Swal.fire({
             title: `<div style="font-size:18px;">${isModifyMode ? '修改' : '填寫'}清查紀錄：${escapeHtml(pointKey)}</div>`,
