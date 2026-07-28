@@ -405,23 +405,31 @@
         };
 
        
-        // 1. 開啟 Grid 容器 (一行 4 個)
-        let photoHtml = '<div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:8px; margin-top:8px;">';
+        // 1. 開啟 Grid 容器 (一行 4 個) - 加入 flex-grow 和 min-width 修正 Swal 衝突
+        let photoHtml = '<div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:10px; margin-top:10px; margin-bottom:15px; width:100%; flex-grow:1; min-width:300px;">';
         
         for (let i = 0; i < maxPhotos; i++) {
             const photoData = currentPhotos[i] || '';
+            
+            // 根據是否有照片資料，設定初始的 display 狀態
+            const imgDisplay = photoData ? 'block' : 'none';
+            const iconDisplay = photoData ? 'none' : 'block';
+
+            // 核心修正：加入 aspect-ratio 讓照片框變正方形，並設定 width: 100% 填滿 Grid 欄位
             photoHtml += `
-                <div style="border:2px dashed #ccc;height:85px;position:relative;display:flex;align-items:center;justify-content:center;background:#fafafa;border-radius:8px;overflow:hidden;">
+                <div class="audit-photo-box" style="width:100%; aspect-ratio:1 / 1; border:2px dashed #ccc; position:relative; display:flex; align-items:center; justify-content:center; background:#fafafa; border-radius:8px; overflow:hidden; transition:border-color 0.2s, background-color 0.2s; cursor:pointer;">
                     
                     <!-- A. 主 input (全覆蓋)：手機預設開啟相機 -->
                     <input type="file" accept="image/*" capture="environment" 
                            onchange="window._tempPreview(this, ${i})" 
-                           style="position:absolute;width:100%;height:100%;opacity:0;z-index:2;cursor:pointer;">
+                           style="position:absolute; width:100%; height:100%; opacity:0; z-index:2; cursor:pointer;">
                     
-                    <img id="audit-prev-${i}" src="${photoData}" style="width:100%;height:100%;object-fit:cover;display:${photoData?'block':'none'};z-index:1;">
-                    <span id="audit-icon-${i}" style="font-size:24px;color:#bbb;display:${photoData?'none':'block'};z-index:1;">📷</span>
+                    <!-- B. 預覽圖片與相機圖示 (共用定位) -->
+                    <img id="audit-prev-${i}" src="${photoData}" style="width:100%; height:100%; object-fit:cover; display:${imgDisplay}; z-index:1;">
+                    <span id="audit-icon-${i}" style="font-size:24px; color:#bbb; display:${iconDisplay}; z-index:1;">📷</span>
 
-                    <!-- B. 小字 input (右下角)：拿掉 capture，手機只會開啟相簿 -->
+                    <!-- C. 小字 input (右下角)：開啟相簿 -->
+                    <!-- 層級 z-index:3 確保點得到 -->
                     <div style="position:absolute; bottom:2px; right:4px; z-index:3; background:rgba(255,255,255,0.7); border-radius:4px; padding:0 2px;">
                         <label for="audit-file-${i}" style="font-size:11px; color:#555; cursor:pointer;">開啟舊檔</label>
                         <input id="audit-file-${i}" type="file" accept="image/*" 
