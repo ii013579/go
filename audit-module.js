@@ -406,7 +406,7 @@
 
         let photoHtml = '';
         
-        // 每列放置 2 個照片上傳框 (利用 Flexbox 平分寬度)
+        // 每列放置照片上傳框 (利用 Flexbox 平分寬度)
         photoHtml += `
         <div style="display: flex; gap: 12px; width: 100%; margin-bottom: 25px;">
             ${Array.from({ length: maxPhotos }).map((_, i) => {
@@ -420,10 +420,10 @@
                             <!-- 2. 預設相機圖示 -->
                             <span id="audit-icon-${i}" style="font-size:24px; color:#bbb; display:${photoData ? 'none' : 'block'}; z-index:1;">📷</span>
         
-                            <!-- 3. 主區域：拍照 Input (點擊整個框框直接啟動相機) -->
+                            <!-- 3. 主區域：拍照 Input (全框點擊) -->
                             <input type="file" accept="image/*" capture="environment" onchange="window._tempPreview(this, ${i})" style="position:absolute; top:0; left:0; width:100%; height:100%; opacity:0; z-index:2; cursor:pointer;" title="現場拍照">
         
-                            <!-- 4. 下方懸浮：舊檔按鈕 (壓在邊緣正中央) -->
+                            <!-- 4. 下方懸浮舊檔按鈕 -->
                             <label style="position:absolute; left:50%; transform:translateX(-50%); bottom:-12px; z-index:3; background:#555; color:#fff; font-size:11px; padding:3px 10px; border-radius:10px; cursor:pointer; display:flex; align-items:center; gap:3px; box-shadow:0 2px 4px rgba(0,0,0,0.2); white-space:nowrap; border:1px solid #777; margin:0;">
                                 <span>🖼️</span> 舊檔
                                 <input type="file" accept="image/*" onchange="window._tempPreview(this, ${i})" style="display:none;">
