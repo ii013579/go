@@ -404,8 +404,7 @@
             }
         };
 
-        let photoHtml = '';
-        
+       
         // 加上外層 grid 容器，避免卡片擠在一塊
         let photoHtml = '<div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(85px, 1fr)); gap:10px;">';
         
