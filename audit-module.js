@@ -405,21 +405,32 @@
         };
 
        
-        // 加上外層 grid 容器，避免卡片擠在一塊
-        let photoHtml = '<div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(85px, 4fr)); gap:10px;">';
+        // 1. 開啟 Grid 容器 (一行 4 個)
+        let photoHtml = '<div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:8px; margin-top:8px;">';
         
         for (let i = 0; i < maxPhotos; i++) {
-            // 取得舊檔資料（若無則為空字串）
-            const photoData = (currentPhotos && currentPhotos[i]) ? currentPhotos[i] : '';
-        
+            const photoData = currentPhotos[i] || '';
             photoHtml += `
                 <div style="border:2px dashed #ccc;height:85px;position:relative;display:flex;align-items:center;justify-content:center;background:#fafafa;border-radius:8px;overflow:hidden;">
-                    <input type="file" accept="image/*" capture="environment" onchange="window._tempPreview(this, ${i})" style="position:absolute;width:100%;height:100%;opacity:0;z-index:2;cursor:pointer;">
-                    <img id="audit-prev-${i}" src="${photoData}" style="width:100%;height:100%;object-fit:cover;display:${photoData ? 'block' : 'none'};z-index:1;">
-                    <span id="audit-icon-${i}" style="font-size:24px;color:#bbb;display:${photoData ? 'none' : 'block'};z-index:1;">📷</span>
+                    
+                    <!-- A. 主 input (全覆蓋)：手機預設開啟相機 -->
+                    <input type="file" accept="image/*" capture="environment" 
+                           onchange="window._tempPreview(this, ${i})" 
+                           style="position:absolute;width:100%;height:100%;opacity:0;z-index:2;cursor:pointer;">
+                    
+                    <img id="audit-prev-${i}" src="${photoData}" style="width:100%;height:100%;object-fit:cover;display:${photoData?'block':'none'};z-index:1;">
+                    <span id="audit-icon-${i}" style="font-size:24px;color:#bbb;display:${photoData?'none':'block'};z-index:1;">📷</span>
+
+                    <!-- B. 小字 input (右下角)：拿掉 capture，手機只會開啟相簿 -->
+                    <div style="position:absolute; bottom:2px; right:4px; z-index:3; background:rgba(255,255,255,0.7); border-radius:4px; padding:0 2px;">
+                        <label for="audit-file-${i}" style="font-size:11px; color:#555; cursor:pointer;">開啟舊檔</label>
+                        <input id="audit-file-${i}" type="file" accept="image/*" 
+                               onchange="window._tempPreview(this, ${i})" 
+                               style="display:none;">
+                    </div>
                 </div>`;
         }
-        
+
         photoHtml += '</div>';
 
         const { value: res } = await Swal.fire({
