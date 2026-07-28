@@ -526,11 +526,18 @@
     };
 
     // ---------------------------------------------------------
-    // 7.讀取 Firestore 取得照片 URL 並透過 Proxy 免 CORS 下載打包
+    // 7. 直接讀取 Firestore 紀錄與 Firebase Storage 檔案進行 ZIP 打包
     // ---------------------------------------------------------
-    window.downloadAuditPhotosZip = async function(kmlId) {
+    window.downloadAuditPhotosZip = async function(kmlId, appId = 'default') {
         if (typeof JSZip === 'undefined' || typeof saveAs === 'undefined') {
             Swal.fire('套件缺失', '請確保 HTML 已引入 JSZip 與 FileSaver 套件！', 'error');
+            return;
+        }
+    
+        // 1. 前端權限檢查 (限 editor 或 owner)
+        const userRole = window.currentUserData?.role;
+        if (userRole !== 'editor' && userRole !== 'owner') {
+            Swal.fire('權限不足', '只有 Editor 或 Owner 角色才能打包下載清查照片！', 'warning');
             return;
         }
     
@@ -562,9 +569,12 @@
     
         try {
             const db = firebase.firestore();
-            
-            // 依據你的資料庫結構抓取 auditRecords (路徑為 /public/data/kmlLayers/{kmlId}/auditRecords)
-            const snapshot = await db.collection('public')
+            const storage = firebase.storage();
+    
+            // 2. 讀取 Firestore 紀錄 (路徑對齊 artifacts/{appId})
+            const snapshot = await db.collection('artifacts')
+                .doc(appId)
+                .collection('public')
                 .doc('data')
                 .collection('kmlLayers')
                 .doc(kmlId)
@@ -578,24 +588,29 @@
     
             const photosToDownload = [];
     
-            // 整理所有照片 URL
+            // 3. 收集 Base64 或 Storage 圖片資訊
             snapshot.forEach(doc => {
                 const data = doc.data();
                 const pointName = data.pointName || doc.id;
                 if (data.photos && Array.isArray(data.photos) && data.photos.length > 0) {
-                    data.photos.forEach((url, idx) => {
-                        if (url && typeof url === 'string' && url.startsWith('http')) {
-                            photosToDownload.push({
-                                fileName: `${pointName}_照片${idx + 1}.jpg`,
-                                url: url
-                            });
+                    data.photos.forEach((photoItem, idx) => {
+                        if (photoItem && typeof photoItem === 'string') {
+                            const fileName = `${pointName}_照片${idx + 1}.jpg`;
+    
+                            if (photoItem.startsWith('data:image')) {
+                                // 格式 A：舊版 Base64
+                                photosToDownload.push({ fileName, type: 'base64', data: photoItem });
+                            } else if (photoItem.startsWith('gs://') || photoItem.startsWith('http')) {
+                                // 格式 B：Firebase Storage 網址 / 路徑
+                                photosToDownload.push({ fileName, type: 'storage', data: photoItem });
+                            }
                         }
                     });
                 }
             });
     
             if (photosToDownload.length === 0) {
-                Swal.fire('提示', '紀錄中沒有任何照片 URL 網址。', 'info');
+                Swal.fire('提示', '紀錄中沒有任何照片資料。', 'info');
                 return;
             }
     
@@ -604,43 +619,57 @@
             let completedCount = 0;
             let failCount = 0;
     
-            if (progressEl) progressEl.textContent = `找到 ${photosToDownload.length} 張照片，開始繞過 CORS 下載...`;
+            if (progressEl) progressEl.textContent = `找到 ${photosToDownload.length} 張照片，準備從 Storage 下載...`;
     
-            // 免 CORS 讀取 ArrayBuffer 的函式 (透過 CorsProxy)
-            async function fetchImageBuffer(imageUrl) {
-                const proxyUrl = 'https://corsproxy.io/?' + encodeURIComponent(imageUrl);
-                const resp = await fetch(proxyUrl);
-                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-                return await resp.arrayBuffer();
+            // 4. 從 Firebase Storage 直接抓取二進制 Buffer 的輔助函式 (繞開 CORS)
+            async function fetchStorageBuffer(photoUrlOrPath) {
+                let storageRef;
+                if (photoUrlOrPath.startsWith('gs://') || photoUrlOrPath.startsWith('http')) {
+                    // 自動使用 Storage SDK 透過 URL 建立 ref
+                    storageRef = storage.refFromURL(photoUrlOrPath);
+                } else {
+                    // 如果存的是純相對路徑 (例如: "audit_photos/abc.jpg")
+                    storageRef = storage.ref().child(photoUrlOrPath);
+                }
+                // 利用 SDK 的 getBytes 直接拉回二進制數據 (最大允許 20MB/張)
+                return await storageRef.getBytes(20 * 1024 * 1024);
             }
     
-            // 分批平行下載 (一次 4 張)
+            // 5. 分批平行下載寫入 ZIP (一次 4 張)
             const BATCH_SIZE = 4;
             for (let i = 0; i < photosToDownload.length; i += BATCH_SIZE) {
                 const batch = photosToDownload.slice(i, i + BATCH_SIZE);
-                
+    
                 await Promise.all(batch.map(async (item) => {
                     try {
-                        const buffer = await fetchImageBuffer(item.url);
-                        rootFolder.file(item.fileName, buffer);
+                        if (item.type === 'base64') {
+                            // 處理 Base64
+                            const base64Data = item.data.split(',')[1] || item.data;
+                            rootFolder.file(item.fileName, base64Data, { base64: true });
+                        } else if (item.type === 'storage') {
+                            // 處理 Storage 直連下載
+                            const buffer = await fetchStorageBuffer(item.data);
+                            rootFolder.file(item.fileName, buffer);
+                        }
                     } catch (err) {
                         failCount++;
-                        console.warn(`下載失敗 (${item.fileName}):`, err);
+                        console.warn(`寫入照片失敗 (${item.fileName}):`, err);
                     } finally {
                         completedCount++;
                         if (progressEl) {
-                            progressEl.textContent = `下載進度: (${completedCount}/${photosToDownload.length})`;
+                            progressEl.textContent = `打包進度: (${completedCount}/${photosToDownload.length})`;
                         }
                     }
                 }));
             }
     
             if (completedCount - failCount === 0) {
-                throw new Error('所有照片皆下載失敗，請檢查網路狀況。');
+                throw new Error('所有照片打包皆失敗，請檢查 Storage 存取權限。');
             }
     
-            if (progressEl) progressEl.textContent = '照片下載完成，正在打包 ZIP...';
+            if (progressEl) progressEl.textContent = '照片下載完成，正在壓縮 ZIP...';
     
+            // 6. 生成 ZIP 並下載
             const zipBlob = await zip.generateAsync({ type: 'blob' });
             saveAs(zipBlob, `${cleanLayerName}_清查照片總集.zip`);
     
@@ -663,7 +692,6 @@
             });
         }
     };
-    
         
     // ---------------------------------------------------------
     // 8. 資料動態監聽與安全退場機制
