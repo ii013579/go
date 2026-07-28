@@ -406,7 +406,7 @@
 
        
         // 加上外層 grid 容器，避免卡片擠在一塊
-        let photoHtml = '<div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(85px, 1fr)); gap:10px;">';
+        let photoHtml = '<div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(85px, 4fr)); gap:10px;">';
         
         for (let i = 0; i < maxPhotos; i++) {
             // 取得舊檔資料（若無則為空字串）
@@ -528,14 +528,19 @@
     // 7. 直接讀取 Firestore 紀錄與 Firebase Storage 檔案進行 ZIP 打包
     // ---------------------------------------------------------
     window.downloadAuditPhotosZip = async function(kmlId, appId = 'default') {
-        if (typeof JSZip === 'undefined' || typeof saveAs === 'undefined') {
+        if (typeof JSZip === 'undefined' && typeof saveAs === 'undefined') {
             Swal.fire('套件缺失', '請確保 HTML 已引入 JSZip 與 FileSaver 套件！', 'error');
             return;
         }
     
-        // 1. 前端權限檢查 (限 editor 或 owner)
-        const userRole = window.currentUserData?.role;
-        if (userRole !== 'editor' && userRole !== 'owner') {
+        // 1. 前端權限檢查 (相容多元變數來源、大小寫與前後空白)
+        const rawRole = window.currentUserData?.role 
+                     || window.currentUserRole 
+                     || window.currentUser?.role;
+        const userRole = rawRole?.toString().trim().toLowerCase();
+
+        if (!['owner', 'editor'].includes(userRole)) {
+            console.warn(`[打包照片] 權限驗證失敗，當前抓取到的角色值為: "${rawRole}"`);
             Swal.fire('權限不足', '只有 Editor 或 Owner 角色才能打包下載清查照片！', 'warning');
             return;
         }
