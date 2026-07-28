@@ -408,23 +408,34 @@
         for (let i = 0; i < maxPhotos; i++) {
             const photoData = currentPhotos[i] || '';
             photoHtml += `
-               <div style="border:2px dashed #ccc; height:85px; position:relative; display:flex; align-items:center; justify-content:center; background:#fafafa; border-radius:8px; overflow:visible; margin-bottom:18px;">
-                   <!-- 預覽圖 -->
-                   <img id="audit-prev-${i}" src="${photoData}" style="width:100%; height:100%; object-fit:cover; border-radius:8px; display:${photoData?'block':'none'}; position:absolute; top:0; left:0; z-index:1;">
-                   
-                   <!-- 預設相機圖示 -->
-                   <span id="audit-icon-${i}" style="font-size:24px; color:#bbb; display:${photoData?'none':'block'}; z-index:1;">📷</span>
+               // 在生成照片上傳框的迴圈中（例如 for 迴圈或 map）：
+               // 假設每列要放照片，使用 grid 或 flex 均勻分配
+               `<div style="display: flex; gap: 10px; width: 100%; margin-bottom: 25px;">
+                   ${[0, 1].map(i => {
+                       const photoData = (photos && photos[i]) ? photos[i] : '';
+                       return `
+                           <div style="flex: 1; min-width: 0;">
+                               <div style="border:2px dashed #ccc; height:85px; position:relative; display:flex; align-items:center; justify-content:center; background:#fafafa; border-radius:8px; overflow:visible;">
+                                   <!-- 預覽圖 -->
+                                   <img id="audit-prev-${i}" src="${photoData}" style="width:100%; height:100%; object-fit:cover; display:${photoData?'block':'none'}; border-radius:6px; position:absolute; top:0; left:0; z-index:1;">
+                                   
+                                   <!-- 預設相機圖示 -->
+                                   <span id="audit-icon-${i}" style="font-size:24px; color:#bbb; display:${photoData?'none':'block'}; z-index:1;">📷</span>
                
-                   <!-- 【拍照 Input】(點擊整個區域直接拍照) -->
-                   <input type="file" accept="image/*" capture="environment" onchange="window._tempPreview(this, ${i})" style="position:absolute; width:100%; height:100%; opacity:0; z-index:2; cursor:pointer;" title="現場拍照">
+                                   <!-- 主拍照 Input (全框點擊) -->
+                                   <input type="file" accept="image/*" capture="environment" onchange="window._tempPreview(this, ${i})" style="position:absolute; top:0; left:0; width:100%; height:100%; opacity:0; z-index:2; cursor:pointer;" title="現場拍照">
                
-                   <!-- 【舊檔按鈕】(放在容器內部，貼在底邊正中央) -->
-                   <label style="position:absolute; left:50%; transform:translateX(-50%); bottom:-12px; z-index:3; background:#555; color:#fff; font-size:11px; padding:3px 10px; border-radius:12px; cursor:pointer; display:flex; align-items:center; gap:3px; box-shadow:0 2px 4px rgba(0,0,0,0.2); white-space:nowrap; border:1px solid #666;">
-                       <span>🖼️</span> 舊檔
-                       <input type="file" accept="image/*" onchange="window._tempPreview(this, ${i})" style="display:none;">
-                   </label>
-               </div>
-           <img id="audit-prev-${i}" src="${photoData}" style="width:100%;height:100%;object-fit:cover;display:${photoData?'block':'none'};z-index:1;">
+                                   <!-- 下方懸浮舊檔按鈕 -->
+                                   <label style="position:absolute; left:50%; transform:translateX(-50%); bottom:-14px; z-index:3; background:#555; color:#fff; font-size:11px; padding:3px 10px; border-radius:10px; cursor:pointer; display:flex; align-items:center; gap:3px; box-shadow:0 2px 4px rgba(0,0,0,0.2); white-space:nowrap; border:1px solid #777; margin:0;">
+                                       <span>🖼️</span> 舊檔
+                                       <input type="file" accept="image/*" onchange="window._tempPreview(this, ${i})" style="display:none;">
+                                   </label>
+                               </div>
+                           </div>
+                       `;
+                   }).join('')}
+               </div>`
+          <img id="audit-prev-${i}" src="${photoData}" style="width:100%;height:100%;object-fit:cover;display:${photoData?'block':'none'};z-index:1;">
                     <span id="audit-icon-${i}" style="font-size:24px;color:#bbb;display:${photoData?'none':'block'};z-index:1;">📷</span>
                 </div>`;
         }
@@ -531,12 +542,8 @@
         });
     };
 
-    
-    
-
-
-// ---------------------------------------------------------
-    // 打包 Firebase Storage 指定資料夾 (修正 CORS / Failed to fetch 版)
+    // ---------------------------------------------------------
+    // 7. 打包照片總集 (方案一：直接從 Firestore 讀取 Base64，完全無 CORS 限制)
     // ---------------------------------------------------------
     window.downloadAuditPhotosZip = async function(kmlId) {
         if (typeof JSZip === 'undefined' || typeof saveAs === 'undefined') {
@@ -559,142 +566,88 @@
             return;
         }
 
+        const cleanLayerName = kmlLayerName.replace(/\.kml$/i, '');
+
         Swal.fire({
-            title: '正在搜尋照片資料夾...',
+            title: '正在從資料庫讀取清查照片...',
             html: `<div id="zip-progress-text" style="font-size:14px; margin-top:10px;">請稍候...</div>`,
             allowOutsideClick: false,
             didOpen: () => Swal.showLoading()
         });
 
-        const withTimeout = (promise, ms = 20000, errorMsg = '操作逾時') => {
-            let timeoutId;
-            const timeoutPromise = new Promise((_, reject) => {
-                timeoutId = setTimeout(() => reject(new Error(errorMsg)), ms);
-            });
-            return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timeoutId));
-        };
-
-        // 安全讀取 Storage 檔案 ArrayBuffer 的輔助函式 (相容 v8 並防 CORS)
-        function fetchFileBuffer(fileRef) {
-            return new Promise((resolve, reject) => {
-                fileRef.getDownloadURL().then(url => {
-                    const xhr = new XMLHttpRequest();
-                    xhr.responseType = 'arraybuffer';
-                    xhr.onload = () => {
-                        if (xhr.status >= 200 && xhr.status < 300) {
-                            resolve(xhr.response);
-                        } else {
-                            reject(new Error(`HTTP ${xhr.status}`));
-                        }
-                    };
-                    xhr.onerror = () => reject(new Error('CORS 跨域阻擋或網路中斷'));
-                    xhr.open('GET', url);
-                    xhr.send();
-                }).catch(reject);
-            });
-        }
+        const progressEl = document.getElementById('zip-progress-text');
 
         try {
-            const STORAGE_ROOT = 'kmldata-d22fb/storage';
-            const cleanLayerName = kmlLayerName.replace(/\.kml$/i, '');
+            // 1. 從 Firestore 搜尋屬於該圖層的清查紀錄 (請依據你的 Collection 名稱調整，這裡假設為 'auditRecords')
+            if (progressEl) progressEl.textContent = '搜尋 Firestore 紀錄中...';
             
-            const possiblePaths = [
-                `${STORAGE_ROOT}/${kmlLayerName}`,
-                `${STORAGE_ROOT}/${cleanLayerName}`
-            ];
-
-            async function fetchAllFiles(dirRef) {
-                let files = [];
-                const res = await dirRef.listAll();
-                files = files.concat(res.items);
-                for (const subFolder of res.prefixes) {
-                    const subFiles = await fetchAllFiles(subFolder);
-                    files = files.concat(subFiles);
-                }
-                return files;
+            // 嘗試多種可能的欄位比對 (kmlId 或 layerName)
+            const db = firebase.firestore();
+            let snapshot = await db.collection('auditRecords').where('kmlId', '==', kmlId).get();
+            
+            if (snapshot.empty) {
+                snapshot = await db.collection('auditRecords').where('layerName', '==', cleanLayerName).get();
             }
 
-            let targetFiles = [];
-            let targetPathUsed = '';
-
-            const progressEl = document.getElementById('zip-progress-text');
-
-            for (const path of possiblePaths) {
-                if (progressEl) progressEl.textContent = `檢查路徑: ${path}...`;
-                try {
-                    const folderRef = firebase.storage().ref().child(path);
-                    const files = await withTimeout(
-                        fetchAllFiles(folderRef), 
-                        15000, 
-                        `讀取 Storage 路徑逾時`
-                    );
-
-                    if (files.length > 0) {
-                        targetFiles = files;
-                        targetPathUsed = path;
-                        break;
-                    }
-                } catch (err) {
-                    console.warn(`檢查路徑 ${path} 失敗:`, err);
-                    if (err.message.includes('逾時')) throw err;
-                }
-            }
-
-            if (targetFiles.length === 0) {
-                Swal.fire('提示', `在 Storage 找不到資料夾。\n搜尋路徑：\n${possiblePaths.join('\n')}`, 'info');
+            if (snapshot.empty) {
+                Swal.fire('提示', `在資料庫中找不到與圖層 [${cleanLayerName}] 相關的清查紀錄。`, 'info');
                 return;
             }
 
             const zip = new JSZip();
             const rootFolder = zip.folder(cleanLayerName);
-            let completedCount = 0;
-            let failCount = 0;
+            let photoCount = 0;
+            let recordCount = 0;
 
-            if (progressEl) progressEl.textContent = `找到 ${targetFiles.length} 個檔案，開始下載...`;
+            if (progressEl) progressEl.textContent = `找到 ${snapshot.size} 筆紀錄，解析照片中...`;
 
-            const BATCH_SIZE = 5;
-            for (let i = 0; i < targetFiles.length; i += BATCH_SIZE) {
-                const batch = targetFiles.slice(i, i + BATCH_SIZE);
+            // 2. 歷遍所有清查紀錄，取出裡面的 Base64 照片
+            snapshot.forEach(doc => {
+                const data = doc.data();
+                const recordId = data.deviceId || data.pointId || doc.id;
                 
-                await Promise.all(batch.map(async (fileRef) => {
-                    const relativePath = fileRef.fullPath.replace(`${targetPathUsed}/`, '');
-                    try {
-                        // 使用防 CORS 的 XHR 讀取 ArrayBuffer
-                        const arrayBuffer = await withTimeout(
-                            fetchFileBuffer(fileRef),
-                            20000,
-                            `檔案 ${relativePath} 下載逾時`
-                        );
+                if (data.photos && Array.isArray(data.photos) && data.photos.length > 0) {
+                    recordCount++;
+                    data.photos.forEach((photoStr, index) => {
+                        if (photoStr && typeof photoStr === 'string') {
+                            let base64Data = photoStr;
+                            let ext = 'jpg';
 
-                        rootFolder.file(relativePath, arrayBuffer);
-                    } catch (err) {
-                        failCount++;
-                        console.warn(`檔案下載失敗 (${relativePath}):`, err);
-                    } finally {
-                        completedCount++;
-                        if (progressEl) {
-                            progressEl.textContent = `下載進度: (${completedCount}/${targetFiles.length})`;
+                            // 解析 Data URL 格式 (例如: data:image/png;base64,...)
+                            if (photoStr.includes(';base64,')) {
+                                const parts = photoStr.split(';base64,');
+                                const match = parts[0].match(/data:image\/(a?png|p?jpeg|webp|gif)/i);
+                                if (match) ext = match[1] === 'jpeg' ? 'jpg' : match[1];
+                                base64Data = parts[1];
+                            }
+
+                            // 檔名命名規則：點號ID_照片編號.jpg
+                            const fileName = `${recordId}_照片${index + 1}.${ext}`;
+                            
+                            // 利用 JSZip 原生 Base64 功能加入檔案 (免去 HTTP 下載，零 CORS 問題)
+                            rootFolder.file(fileName, base64Data, { base64: true });
+                            photoCount++;
                         }
-                    }
-                }));
+                    });
+                }
+            });
+
+            if (photoCount === 0) {
+                Swal.fire('提示', '找到清查紀錄，但紀錄中沒有任何 Base64 照片資料。', 'info');
+                return;
             }
 
-            if (completedCount - failCount === 0) {
-                throw new Error('所有檔案皆下載失敗，請確認 Firebase Storage 的 CORS 設定是否已開放。');
-            }
+            if (progressEl) progressEl.textContent = `共 ${photoCount} 張照片，正在壓縮打包成 ZIP...`;
 
-            if (progressEl) progressEl.textContent = '下載完成，正在壓縮 ZIP 檔案...';
-
+            // 3. 壓成 ZIP 檔案並下載
             const zipBlob = await zip.generateAsync({ type: 'blob' });
             saveAs(zipBlob, `${cleanLayerName}_清查照片總集.zip`);
 
             Swal.fire({
-                icon: failCount > 0 ? 'warning' : 'success',
+                icon: 'success',
                 title: '打包下載完成！',
-                text: failCount > 0 
-                    ? `成功打包 ${completedCount - failCount} 個，失敗 ${failCount} 個`
-                    : `已成功打包 ${completedCount} 個檔案`,
-                timer: 2000,
+                text: `已成功從 ${recordCount} 筆紀錄中打包 ${photoCount} 張照片`,
+                timer: 2200,
                 showConfirmButton: false
             });
 
@@ -703,7 +656,7 @@
             Swal.fire({
                 icon: 'error',
                 title: '打包失敗',
-                text: error.message || '發生未知錯誤'
+                text: error.message || '讀取 Firestore 照片失敗'
             });
         }
     };
