@@ -408,7 +408,7 @@
         
         // 每列放置照片上傳框 (利用 Flexbox 平分寬度)
         photoHtml += `
-        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(85px, 1fr)); gap: 10px;">
+        <div style="border:2px dashed #ccc;height:85px;position:relative;display:flex;align-items:center;justify-content:center;background:#fafafa;border-radius:8px;overflow:hidden;">
             ${Array.from({ length: maxPhotos }).map((_, i) => {
                 const photoData = (currentPhotos && currentPhotos[i]) ? currentPhotos[i] : '';
                 return `
