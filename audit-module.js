@@ -408,27 +408,22 @@
         for (let i = 0; i < maxPhotos; i++) {
             const photoData = currentPhotos[i] || '';
             photoHtml += `
-              <!-- 1. 照片上傳容器 (設定高度為 85px，維持原樣) -->
-              <div style="border:2px dashed #ccc;height:85px;position:relative;display:flex;align-items:center;justify-content:center;background:#fafafa;border-radius:8px;overflow:hidden; cursor:pointer; margin-bottom: 25px; /* 為下方按鈕預留一點空間 */">
-                  
-                  <!-- 預覽圖 ( z-index:1 ) -->
-                  <img id="audit-prev-${i}" src="${photoData}" style="width:100%;height:100%;object-fit:cover;display:${photoData?'block':'none'};position:absolute;top:0;left:0;z-index:1;">
-                  
-                  <!-- 預設相機圖示 ( z-index:1 ) -->
-                  <span id="audit-icon-${i}" style="font-size:24px;color:#bbb;display:${photoData?'none':'block'};z-index:1;">📷</span>
-              
-                  <!-- 【拍照 Input】( z-index:2 ) -->
-                  <!-- 整門區域皆可點擊，且因為帶有 capture，在安卓上會直接開啟相機 -->
-                  <input type="file" accept="image/*" capture="environment" onchange="window._tempPreview(this, ${i})" style="position:absolute;width:100%;height:100%;opacity:0;z-index:2;cursor:pointer;" title="現場拍照">
-              </div>
-              
-              <!-- 2. 【舊檔按鈕】( 懸浮在容器下方正中央，z-index:3 ) -->
-              <!-- 為了達到你圖片中的效果，我們將此按鈕放在容器外部，並使用定位讓它壓在容器邊緣 -->
-              <label style="position:absolute; left:50%; transform:translateX(-50%); bottom: -20px; /* 壓在虛線框邊緣下方 */ z-index:3; background:#555; color:#fff; font-size:12px; padding:6px 12px; border-radius:10px; cursor:pointer; display:flex; align-items:center; gap:4px; box-shadow: 0 2px 4px rgba(0,0,0,0.2); white-space:nowrap; border: 1px solid #777;">
-                  <span>🖼️</span> 舊檔
-                  <!-- 不帶 capture，點擊開啟舊檔/相冊 -->
-                  <input type="file" accept="image/*" onchange="window._tempPreview(this, ${i})" style="display:none;">
-              </label>
+               <div style="border:2px dashed #ccc; height:85px; position:relative; display:flex; align-items:center; justify-content:center; background:#fafafa; border-radius:8px; overflow:visible; margin-bottom:18px;">
+                   <!-- 預覽圖 -->
+                   <img id="audit-prev-${i}" src="${photoData}" style="width:100%; height:100%; object-fit:cover; border-radius:8px; display:${photoData?'block':'none'}; position:absolute; top:0; left:0; z-index:1;">
+                   
+                   <!-- 預設相機圖示 -->
+                   <span id="audit-icon-${i}" style="font-size:24px; color:#bbb; display:${photoData?'none':'block'}; z-index:1;">📷</span>
+               
+                   <!-- 【拍照 Input】(點擊整個區域直接拍照) -->
+                   <input type="file" accept="image/*" capture="environment" onchange="window._tempPreview(this, ${i})" style="position:absolute; width:100%; height:100%; opacity:0; z-index:2; cursor:pointer;" title="現場拍照">
+               
+                   <!-- 【舊檔按鈕】(放在容器內部，貼在底邊正中央) -->
+                   <label style="position:absolute; left:50%; transform:translateX(-50%); bottom:-12px; z-index:3; background:#555; color:#fff; font-size:11px; padding:3px 10px; border-radius:12px; cursor:pointer; display:flex; align-items:center; gap:3px; box-shadow:0 2px 4px rgba(0,0,0,0.2); white-space:nowrap; border:1px solid #666;">
+                       <span>🖼️</span> 舊檔
+                       <input type="file" accept="image/*" onchange="window._tempPreview(this, ${i})" style="display:none;">
+                   </label>
+               </div>
            <img id="audit-prev-${i}" src="${photoData}" style="width:100%;height:100%;object-fit:cover;display:${photoData?'block':'none'};z-index:1;">
                     <span id="audit-icon-${i}" style="font-size:24px;color:#bbb;display:${photoData?'none':'block'};z-index:1;">📷</span>
                 </div>`;
@@ -540,8 +535,8 @@
     
 
 
-    // ---------------------------------------------------------
-    // 7.打包 Firebase Storage 指定資料夾 (v8 相容修正版)
+// ---------------------------------------------------------
+    // 打包 Firebase Storage 指定資料夾 (修正 CORS / Failed to fetch 版)
     // ---------------------------------------------------------
     window.downloadAuditPhotosZip = async function(kmlId) {
         if (typeof JSZip === 'undefined' || typeof saveAs === 'undefined') {
@@ -549,7 +544,6 @@
             return;
         }
 
-        // 1. 取得圖層名稱
         const selectEl = document.getElementById('kmlLayerSelect');
         let kmlLayerName = '';
         if (selectEl) {
@@ -572,13 +566,33 @@
             didOpen: () => Swal.showLoading()
         });
 
-        const withTimeout = (promise, ms = 15000, errorMsg = '操作逾時') => {
+        const withTimeout = (promise, ms = 20000, errorMsg = '操作逾時') => {
             let timeoutId;
             const timeoutPromise = new Promise((_, reject) => {
                 timeoutId = setTimeout(() => reject(new Error(errorMsg)), ms);
             });
             return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timeoutId));
         };
+
+        // 安全讀取 Storage 檔案 ArrayBuffer 的輔助函式 (相容 v8 並防 CORS)
+        function fetchFileBuffer(fileRef) {
+            return new Promise((resolve, reject) => {
+                fileRef.getDownloadURL().then(url => {
+                    const xhr = new XMLHttpRequest();
+                    xhr.responseType = 'arraybuffer';
+                    xhr.onload = () => {
+                        if (xhr.status >= 200 && xhr.status < 300) {
+                            resolve(xhr.response);
+                        } else {
+                            reject(new Error(`HTTP ${xhr.status}`));
+                        }
+                    };
+                    xhr.onerror = () => reject(new Error('CORS 跨域阻擋或網路中斷'));
+                    xhr.open('GET', url);
+                    xhr.send();
+                }).catch(reject);
+            });
+        }
 
         try {
             const STORAGE_ROOT = 'kmldata-d22fb/storage';
@@ -589,7 +603,6 @@
                 `${STORAGE_ROOT}/${cleanLayerName}`
             ];
 
-            // 遞迴掃描 Storage 資料夾內所有檔案
             async function fetchAllFiles(dirRef) {
                 let files = [];
                 const res = await dirRef.listAll();
@@ -613,7 +626,7 @@
                     const files = await withTimeout(
                         fetchAllFiles(folderRef), 
                         15000, 
-                        `讀取 Storage 路徑逾時，請確認 Storage 權限。`
+                        `讀取 Storage 路徑逾時`
                     );
 
                     if (files.length > 0) {
@@ -628,37 +641,30 @@
             }
 
             if (targetFiles.length === 0) {
-                Swal.fire('提示', `在 Storage 找不到照片資料夾。\n搜尋路徑：\n${possiblePaths.join('\n')}`, 'info');
+                Swal.fire('提示', `在 Storage 找不到資料夾。\n搜尋路徑：\n${possiblePaths.join('\n')}`, 'info');
                 return;
             }
 
-            // 開始打包下載 (改用 Firebase v8 的 getDownloadURL + fetch)
             const zip = new JSZip();
             const rootFolder = zip.folder(cleanLayerName);
             let completedCount = 0;
             let failCount = 0;
 
-            if (progressEl) progressEl.textContent = `找到 ${targetFiles.length} 張照片，開始平行下載...`;
+            if (progressEl) progressEl.textContent = `找到 ${targetFiles.length} 個檔案，開始下載...`;
 
-            const BATCH_SIZE = 5; // 每批平行下載 5 張
+            const BATCH_SIZE = 5;
             for (let i = 0; i < targetFiles.length; i += BATCH_SIZE) {
                 const batch = targetFiles.slice(i, i + BATCH_SIZE);
                 
                 await Promise.all(batch.map(async (fileRef) => {
                     const relativePath = fileRef.fullPath.replace(`${targetPathUsed}/`, '');
                     try {
-                        // 1. 取得 Firebase v8 相容的 Download URL
-                        const downloadUrl = await fileRef.getDownloadURL();
-                        
-                        // 2. 使用 fetch 讀取 ArrayBuffer
-                        const resp = await withTimeout(
-                            fetch(downloadUrl),
-                            15000,
+                        // 使用防 CORS 的 XHR 讀取 ArrayBuffer
+                        const arrayBuffer = await withTimeout(
+                            fetchFileBuffer(fileRef),
+                            20000,
                             `檔案 ${relativePath} 下載逾時`
                         );
-
-                        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-                        const arrayBuffer = await resp.arrayBuffer();
 
                         rootFolder.file(relativePath, arrayBuffer);
                     } catch (err) {
@@ -674,10 +680,10 @@
             }
 
             if (completedCount - failCount === 0) {
-                throw new Error('所有檔案皆下載失敗，請檢查網路或 CORS/Storage 讀取權限。');
+                throw new Error('所有檔案皆下載失敗，請確認 Firebase Storage 的 CORS 設定是否已開放。');
             }
 
-            if (progressEl) progressEl.textContent = '照片下載完成，正在壓縮 ZIP 檔案...';
+            if (progressEl) progressEl.textContent = '下載完成，正在壓縮 ZIP 檔案...';
 
             const zipBlob = await zip.generateAsync({ type: 'blob' });
             saveAs(zipBlob, `${cleanLayerName}_清查照片總集.zip`);
@@ -686,8 +692,8 @@
                 icon: failCount > 0 ? 'warning' : 'success',
                 title: '打包下載完成！',
                 text: failCount > 0 
-                    ? `成功打包 ${completedCount - failCount} 張，失敗 ${failCount} 張`
-                    : `已成功打包 ${completedCount} 張照片`,
+                    ? `成功打包 ${completedCount - failCount} 個，失敗 ${failCount} 個`
+                    : `已成功打包 ${completedCount} 個檔案`,
                 timer: 2000,
                 showConfirmButton: false
             });
@@ -697,7 +703,7 @@
             Swal.fire({
                 icon: 'error',
                 title: '打包失敗',
-                text: error.message || '發生未知錯誤，請檢視 Console Error Log'
+                text: error.message || '發生未知錯誤'
             });
         }
     };
