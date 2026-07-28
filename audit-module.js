@@ -70,12 +70,12 @@
                         f.properties.auditNote = record.note;
                         f.properties.photos = record.photos || [];
                         f.properties.isAudited = true;
-                        f.properties.fillColor = "#ff85c0"; // 粉紅色 (已清查)
+                        f.properties.fillColor = "#FCD770"; // 粉紅色 (已清查)
                         f.properties.radius = 8;
                     } else {
                         f.properties.isAudited = false;
                         f.properties.auditStatus = null;
-                        f.properties.fillColor = "#3498db"; // 藍色 (未清查)
+                        f.properties.fillColor = "#2A00D2"; // 藍色 (未清查)
                         f.properties.radius = 8;
                     }
                     f.properties.color = "#ffffff";
