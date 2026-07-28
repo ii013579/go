@@ -408,13 +408,28 @@
         for (let i = 0; i < maxPhotos; i++) {
             const photoData = currentPhotos[i] || '';
             photoHtml += `
-                <div style="border:2px dashed #ccc;height:85px;position:relative;display:flex;align-items:center;justify-content:center;background:#fafafa;border-radius:8px;overflow:hidden;">
-                    <input type="file" accept="image/*" capture="environment" onchange="window._tempPreview(this, ${i})" style="position:absolute;width:100%;height:100%;opacity:0;z-index:2;cursor:pointer;">
-                   <label style="position:absolute;right:4px;bottom:4px;z-index:3;background:rgba(0,0,0,0.6);color:#fff;font-size:11px;padding:3px 6px;border-radius:4px;cursor:pointer;">
-        🖼️ 舊檔
-        <input type="file" accept="image/*" onchange="window._tempPreview(this, ${i})" style="display:none;">
-    </label>
-    <img id="audit-prev-${i}" src="${photoData}" style="width:100%;height:100%;object-fit:cover;display:${photoData?'block':'none'};z-index:1;">
+              <!-- 1. 照片上傳容器 (設定高度為 85px，維持原樣) -->
+              <div style="border:2px dashed #ccc;height:85px;position:relative;display:flex;align-items:center;justify-content:center;background:#fafafa;border-radius:8px;overflow:hidden; cursor:pointer; margin-bottom: 25px; /* 為下方按鈕預留一點空間 */">
+                  
+                  <!-- 預覽圖 ( z-index:1 ) -->
+                  <img id="audit-prev-${i}" src="${photoData}" style="width:100%;height:100%;object-fit:cover;display:${photoData?'block':'none'};position:absolute;top:0;left:0;z-index:1;">
+                  
+                  <!-- 預設相機圖示 ( z-index:1 ) -->
+                  <span id="audit-icon-${i}" style="font-size:24px;color:#bbb;display:${photoData?'none':'block'};z-index:1;">📷</span>
+              
+                  <!-- 【拍照 Input】( z-index:2 ) -->
+                  <!-- 整門區域皆可點擊，且因為帶有 capture，在安卓上會直接開啟相機 -->
+                  <input type="file" accept="image/*" capture="environment" onchange="window._tempPreview(this, ${i})" style="position:absolute;width:100%;height:100%;opacity:0;z-index:2;cursor:pointer;" title="現場拍照">
+              </div>
+              
+              <!-- 2. 【舊檔按鈕】( 懸浮在容器下方正中央，z-index:3 ) -->
+              <!-- 為了達到你圖片中的效果，我們將此按鈕放在容器外部，並使用定位讓它壓在容器邊緣 -->
+              <label style="position:absolute; left:50%; transform:translateX(-50%); bottom: -20px; /* 壓在虛線框邊緣下方 */ z-index:3; background:#555; color:#fff; font-size:12px; padding:6px 12px; border-radius:10px; cursor:pointer; display:flex; align-items:center; gap:4px; box-shadow: 0 2px 4px rgba(0,0,0,0.2); white-space:nowrap; border: 1px solid #777;">
+                  <span>🖼️</span> 舊檔
+                  <!-- 不帶 capture，點擊開啟舊檔/相冊 -->
+                  <input type="file" accept="image/*" onchange="window._tempPreview(this, ${i})" style="display:none;">
+              </label>
+           <img id="audit-prev-${i}" src="${photoData}" style="width:100%;height:100%;object-fit:cover;display:${photoData?'block':'none'};z-index:1;">
                     <span id="audit-icon-${i}" style="font-size:24px;color:#bbb;display:${photoData?'none':'block'};z-index:1;">📷</span>
                 </div>`;
         }
@@ -526,7 +541,7 @@
 
 
     // ---------------------------------------------------------
-    // 7. 直接打包 Firebase Storage 指定資料夾 (v3.12 kmlLayerName 路徑版)
+    // 7.打包 Firebase Storage 指定資料夾 (v8 相容修正版)
     // ---------------------------------------------------------
     window.downloadAuditPhotosZip = async function(kmlId) {
         if (typeof JSZip === 'undefined' || typeof saveAs === 'undefined') {
@@ -534,121 +549,138 @@
             return;
         }
 
-        // 1. 取得圖層名稱 (用來作為 Storage 資料夾名稱與下載 ZIP 檔名)
+        // 1. 取得圖層名稱
         const selectEl = document.getElementById('kmlLayerSelect');
         let kmlLayerName = '';
-        
         if (selectEl) {
             const opt = Array.from(selectEl.options).find(o => o.value === kmlId);
             if (opt) {
-                // 優先拿 data-basename 或從下拉選單選項目抓取完整檔名/名稱
                 const rawName = opt.getAttribute('data-basename') || opt.textContent.split(' (')[0];
                 kmlLayerName = rawName.trim();
             }
         }
 
-        // 備用防呆：如果抓不到選單名稱，嘗試從全域狀態拿或提示錯誤
         if (!kmlLayerName) {
-            Swal.fire('錯誤', '無法辨識當前圖層名稱，請確認圖層選單狀態。', 'error');
+            Swal.fire('錯誤', '無法辨識當前圖層名稱，請確認選單狀態。', 'error');
             return;
         }
 
-        // 顯示解凍/下載中提示
         Swal.fire({
-            title: '正在掃描照片資料夾...',
+            title: '正在搜尋照片資料夾...',
             html: `<div id="zip-progress-text" style="font-size:14px; margin-top:10px;">請稍候...</div>`,
             allowOutsideClick: false,
             didOpen: () => Swal.showLoading()
         });
 
-        try {
-            // 【正確路徑】 STORAGE_ROOT / kmlLayerName
-            const STORAGE_ROOT = 'kmldata-d22fb/storage';
-            const targetFolderPath = `${STORAGE_ROOT}/${kmlLayerName}`;
-            const folderRef = firebase.storage().ref().child(targetFolderPath);
+        const withTimeout = (promise, ms = 15000, errorMsg = '操作逾時') => {
+            let timeoutId;
+            const timeoutPromise = new Promise((_, reject) => {
+                timeoutId = setTimeout(() => reject(new Error(errorMsg)), ms);
+            });
+            return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timeoutId));
+        };
 
-            // 遞迴掃描資料夾內所有檔案 (包含各點位的子資料夾)
-            async function fetchAllStorageFiles(dirRef) {
+        try {
+            const STORAGE_ROOT = 'kmldata-d22fb/storage';
+            const cleanLayerName = kmlLayerName.replace(/\.kml$/i, '');
+            
+            const possiblePaths = [
+                `${STORAGE_ROOT}/${kmlLayerName}`,
+                `${STORAGE_ROOT}/${cleanLayerName}`
+            ];
+
+            // 遞迴掃描 Storage 資料夾內所有檔案
+            async function fetchAllFiles(dirRef) {
                 let files = [];
                 const res = await dirRef.listAll();
-
-                // 收集當前目錄下的檔案
                 files = files.concat(res.items);
-
-                // 若有子目錄，遞迴繼續掃描
                 for (const subFolder of res.prefixes) {
-                    const subFiles = await fetchAllStorageFiles(subFolder);
+                    const subFiles = await fetchAllFiles(subFolder);
                     files = files.concat(subFiles);
                 }
                 return files;
             }
 
+            let targetFiles = [];
+            let targetPathUsed = '';
+
             const progressEl = document.getElementById('zip-progress-text');
-            if (progressEl) progressEl.textContent = `搜尋路徑: ${targetFolderPath}...`;
 
-            // 執行 Storage 資料夾掃描
-            const allFiles = await fetchAllStorageFiles(folderRef);
+            for (const path of possiblePaths) {
+                if (progressEl) progressEl.textContent = `檢查路徑: ${path}...`;
+                try {
+                    const folderRef = firebase.storage().ref().child(path);
+                    const files = await withTimeout(
+                        fetchAllFiles(folderRef), 
+                        15000, 
+                        `讀取 Storage 路徑逾時，請確認 Storage 權限。`
+                    );
 
-            if (allFiles.length === 0) {
-                // 去掉 .kml 副檔名再試一次 (防呆: 預防上傳時資料夾名稱有去副檔名)
-                const cleanLayerName = kmlLayerName.replace(/\.kml$/i, '');
-                if (cleanLayerName !== kmlLayerName) {
-                    const altFolderPath = `${STORAGE_ROOT}/${cleanLayerName}`;
-                    const altFolderRef = firebase.storage().ref().child(altFolderPath);
-                    const altFiles = await fetchAllStorageFiles(altFolderRef);
-                    
-                    if (altFiles.length > 0) {
-                        return proceedDownload(altFiles, altFolderPath, cleanLayerName);
+                    if (files.length > 0) {
+                        targetFiles = files;
+                        targetPathUsed = path;
+                        break;
                     }
+                } catch (err) {
+                    console.warn(`檢查路徑 ${path} 失敗:`, err);
+                    if (err.message.includes('逾時')) throw err;
                 }
+            }
 
-                Swal.fire('提示', `在 Storage 路徑 (${targetFolderPath}) 下找不到上傳的照片。`, 'info');
+            if (targetFiles.length === 0) {
+                Swal.fire('提示', `在 Storage 找不到照片資料夾。\n搜尋路徑：\n${possiblePaths.join('\n')}`, 'info');
                 return;
             }
 
-            await proceedDownload(allFiles, targetFolderPath, kmlLayerName.replace(/\.kml$/i, ''));
-
-        } catch (error) {
-            console.error('Storage 資料夾打包失敗:', error);
-            Swal.fire('打包失敗', error.message, 'error');
-        }
-
-        // 核心下載與 ZIP 壓縮處理函式
-        async function proceedDownload(files, folderPath, zipName) {
+            // 開始打包下載 (改用 Firebase v8 的 getDownloadURL + fetch)
             const zip = new JSZip();
-            const rootFolder = zip.folder(zipName);
+            const rootFolder = zip.folder(cleanLayerName);
             let completedCount = 0;
             let failCount = 0;
 
-            const progressEl = document.getElementById('zip-progress-text');
+            if (progressEl) progressEl.textContent = `找到 ${targetFiles.length} 張照片，開始平行下載...`;
 
-            for (const fileRef of files) {
-                // 計算相對路徑 (保留 Storage 裡的點位資料夾目錄結構)
-                const relativePath = fileRef.fullPath.replace(`${folderPath}/`, '');
+            const BATCH_SIZE = 5; // 每批平行下載 5 張
+            for (let i = 0; i < targetFiles.length; i += BATCH_SIZE) {
+                const batch = targetFiles.slice(i, i + BATCH_SIZE);
+                
+                await Promise.all(batch.map(async (fileRef) => {
+                    const relativePath = fileRef.fullPath.replace(`${targetPathUsed}/`, '');
+                    try {
+                        // 1. 取得 Firebase v8 相容的 Download URL
+                        const downloadUrl = await fileRef.getDownloadURL();
+                        
+                        // 2. 使用 fetch 讀取 ArrayBuffer
+                        const resp = await withTimeout(
+                            fetch(downloadUrl),
+                            15000,
+                            `檔案 ${relativePath} 下載逾時`
+                        );
 
-                try {
-                    // 使用 Firebase SDK 原生 getBytes 直讀二進位資料 (單檔上限 20MB)
-                    const arrayBuffer = await fileRef.getBytes(20 * 1024 * 1024);
-                    rootFolder.file(relativePath, arrayBuffer);
-                } catch (err) {
-                    failCount++;
-                    console.warn(`檔案下載失敗 (${relativePath}):`, err);
-                } finally {
-                    completedCount++;
-                    if (progressEl) {
-                        progressEl.textContent = `下載照片中... (${completedCount}/${files.length})`;
+                        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                        const arrayBuffer = await resp.arrayBuffer();
+
+                        rootFolder.file(relativePath, arrayBuffer);
+                    } catch (err) {
+                        failCount++;
+                        console.warn(`檔案下載失敗 (${relativePath}):`, err);
+                    } finally {
+                        completedCount++;
+                        if (progressEl) {
+                            progressEl.textContent = `下載進度: (${completedCount}/${targetFiles.length})`;
+                        }
                     }
-                }
+                }));
             }
 
             if (completedCount - failCount === 0) {
-                throw new Error('讀取檔案失敗，請確認 Storage Rules 存取權限。');
+                throw new Error('所有檔案皆下載失敗，請檢查網路或 CORS/Storage 讀取權限。');
             }
 
             if (progressEl) progressEl.textContent = '照片下載完成，正在壓縮 ZIP 檔案...';
 
             const zipBlob = await zip.generateAsync({ type: 'blob' });
-            saveAs(zipBlob, `${zipName}_清查照片總集.zip`);
+            saveAs(zipBlob, `${cleanLayerName}_清查照片總集.zip`);
 
             Swal.fire({
                 icon: failCount > 0 ? 'warning' : 'success',
@@ -659,8 +691,17 @@
                 timer: 2000,
                 showConfirmButton: false
             });
+
+        } catch (error) {
+            console.error('打包過程發生錯誤:', error);
+            Swal.fire({
+                icon: 'error',
+                title: '打包失敗',
+                text: error.message || '發生未知錯誤，請檢視 Console Error Log'
+            });
         }
     };
+    
         
     // ---------------------------------------------------------
     // 8. 資料動態監聽與安全退場機制
