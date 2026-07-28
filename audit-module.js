@@ -587,7 +587,7 @@
         try {
             const storage = firebase.storage();
             // 請依據您實際在 Storage 存放照片的路徑結構微調 (例如 'audit_photos/' 或 'audits/')
-            const storageFolderPath = `audit_photos/${cleanLayerName}`;
+            const storageFolderPath = `${kmlLayerName}`;
             const folderRef = storage.ref(storageFolderPath);
 
             // 3. 直接清查 Storage 資料夾內的所有檔案 (不用讀取 Firestore)
