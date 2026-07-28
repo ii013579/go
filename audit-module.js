@@ -409,8 +409,12 @@
             const photoData = currentPhotos[i] || '';
             photoHtml += `
                 <div style="border:2px dashed #ccc;height:85px;position:relative;display:flex;align-items:center;justify-content:center;background:#fafafa;border-radius:8px;overflow:hidden;">
-                    <input type="file" accept="image/*" onchange="window._tempPreview(this, ${i})" style="position:absolute;width:100%;height:100%;opacity:0;z-index:2;cursor:pointer;">
-                    <img id="audit-prev-${i}" src="${photoData}" style="width:100%;height:100%;object-fit:cover;display:${photoData?'block':'none'};z-index:1;">
+                    <input type="file" accept="image/*" capture="environment" onchange="window._tempPreview(this, ${i})" style="position:absolute;width:100%;height:100%;opacity:0;z-index:2;cursor:pointer;">
+                   <label style="position:absolute;right:4px;bottom:4px;z-index:3;background:rgba(0,0,0,0.6);color:#fff;font-size:11px;padding:3px 6px;border-radius:4px;cursor:pointer;">
+        🖼️ 舊檔
+        <input type="file" accept="image/*" onchange="window._tempPreview(this, ${i})" style="display:none;">
+    </label>
+    <img id="audit-prev-${i}" src="${photoData}" style="width:100%;height:100%;object-fit:cover;display:${photoData?'block':'none'};z-index:1;">
                     <span id="audit-icon-${i}" style="font-size:24px;color:#bbb;display:${photoData?'none':'block'};z-index:1;">📷</span>
                 </div>`;
         }
