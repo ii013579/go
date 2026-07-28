@@ -405,8 +405,7 @@
         };
 
        
-        // 1. 開啟 Grid 容器 (一行 4 個) - 此處保留 Inline Style
-        let photoHtml = '<div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:10px; margin-top:10px; margin-bottom:15px; width:100%; flex-grow:1; min-width:300px;">';
+        Eet photoHtml = '<div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:10px; margin-top:10px; margin-bottom:15px; width:100%;">';
         
         for (let i = 0; i < maxPhotos; i++) {
             const photoData = currentPhotos[i] || '';
@@ -414,21 +413,20 @@
             const iconDisplay = photoData ? 'none' : 'block';
 
             photoHtml += `
-                <div class="audit-photo-box" style="width:100%; aspect-ratio:1 / 1; border:2px dashed #ccc; position:relative; display:flex; align-items:center; justify-content:center; background:#fafafa; border-radius:8px; overflow:hidden; transition:border-color 0.2s, background-color 0.2s; cursor:pointer;">
+                <div style="width:100%; aspect-ratio:1/1; border:2px dashed #ccc; position:relative; display:flex; align-items:center; justify-content:center; background:#fafafa; border-radius:8px; overflow:visible;">
                     
-                    <!-- A. 主 input (全覆蓋)：拍照 -->
+                    <!-- 1. 主拍照點擊區 -->
                     <input type="file" accept="image/*" capture="environment" 
                            onchange="window._tempPreview(this, ${i})" 
-                           style="position:absolute; width:100%; height:100%; opacity:0; z-index:2; cursor:pointer;">
+                           style="position:absolute; width:100%; height:100%; top:0; left:0; opacity:0; z-index:2; cursor:pointer;">
                     
-                    <!-- B. 預覽圖與圖示 -->
-                    <img id="audit-prev-${i}" src="${photoData}" style="width:100%; height:100%; object-fit:cover; display:${imgDisplay}; z-index:1;">
+                    <!-- 2. 預覽圖與圖示 -->
+                    <img id="audit-prev-${i}" src="${photoData}" style="width:100%; height:100%; object-fit:cover; border-radius:6px; display:${imgDisplay}; z-index:1;">
                     <span id="audit-icon-${i}" style="font-size:24px; color:#bbb; display:${iconDisplay}; z-index:1;">📷</span>
 
-                    <!-- C. 修正式「開啟舊檔」小字容器 -->
-                    <!-- *** 核心修改：移除所有 inline style，加上 class="open-old-file-container" *** -->
-                    <div class="open-old-file-container">
-                        <label for="audit-file-${i}">開啟舊檔</label>
+                    <!-- 3. 紅框位置：騎在右下角線上的黑框小字 -->
+                    <div style="position:absolute; bottom:0; right:0; transform:translate(20%, 30%); z-index:3;">
+                        <label for="audit-file-${i}" style="display:inline-block !important; font-size:10px !important; line-height:1 !important; white-space:nowrap !important; color:#000 !important; cursor:pointer; background:#fff !important; padding:2px 4px !important; border:1px solid #000 !important; border-radius:3px !important; box-shadow:0 1px 3px rgba(0,0,0,0.2);">開啟舊檔</label>
                         <input id="audit-file-${i}" type="file" accept="image/*" 
                                onchange="window._tempPreview(this, ${i})" 
                                style="display:none;">
@@ -584,7 +582,7 @@
         try {
             const storage = firebase.storage();
             // 請依據您實際在 Storage 存放照片的路徑結構微調 (例如 'audit_photos/' 或 'audits/')
-            const storageFolderPath = `${kmlLayerName}`;
+            const storageFolderPath = `${STORAGE_ROOT}/${cleanLayerName}`;
             const folderRef = storage.ref(storageFolderPath);
 
             // 3. 直接清查 Storage 資料夾內的所有檔案 (不用讀取 Firestore)
