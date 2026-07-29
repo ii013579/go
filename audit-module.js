@@ -284,35 +284,6 @@
             const imgDisplay = photoData ? 'block' : 'none';
             const iconDisplay = photoData ? 'none' : 'flex';
 
-            photoHtml += `
-                <div class="audit-photo-box">
-                    
-                    <!-- 1. 主拍照點擊區 -->
-                    <input class="audit-photo-input-main" 
-                           type="file" accept="image/*" capture="environment" 
-                           onchange="window._tempPreview(this, ${i})" 
-                           title="拍照上傳照片 ${i + 1}">
-                    
-                    <!-- 2. 圖示與文字 -->
-                    <div id="audit-icon-${i}" class="audit-photo-placeholder" style="display:${iconDisplay};">
-                        <span class="icon">📷</span>
-                        <span class="text">照片 ${i + 1}</span>
-                    </div>
-
-                    <!-- 3. 預覽圖 -->
-                    <img id="audit-prev-${i}" class="audit-photo-img" src="${photoData}" style="display:${imgDisplay};">
-
-                    <!-- 4. 右下角：開啟舊檔按鈕 -->
-                    <div class="audit-photo-btn-sub">
-                        <label for="audit-file-${i}">開啟舊檔</label>
-                        <input id="audit-file-${i}" type="file" accept="image/*" 
-                               onchange="window._tempPreview(this, ${i})" 
-                               style="display:none;">
-                    </div>
-                </div>`;
-        }
-
-        photoHtml += '</div></div>';
         
         Swal.fire({ 
             title: '圖層清查管理 (v3.06)', 
@@ -475,32 +446,36 @@
 
        
         // 核心修正：強制 min-width / min-height，並將寬度 100% 寫死
-        let photoHtml = '<div style="width:100%; box-sizing:border-box;"><div class="audit-photo-grid">';
-        
-        for (let i = 0; i < maxPhotos; i++) {
-            const photoData = currentPhotos[i] || '';
-            const imgDisplay = photoData ? 'block' : 'none';
-            const iconDisplay = photoData ? 'none' : 'flex';
-        
             photoHtml += `
                 <div class="audit-photo-box">
-                    <input class="audit-photo-input-main" type="file" accept="image/*" capture="environment" onchange="window._tempPreview(this, ${i})">
                     
+                    <!-- 1. 主拍照點擊區 -->
+                    <input class="audit-photo-input-main" 
+                           type="file" accept="image/*" capture="environment" 
+                           onchange="window._tempPreview(this, ${i})" 
+                           title="拍照上傳照片 ${i + 1}">
+                    
+                    <!-- 2. 圖示與文字 -->
                     <div id="audit-icon-${i}" class="audit-photo-placeholder" style="display:${iconDisplay};">
                         <span class="icon">📷</span>
                         <span class="text">照片 ${i + 1}</span>
                     </div>
-        
+
+                    <!-- 3. 預覽圖 -->
                     <img id="audit-prev-${i}" class="audit-photo-img" src="${photoData}" style="display:${imgDisplay};">
-        
+
+                    <!-- 4. 右下角：開啟舊檔按鈕 -->
                     <div class="audit-photo-btn-sub">
                         <label for="audit-file-${i}">開啟舊檔</label>
-                        <input id="audit-file-${i}" type="file" accept="image/*" onchange="window._tempPreview(this, ${i})" style="display:none;">
+                        <input id="audit-file-${i}" type="file" accept="image/*" 
+                               onchange="window._tempPreview(this, ${i})" 
+                               style="display:none;">
                     </div>
                 </div>`;
         }
-        
+
         photoHtml += '</div></div>';
+
         
 
         const { value: res } = await Swal.fire({
