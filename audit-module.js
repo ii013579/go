@@ -181,18 +181,18 @@
                 btnHtml = `
                     <button onclick="window.viewAuditDetailOnly('${safePointKey}')" 
                             style="background: #e91e63; color: white; border: 2px solid #ffffff; padding: 10px 22px; border-radius: 50px; font-weight: bold; font-size: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); cursor: pointer;">
-                        🔍 查看
+                        查看
                     </button>
                     <button onclick="window.openAuditEditor(true)" 
                             style="background: #f39c12; color: white; border: 2px solid #ffffff; padding: 10px 22px; border-radius: 50px; font-weight: bold; font-size: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); cursor: pointer;">
-                        ✏️ 修改
+                        修改
                     </button>
                 `;
             } else {
                 btnHtml = `
                     <button onclick="window.openAuditEditor(false)" 
                             style="background: #2ecc71; color: white; border: 2px solid #ffffff; padding: 12px 35px; border-radius: 50px; font-weight: bold; font-size: 16px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); cursor: pointer;">
-                        📋 清查點位
+                        清查點位
                     </button>
                 `;
             }
