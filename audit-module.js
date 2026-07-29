@@ -542,7 +542,7 @@
     // 7. 直接抓取 Firebase Storage 照片並生成 CSV 打包 ZIP
     // ---------------------------------------------------------
     window.downloadAuditPhotosZip = async function(kmlId, appId = 'default') {
-        if (typeof JSZip === 'undefined' && typeof saveAs === 'undefined') {
+        if (typeof JSZip === 'undefined' || typeof saveAs === 'undefined') {
             Swal.fire('套件缺失', '請確保 HTML 已引入 JSZip 與 FileSaver 套件！', 'error');
             return;
         }
@@ -581,12 +581,21 @@
 
         try {
             const storage = firebase.storage();
-            // 請依據您實際在 Storage 存放照片的路徑結構微調 (例如 'audit_photos/' 或 'audits/')
+            // 完整路徑: kmldata-d22fb/storage/{cleanLayerName}
             const storageFolderPath = `${STORAGE_ROOT}/${cleanLayerName}`;
             const folderRef = storage.ref(storageFolderPath);
 
-            // 3. 直接清查 Storage 資料夾內的所有檔案 (不用讀取 Firestore)
-            const listResult = await folderRef.listAll();
+            // 3. 清查 Storage 資料夾內的所有檔案
+            let listResult;
+            try {
+                listResult = await folderRef.listAll();
+            } catch (listErr) {
+                console.error('Storage listAll 失敗:', listErr);
+                if (listErr.code === 'storage/unauthorized') {
+                    throw new Error(`無權限存取目錄 [${storageFolderPath}]。請確認 Storage Rules 是否允許讀取/列出 (read/list) 權限。`);
+                }
+                throw listErr;
+            }
 
             if (listResult.items.length === 0) {
                 Swal.fire('提示', `Storage 路徑 [${storageFolderPath}] 下找不到任何檔案。`, 'info');
@@ -603,7 +612,7 @@
             let completedCount = 0;
             let failCount = 0;
 
-            // 4. 分批從 Storage 拉取二進制資料與下載網址 (一次 4 張)
+            // 4. 分批從 Storage 拉取檔案 (一次 4 個，防止瀏覽器記憶體爆發或併發請求受限)
             const BATCH_SIZE = 4;
             for (let i = 0; i < items.length; i += BATCH_SIZE) {
                 const batch = items.slice(i, i + BATCH_SIZE);
@@ -612,17 +621,29 @@
                     try {
                         const fileName = fileRef.name;
                         
-                        // 平行並列取得：二進制檔案 Buffer + 直連下載網址 (用於 CSV)
-                        const [buffer, downloadUrl] = await Promise.all([
-                            fileRef.getBytes(20 * 1024 * 1024), // 上限 20MB
-                            fileRef.getDownloadURL().catch(() => '')
-                        ]);
+                        // 取得下載網址
+                        const downloadUrl = await fileRef.getDownloadURL();
 
-                        // 將照片寫入 ZIP 檔
-                        rootFolder.file(fileName, buffer);
+                        // 嘗試抓取檔案 ArrayBuffer
+                        let arrayBuffer;
+                        try {
+                            // 優先使用 SDK getBytes (上限 20MB)
+                            arrayBuffer = await fileRef.getBytes(20 * 1024 * 1024);
+                        } catch (bytesErr) {
+                            // 若 SDK getBytes 失敗，退回使用 fetch 下載
+                            const resp = await fetch(downloadUrl);
+                            if (!resp.ok) throw new Error(`HTTP Error ${resp.status}`);
+                            arrayBuffer = await resp.arrayBuffer();
+                        }
 
-                        // 紀錄至 CSV 列資料
-                        csvRows.push([`"${fileName}"`, `"${fileRef.fullPath}"`, `"${downloadUrl}"`]);
+                        // 將照片/檔案寫入 ZIP
+                        rootFolder.file(fileName, arrayBuffer);
+
+                        // 紀錄至 CSV 列資料 (做好引號跳脫防範 CSV 破格)
+                        const safeFileName = fileName.replace(/"/g, '""');
+                        const safeFullPath = fileRef.fullPath.replace(/"/g, '""');
+                        const safeUrl = downloadUrl.replace(/"/g, '""');
+                        csvRows.push([`"${safeFileName}"`, `"${safeFullPath}"`, `"${safeUrl}"`]);
 
                     } catch (err) {
                         failCount++;
@@ -637,16 +658,16 @@
             }
 
             if (completedCount - failCount === 0) {
-                throw new Error('所有檔案下載皆失敗，請確認 Firebase Storage 權限 (Rules) 設定。');
+                throw new Error('所有檔案下載皆失敗，請檢查網路連線或 CORS 設定。');
             }
 
-            // 5. 生成 CSV 文字內容 (包含 UTF-8 BOM 避免 Excel 開啟亂碼)
+            // 5. 生成 CSV 文字內容 (加入 UTF-8 BOM \uFEFF，確保 Excel 開啟不亂碼)
             const csvContent = '\uFEFF' + csvRows.map(e => e.join(',')).join('\n');
             rootFolder.file(`照片清冊目錄_${cleanLayerName}.csv`, csvContent);
 
             if (progressEl) progressEl.textContent = '檔案處理完成，正在壓縮 ZIP...';
 
-            // 6. 生成 ZIP 並存檔
+            // 6. 生成 ZIP 並下載
             const zipBlob = await zip.generateAsync({ type: 'blob' });
             saveAs(zipBlob, `${cleanLayerName}_Storage照片總集.zip`);
 
@@ -654,9 +675,9 @@
                 icon: failCount > 0 ? 'warning' : 'success',
                 title: '打包下載完成！',
                 text: failCount > 0 
-                    ? `成功打包 ${completedCount - failCount} 張，失敗 ${failCount} 張`
-                    : `已成功下載 ${completedCount} 張照片與 CSV 清冊`,
-                timer: 2000,
+                    ? `成功打包 ${completedCount - failCount} 個檔案，失敗 ${failCount} 個`
+                    : `已成功下載 ${completedCount} 個檔案與 CSV 清冊`,
+                timer: 2500,
                 showConfirmButton: false
             });
 
