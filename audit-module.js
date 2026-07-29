@@ -546,7 +546,7 @@
     };
 
     // ---------------------------------------------------------
-    // 7. 純前端免 CORS：直接從 Firestore 抓取 Base64 照片打包 ZIP
+    // 打包 Firebase Storage 照片 (使用 CORS 代理下載)
     // ---------------------------------------------------------
     window.downloadAuditPhotosZip = async function(kmlId, appId = 'default') {
         if (typeof JSZip === 'undefined' || typeof saveAs === 'undefined') {
@@ -578,7 +578,7 @@
         const cleanLayerName = (kmlLayerName || kmlId).replace(/\.kml$/i, '');
 
         Swal.fire({
-            title: '正在從 Firestore 讀取紀錄...',
+            title: '正在搜尋 Storage 照片...',
             html: `<div id="zip-progress-text" style="font-size:14px; margin-top:10px;">請稍候...</div>`,
             allowOutsideClick: false,
             didOpen: () => Swal.showLoading()
@@ -587,82 +587,93 @@
         const progressEl = document.getElementById('zip-progress-text');
 
         try {
-            const db = firebase.firestore();
-            // 直接讀取 Firestore 紀錄子集合
-            const auditRef = db.collection('artifacts/kmldata-d22fb/public/data/kmlLayers')
-                              .doc(kmlId)
-                              .collection('auditRecords');
+            const storage = firebase.storage();
+            // 組合完整 Storage 路徑: kmldata-d22fb/storage/{cleanLayerName}
+            const storageFolderPath = `${STORAGE_ROOT}/${cleanLayerName}`;
+            const folderRef = storage.ref(storageFolderPath);
 
-            const snapshot = await auditRef.get();
+            // 3. 列出目錄下所有檔案
+            const listResult = await folderRef.listAll();
 
-            if (snapshot.empty) {
-                Swal.fire('提示', `圖層 [${cleanLayerName}] 找不到任何清查紀錄。`, 'info');
+            if (listResult.items.length === 0) {
+                Swal.fire('提示', `Storage 路徑 [${storageFolderPath}] 下找不到任何檔案。`, 'info');
                 return;
             }
+
+            const items = listResult.items;
+            if (progressEl) progressEl.textContent = `找到 ${items.length} 個檔案，準備下載...`;
 
             const zip = new JSZip();
             const rootFolder = zip.folder(cleanLayerName);
-            const csvRows = [['點位ID', '設備狀態', '照片張數', '備註', '更新時間']];
+            const csvRows = [['檔名', '完整 Storage 路徑', '下載網址']];
 
-            let photoCount = 0;
-            let docIndex = 0;
+            let completedCount = 0;
+            let failCount = 0;
 
-            snapshot.forEach(doc => {
-                docIndex++;
-                const data = doc.data();
-                const pointKey = doc.id;
-                const status = data.status || '';
-                const note = (data.note || '').replace(/"/g, '""');
-                const updatedAt = data.updatedAt ? new Date(data.updatedAt.seconds * 1000).toLocaleString() : '';
-                const photos = data.photos || [];
+            // 免設定 CORS 的跨域代理伺服器
+            const PROXY_URL = 'https://corsproxy.io/?';
 
-                let validPhotoCount = 0;
+            // 4. 分批拉取照片 (一次 3 個，避免請求過於頻繁)
+            const BATCH_SIZE = 3;
+            for (let i = 0; i < items.length; i += BATCH_SIZE) {
+                const batch = items.slice(i, i + BATCH_SIZE);
 
-                // 處理單點點位的照片 (Base64 DataURL 或 URL)
-                photos.forEach((photoStr, idx) => {
-                    if (!photoStr) return;
+                await Promise.all(batch.map(async (fileRef) => {
+                    try {
+                        const fileName = fileRef.name;
+                        
+                        // A. 取得 Firebase Storage 帶 Token 的下載網址
+                        const downloadUrl = await fileRef.getDownloadURL();
 
-                    const photoIndexStr = String(idx + 1).padStart(2, '0');
-                    const fileName = `${pointKey}_${photoIndexStr}.jpg`;
+                        // B. 加上 CORS 代理，繞過瀏覽器同源限制
+                        const proxiedUrl = PROXY_URL + encodeURIComponent(downloadUrl);
 
-                    if (photoStr.startsWith('data:image')) {
-                        // 【免 CORS 核心】直接把 Base64 解碼寫入 ZIP
-                        const base64Data = photoStr.split(',')[1];
-                        if (base64Data) {
-                            rootFolder.file(fileName, base64Data, { base64: true });
-                            photoCount++;
-                            validPhotoCount++;
+                        // C. 抓取照片二進制 Buffer
+                        const resp = await fetch(proxiedUrl);
+                        if (!resp.ok) throw new Error(`HTTP Error ${resp.status}`);
+                        const arrayBuffer = await resp.arrayBuffer();
+
+                        // D. 將照片寫入 ZIP
+                        rootFolder.file(fileName, arrayBuffer);
+
+                        // E. 記錄至 CSV
+                        const safeFileName = fileName.replace(/"/g, '""');
+                        const safeFullPath = fileRef.fullPath.replace(/"/g, '""');
+                        const safeUrl = downloadUrl.replace(/"/g, '""');
+                        csvRows.push([`"${safeFileName}"`, `"${safeFullPath}"`, `"${safeUrl}"`]);
+
+                    } catch (err) {
+                        failCount++;
+                        console.warn(`下載失敗 (${fileRef.name}):`, err);
+                    } finally {
+                        completedCount++;
+                        if (progressEl) {
+                            progressEl.textContent = `打包進度: (${completedCount}/${items.length})`;
                         }
                     }
-                });
-
-                // 記錄 CSV
-                csvRows.push([`"${pointKey}"`, `"${status}"`, `"${validPhotoCount}"`, `"${note}"`, `"${updatedAt}"`]);
-
-                if (progressEl) {
-                    progressEl.textContent = `處理紀錄中... (${docIndex}/${snapshot.size})，已打包 ${photoCount} 張照片`;
-                }
-            });
-
-            if (photoCount === 0) {
-                Swal.fire('提示', '有找到清查紀錄，但紀錄中沒有任何現場照片。', 'info');
-                return;
+                }));
             }
 
-            // 生成 CSV (帶 UTF-8 BOM 防亂碼)
+            if (completedCount - failCount === 0) {
+                throw new Error('所有檔案下載皆失敗，請確認網路連線。');
+            }
+
+            // 5. 生成 CSV (帶 UTF-8 BOM 避免 Excel 開啟亂碼)
             const csvContent = '\uFEFF' + csvRows.map(e => e.join(',')).join('\n');
-            rootFolder.file(`清查紀錄總表_${cleanLayerName}.csv`, csvContent);
+            rootFolder.file(`照片清冊目錄_${cleanLayerName}.csv`, csvContent);
 
-            if (progressEl) progressEl.textContent = '資料讀取完成，正在壓縮 ZIP 檔案...';
+            if (progressEl) progressEl.textContent = '檔案下載完成，正在壓縮 ZIP...';
 
-            // 下載 ZIP 檔
+            // 6. 生成 ZIP 檔並下載
             const zipBlob = await zip.generateAsync({ type: 'blob' });
-            saveAs(zipBlob, `${cleanLayerName}_清查照片總集.zip`);
+            saveAs(zipBlob, `${cleanLayerName}_Storage照片總集.zip`);
 
             Swal.fire({
-                icon: 'success',
+                icon: failCount > 0 ? 'warning' : 'success',
                 title: '打包下載完成！',
-                text: `成功打包 ${photoCount} 張照片與清查總表 CSV`,
+                text: failCount > 0 
+                    ? `成功打包 ${completedCount - failCount} 個檔案，失敗 ${failCount} 個`
+                    : `已成功下載 ${completedCount} 個檔案與 CSV 清冊`,
                 timer: 2000,
                 showConfirmButton: false
             });
@@ -672,7 +683,7 @@
             Swal.fire({
                 icon: 'error',
                 title: '打包失敗',
-                text: error.message || '讀取 Firestore 失敗'
+                text: error.message || '發生未知錯誤'
             });
         }
     };
