@@ -852,7 +852,7 @@ canvas {
 /* 個別照片方塊：給予最小高度保底，絕對不被壓縮 */
 .audit-photo-box {
     width: 100% !important;
-    min-height: 80px !important; /* 保底高度，徹底解決縮成螞蟻問題 */
+    min-height: 80px !important;
     aspect-ratio: 1 / 1 !important;
     border: 2px dashed #b0b0b0 !important;
     background-color: #fafafa !important;
@@ -863,7 +863,7 @@ canvas {
     align-items: center !important;
     justify-content: center !important;
     box-sizing: border-box !important;
-    overflow: visible !important; /* 讓右下角「開啟舊檔」不會被裁切 */
+    overflow: hidden !important; /* 💡 設為 hidden，完美裁切邊角不突出 */
 }
 
 /* 相機圖示與提示字容器 */
@@ -916,22 +916,22 @@ canvas {
 /* 右下角「開啟舊檔」標籤容器 */
 .audit-photo-btn-sub {
     position: absolute;
-    bottom: 2px;
-    right: 0x;
+    bottom: 2px !important; /* 💡 從 -6px 改為 2px (貼合內側右下角) */
+    right: 2px !important;  /* 💡 從 -6px 改為 2px */
     z-index: 4;
 }
 
 .audit-photo-btn-sub label {
     display: inline-block !important;
-    font-size: 10px !important;
-    line-height: 1.2 !important;
+    font-size: 9px !important; /* 微調字體大小，避免佔據太大視覺空間 */
+    line-height: 1.1 !important;
     white-space: nowrap !important;
-    color: #000 !important;
+    color: #333 !important;
     cursor: pointer;
-    background: #ffffff !important;
-    padding: 2px 5px !important;
-    border: 1px solid #000 !important;
+    background: rgba(255, 255, 255, 0.95) !important; /* 帶一點透明白底，不遮擋背景 */
+    padding: 2px 4px !important;
+    border: 1px solid #777 !important;
     border-radius: 3px !important;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.3) !important;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.2) !important;
     font-weight: normal !important;
 }
