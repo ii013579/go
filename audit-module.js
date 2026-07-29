@@ -405,7 +405,7 @@
         };
 
        
-        let photoHtml = '<div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:10px; margin-top:10px; margin-bottom:15px; width:100%;">';
+        let photoHtml = '<div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:12px; margin-top:10px; margin-bottom:20px; width:100%; box-sizing:border-box;">';
         
         for (let i = 0; i < maxPhotos; i++) {
             const photoData = currentPhotos[i] || '';
@@ -413,7 +413,7 @@
             const iconDisplay = photoData ? 'none' : 'block';
 
             photoHtml += `
-                <div style="width:100%; aspect-ratio:1/1; border:2px dashed #ccc; position:relative; display:flex; align-items:center; justify-content:center; background:#fafafa; border-radius:8px; overflow:visible;">
+                <div style="width:100%; aspect-ratio:1/1; border:2px dashed #ccc; position:relative; display:flex; align-items:center; justify-content:center; background:#fafafa; border-radius:8px; overflow:visible; box-sizing:border-box;">
                     
                     <!-- 1. 主拍照點擊區 -->
                     <input type="file" accept="image/*" capture="environment" 
@@ -424,8 +424,8 @@
                     <img id="audit-prev-${i}" src="${photoData}" style="width:100%; height:100%; object-fit:cover; border-radius:6px; display:${imgDisplay}; z-index:1;">
                     <span id="audit-icon-${i}" style="font-size:24px; color:#bbb; display:${iconDisplay}; z-index:1;">📷</span>
 
-                    <!-- 3. 紅框位置：騎在右下角線上的黑框小字 -->
-                    <div style="position:absolute; bottom:0; right:0; transform:translate(20%, 30%); z-index:3;">
+                    <!-- 3. 右下角線上的黑框小字 -->
+                    <div style="position:absolute; bottom:0; right:0; transform:translate(10%, 25%); z-index:3;">
                         <label for="audit-file-${i}" style="display:inline-block !important; font-size:10px !important; line-height:1 !important; white-space:nowrap !important; color:#000 !important; cursor:pointer; background:#fff !important; padding:2px 4px !important; border:1px solid #000 !important; border-radius:3px !important; box-shadow:0 1px 3px rgba(0,0,0,0.2);">開啟舊檔</label>
                         <input id="audit-file-${i}" type="file" accept="image/*" 
                                onchange="window._tempPreview(this, ${i})" 
