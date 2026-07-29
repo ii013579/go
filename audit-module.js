@@ -543,7 +543,7 @@
 
 
     // ---------------------------------------------------------
-    // 7.打包 Firebase Storage 照片 (使用 CORS 代理下載)
+    // 7.打包 Firebase Storage 照片 (直連原生 CORS 下載)
     // ---------------------------------------------------------
     window.downloadAuditPhotosZip = async function(kmlId, appId = 'default') {
         if (typeof JSZip === 'undefined' || typeof saveAs === 'undefined') {
@@ -619,18 +619,15 @@
                         // A. 取得 Firebase Storage 帶 token 的原始下載網址
                         const downloadUrl = await fileRef.getDownloadURL();
 
-                        // B. 將網址透過 CORS Proxy 代理封裝，繞過瀏覽器跨網域限制
-                        const proxiedUrl = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(downloadUrl);
-
-                        // C. 透過 Fetch 取得圖片的 Blob 資料
-                        const response = await fetch(proxiedUrl);
+                        // B. 透過 Fetch 直連取得圖片 Blob（依靠剛設定好的 GCP CORS）
+                        const response = await fetch(downloadUrl);
                         if (!response.ok) throw new Error(`HTTP error ${response.status}`);
                         const blob = await response.blob();
 
-                        // D. 寫入 ZIP (直接傳入 Blob)
+                        // C. 寫入 ZIP (直接傳入 Blob)
                         rootFolder.file(fileName, blob);
 
-                        // E. 記錄至 CSV
+                        // D. 記錄至 CSV
                         const safeFileName = fileName.replace(/"/g, '""');
                         const safeFullPath = fileRef.fullPath.replace(/"/g, '""');
                         const safeUrl = downloadUrl.replace(/"/g, '""');
@@ -649,7 +646,7 @@
             }
 
             if (completedCount - failCount === 0) {
-                throw new Error('所有檔案下載皆失敗，請確認網路連線。');
+                throw new Error('所有檔案下載皆失敗，請確認網路連線或 CORS 設定。');
             }
 
             // 5. 生成 CSV (帶 UTF-8 BOM 避免 Excel 開啟亂碼)
@@ -668,7 +665,7 @@
                 text: failCount > 0 
                     ? `成功打包 ${completedCount - failCount} 個檔案，失敗 ${failCount} 個`
                     : `已成功下載 ${completedCount} 個檔案與 CSV 清冊`,
-                timer: 2000,
+                timer: 2500,
                 showConfirmButton: false
             });
 
