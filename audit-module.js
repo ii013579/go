@@ -405,28 +405,34 @@
         };
 
        
-        let photoHtml = '<div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:12px; margin-top:10px; margin-bottom:20px; width:100%; box-sizing:border-box;">';
+        let photoHtml = '<div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:10px; margin-top:10px; margin-bottom:20px; width:100%; box-sizing:border-box;">';
         
         for (let i = 0; i < maxPhotos; i++) {
             const photoData = currentPhotos[i] || '';
             const imgDisplay = photoData ? 'block' : 'none';
-            const iconDisplay = photoData ? 'none' : 'block';
+            const iconDisplay = photoData ? 'none' : 'flex';
 
             photoHtml += `
-                <div style="width:100%; aspect-ratio:1/1; border:2px dashed #ccc; position:relative; display:flex; align-items:center; justify-content:center; background:#fafafa; border-radius:8px; overflow:visible; box-sizing:border-box;">
+                <div style="width:100%; aspect-ratio:1/1; border:2px dashed #ccc; position:relative; display:flex; flex-direction:column; align-items:center; justify-content:center; background:#fafafa; border-radius:8px; overflow:hidden; box-sizing:border-box;">
                     
-                    <!-- 1. 主拍照點擊區 -->
+                    <!-- 1. 主拍照點擊區 (涵蓋整個方塊) -->
                     <input type="file" accept="image/*" capture="environment" 
                            onchange="window._tempPreview(this, ${i})" 
-                           style="position:absolute; width:100%; height:100%; top:0; left:0; opacity:0; z-index:2; cursor:pointer;">
+                           style="position:absolute; width:100%; height:100%; top:0; left:0; opacity:0; z-index:2; cursor:pointer;" 
+                           title="拍照上傳照片 ${i + 1}">
                     
-                    <!-- 2. 預覽圖與圖示 -->
-                    <img id="audit-prev-${i}" src="${photoData}" style="width:100%; height:100%; object-fit:cover; border-radius:6px; display:${imgDisplay}; z-index:1;">
-                    <span id="audit-icon-${i}" style="font-size:24px; color:#bbb; display:${iconDisplay}; z-index:1;">📷</span>
+                    <!-- 2. 未上傳時顯示的圖示與文字 -->
+                    <div id="audit-icon-${i}" style="display:${iconDisplay}; flex-direction:column; align-items:center; justify-content:center; pointer-events:none; z-index:1;">
+                        <span style="font-size:28px; line-height:1; color:#888;">📷</span>
+                        <span style="font-size:11px; color:#666; margin-top:4px; font-weight:bold;">照片 ${i + 1}</span>
+                    </div>
 
-                    <!-- 3. 右下角線上的黑框小字 -->
-                    <div style="position:absolute; bottom:0; right:0; transform:translate(10%, 25%); z-index:3;">
-                        <label for="audit-file-${i}" style="display:inline-block !important; font-size:10px !important; line-height:1 !important; white-space:nowrap !important; color:#000 !important; cursor:pointer; background:#fff !important; padding:2px 4px !important; border:1px solid #000 !important; border-radius:3px !important; box-shadow:0 1px 3px rgba(0,0,0,0.2);">開啟舊檔</label>
+                    <!-- 3. 已上傳時顯示的預覽圖 -->
+                    <img id="audit-prev-${i}" src="${photoData}" style="position:absolute; top:0; left:0; width:100%; height:100%; object-fit:cover; display:${imgDisplay}; z-index:1;">
+
+                    <!-- 4. 右下角：開啟舊檔按鈕 (貼合右下角內側，防止被遮擋) -->
+                    <div style="position:absolute; bottom:3px; right:3px; z-index:4;">
+                        <label for="audit-file-${i}" style="display:inline-block !important; font-size:10px !important; line-height:1.2 !important; white-space:nowrap !important; color:#333 !important; cursor:pointer; background:rgba(255, 255, 255, 0.9) !important; padding:3px 5px !important; border:1px solid #999 !important; border-radius:4px !important; box-shadow:0 1px 2px rgba(0,0,0,0.2); font-weight:normal;">開啟舊檔</label>
                         <input id="audit-file-${i}" type="file" accept="image/*" 
                                onchange="window._tempPreview(this, ${i})" 
                                style="display:none;">
@@ -539,7 +545,7 @@
     };
 
     // ---------------------------------------------------------
-    // 7. 直接抓取 Firebase Storage 照片並生成 CSV 打包 ZIP
+    // 7. 使用 CORS 代理 (Proxy) 打包 Storage 照片與 CSV
     // ---------------------------------------------------------
     window.downloadAuditPhotosZip = async function(kmlId, appId = 'default') {
         if (typeof JSZip === 'undefined' || typeof saveAs === 'undefined') {
@@ -547,7 +553,7 @@
             return;
         }
     
-        // 1. 前端權限檢查 (限 editor 或 owner)
+        // 1. 權限檢查
         const rawRole = window.currentUserData?.role 
                      || window.currentUserRole 
                      || window.currentUser?.role;
@@ -581,21 +587,12 @@
 
         try {
             const storage = firebase.storage();
-            // 完整路徑: kmldata-d22fb/storage/{cleanLayerName}
+            // 組合完整 Storage 路徑: kmldata-d22fb/storage/{cleanLayerName}
             const storageFolderPath = `${STORAGE_ROOT}/${cleanLayerName}`;
             const folderRef = storage.ref(storageFolderPath);
 
-            // 3. 清查 Storage 資料夾內的所有檔案
-            let listResult;
-            try {
-                listResult = await folderRef.listAll();
-            } catch (listErr) {
-                console.error('Storage listAll 失敗:', listErr);
-                if (listErr.code === 'storage/unauthorized') {
-                    throw new Error(`無權限存取目錄 [${storageFolderPath}]。請確認 Storage Rules 是否允許讀取/列出 (read/list) 權限。`);
-                }
-                throw listErr;
-            }
+            // 3. 列出目錄下所有檔案
+            const listResult = await folderRef.listAll();
 
             if (listResult.items.length === 0) {
                 Swal.fire('提示', `Storage 路徑 [${storageFolderPath}] 下找不到任何檔案。`, 'info');
@@ -607,13 +604,16 @@
 
             const zip = new JSZip();
             const rootFolder = zip.folder(cleanLayerName);
-            const csvRows = [['檔名', '完整 Storage 路徑', '下載網址']]; // CSV 表頭
+            const csvRows = [['檔名', '完整 Storage 路徑', '下載網址']];
 
             let completedCount = 0;
             let failCount = 0;
 
-            // 4. 分批從 Storage 拉取檔案 (一次 4 個，防止瀏覽器記憶體爆發或併發請求受限)
-            const BATCH_SIZE = 4;
+            // CORS 免設定代理伺服器 Prefix
+            const PROXY_URL = 'https://corsproxy.io/?';
+
+            // 4. 分批拉取照片 (一次 3 個，避免請求過於頻繁)
+            const BATCH_SIZE = 3;
             for (let i = 0; i < items.length; i += BATCH_SIZE) {
                 const batch = items.slice(i, i + BATCH_SIZE);
 
@@ -621,25 +621,21 @@
                     try {
                         const fileName = fileRef.name;
                         
-                        // 取得下載網址
+                        // A. 取得 Firebase Storage 帶 token 的公開下載網址
                         const downloadUrl = await fileRef.getDownloadURL();
 
-                        // 嘗試抓取檔案 ArrayBuffer
-                        let arrayBuffer;
-                        try {
-                            // 優先使用 SDK getBytes (上限 20MB)
-                            arrayBuffer = await fileRef.getBytes(20 * 1024 * 1024);
-                        } catch (bytesErr) {
-                            // 若 SDK getBytes 失敗，退回使用 fetch 下載
-                            const resp = await fetch(downloadUrl);
-                            if (!resp.ok) throw new Error(`HTTP Error ${resp.status}`);
-                            arrayBuffer = await resp.arrayBuffer();
-                        }
+                        // B. 加上 Proxy 前綴繞過瀏覽器 CORS 限制
+                        const proxiedUrl = PROXY_URL + encodeURIComponent(downloadUrl);
 
-                        // 將照片/檔案寫入 ZIP
+                        // C. 透過代理抓取圖片二進制 Buffer
+                        const resp = await fetch(proxiedUrl);
+                        if (!resp.ok) throw new Error(`HTTP Error ${resp.status}`);
+                        const arrayBuffer = await resp.arrayBuffer();
+
+                        // D. 將圖片寫入 ZIP
                         rootFolder.file(fileName, arrayBuffer);
 
-                        // 紀錄至 CSV 列資料 (做好引號跳脫防範 CSV 破格)
+                        // E. 記錄至 CSV
                         const safeFileName = fileName.replace(/"/g, '""');
                         const safeFullPath = fileRef.fullPath.replace(/"/g, '""');
                         const safeUrl = downloadUrl.replace(/"/g, '""');
@@ -658,16 +654,16 @@
             }
 
             if (completedCount - failCount === 0) {
-                throw new Error('所有檔案下載皆失敗，請檢查網路連線或 CORS 設定。');
+                throw new Error('所有檔案下載皆失敗，請確認網路或 Firebase Storage 存取權限。');
             }
 
-            // 5. 生成 CSV 文字內容 (加入 UTF-8 BOM \uFEFF，確保 Excel 開啟不亂碼)
+            // 5. 生成 CSV (加上 UTF-8 BOM 防 Excel 亂碼)
             const csvContent = '\uFEFF' + csvRows.map(e => e.join(',')).join('\n');
             rootFolder.file(`照片清冊目錄_${cleanLayerName}.csv`, csvContent);
 
-            if (progressEl) progressEl.textContent = '檔案處理完成，正在壓縮 ZIP...';
+            if (progressEl) progressEl.textContent = '檔案下載完成，正在壓縮 ZIP...';
 
-            // 6. 生成 ZIP 並下載
+            // 6. 生成 ZIP 檔並下載
             const zipBlob = await zip.generateAsync({ type: 'blob' });
             saveAs(zipBlob, `${cleanLayerName}_Storage照片總集.zip`);
 
@@ -677,7 +673,7 @@
                 text: failCount > 0 
                     ? `成功打包 ${completedCount - failCount} 個檔案，失敗 ${failCount} 個`
                     : `已成功下載 ${completedCount} 個檔案與 CSV 清冊`,
-                timer: 2500,
+                timer: 2000,
                 showConfirmButton: false
             });
 

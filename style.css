@@ -837,3 +837,48 @@ canvas {
     margin: 10px auto;
     font-size: 16px;
 }
+
+/* 照片上傳區域容器 */
+.photo-upload-grid {
+    display: grid;
+    /* 核心關鍵：強制分成等寬的 4 欄 */
+    grid-template-columns: repeat(4, 1fr); 
+    gap: 10px; /* 方塊之間的間距 */
+    width: 100%;
+    margin-top: 10px;
+    box-sizing: border-box;
+}
+
+/* 單個相機/照片上傳方塊 */
+.photo-item {
+    width: 100%;
+    /* 設定 1:1 長寬比，讓按鈕變大且呈正方形 */
+    aspect-ratio: 1 / 1; 
+    border: 2px dashed #ccc;
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    background-color: #f9f9f9;
+    box-sizing: border-box;
+    overflow: hidden;
+    position: relative;
+}
+
+/* 方塊內的相機圖示與文字調整 */
+.photo-item img, .photo-item svg {
+    width: 45%;
+    height: auto;
+    max-height: 50%;
+    object-fit: contain;
+}
+
+.photo-item span {
+    font-size: 12px;
+    margin-top: 4px;
+    color: #555;
+    text-align: center;
+    white-space: nowrap;
+}
