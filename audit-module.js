@@ -354,7 +354,7 @@
         }
     };
     
-// ---------------------------------------------------------
+    // ---------------------------------------------------------
     // 5. 清查資料編輯與上傳邏輯
     // ---------------------------------------------------------
     window.openAuditEditor = async function(isModifyMode = false) {
@@ -543,7 +543,7 @@
 
 
     // ---------------------------------------------------------
-    // 打包 Firebase Storage 照片 (使用 CORS 代理下載)
+    // 7.打包 Firebase Storage 照片 (使用 CORS 代理下載)
     // ---------------------------------------------------------
     window.downloadAuditPhotosZip = async function(kmlId, appId = 'default') {
         if (typeof JSZip === 'undefined' || typeof saveAs === 'undefined') {
@@ -585,7 +585,7 @@
 
         try {
             const storage = firebase.storage();
-            // 組合完整 Storage 路徑: kmldata-d22fb/storage/{cleanLayerName}
+            // 組合完整 Storage 路徑
             const storageFolderPath = `${STORAGE_ROOT}/${cleanLayerName}`;
             const folderRef = storage.ref(storageFolderPath);
 
@@ -607,9 +607,6 @@
             let completedCount = 0;
             let failCount = 0;
 
-            // 免設定 CORS 的跨域代理伺服器
-            const PROXY_URL = 'https://images.weserv.nl/?url=';
-
             // 4. 分批拉取照片 (一次 3 個，避免併發過多)
             const BATCH_SIZE = 3;
             for (let i = 0; i < items.length; i += BATCH_SIZE) {
@@ -619,29 +616,21 @@
                     try {
                         const fileName = fileRef.name;
                         
-                        // A. 取得 Firebase Storage 帶 token 的下載網址
+                        // A. 取得 Firebase Storage 帶 token 的原始下載網址
                         const downloadUrl = await fileRef.getDownloadURL();
 
-                        // B. 使用原生 XHR / Blob 繞過第三方 Proxy 的網址解析問題
-                        const blob = await new Promise((resolve, reject) => {
-                            const xhr = new XMLHttpRequest();
-                            xhr.responseType = 'blob';
-                            xhr.onload = (event) => {
-                                if (xhr.status >= 200 && xhr.status < 300) {
-                                    resolve(xhr.response);
-                                } else {
-                                    reject(new Error(`HTTP Error ${xhr.status}`));
-                                }
-                            };
-                            xhr.onerror = () => reject(new Error('Network Error'));
-                            xhr.open('GET', downloadUrl);
-                            xhr.send();
-                        });
+                        // B. 將網址透過 CORS Proxy 代理封裝，繞過瀏覽器跨網域限制
+                        const proxiedUrl = 'https://corsproxy.io/?' + encodeURIComponent(downloadUrl);
 
-                        // C. 寫入 ZIP (直接傳入 Blob)
+                        // C. 透過 Fetch 取得圖片的 Blob 資料
+                        const response = await fetch(proxiedUrl);
+                        if (!response.ok) throw new Error(`HTTP error ${response.status}`);
+                        const blob = await response.blob();
+
+                        // D. 寫入 ZIP (直接傳入 Blob)
                         rootFolder.file(fileName, blob);
 
-                        // D. 記錄至 CSV
+                        // E. 記錄至 CSV
                         const safeFileName = fileName.replace(/"/g, '""');
                         const safeFullPath = fileRef.fullPath.replace(/"/g, '""');
                         const safeUrl = downloadUrl.replace(/"/g, '""');
