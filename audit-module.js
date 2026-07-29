@@ -277,13 +277,25 @@
             const baseName = opt.getAttribute('data-basename') || opt.textContent.split(' (')[0];
             const safeValue = escapeHtml(opt.value);
 
-         let photoHtml = '<div style="width:100%; box-sizing:border-box;"><div class="audit-photo-grid">';
-        
-        for (let i = 0; i < maxPhotos; i++) {
-            const photoData = currentPhotos[i] || '';
-            const imgDisplay = photoData ? 'block' : 'none';
-            const iconDisplay = photoData ? 'none' : 'flex';
-
+            listHtml += `
+                <div style="display:flex; align-items:center; justify-content:space-between; padding:12px; border-bottom:1px solid #eee;">
+                    <div>
+                        <div style="font-weight:bold; font-size:14px;">${escapeHtml(baseName)}</div>
+                        ${isAuditing ? `<div style="color: #e67e22; font-size:12px;">清查中：需照片 ${targetPhotos} 張</div>` : `<div style="color: #999; font-size: 12px;">未開啟清查</div>`}
+                    </div>
+                    <div style="display:flex; gap:6px;">
+                        ${isAuditing ? `
+                            <button onclick="window.downloadAuditPhotosZip('${safeValue}')" title="下載此圖層所有照片為 ZIP" style="background:#8e44ad; color:white; border:none; padding:6px 10px; border-radius:4px; cursor:pointer; font-size:12px;">
+                                📦 下載照片
+                            </button>
+                        ` : ''}
+                        <button onclick="window.toggleAuditStatus('${safeValue}', ${!isAuditing})" style="background:${isAuditing ? '#666' : '#3498db'}; color:white; border:none; padding:6px 12px; border-radius:4px; cursor:pointer; font-size:12px;">
+                            ${isAuditing ? '關閉' : '開啟'}
+                        </button>
+                    </div>
+                </div>`;
+        });
+        listHtml += '</div>';
         
         Swal.fire({ 
             title: '圖層清查管理 (v3.06)', 
@@ -341,60 +353,8 @@
             });
         }
     };
-
-    // ---------------------------------------------------------
-    // 5. 切換清查狀態 (寫入 Firestore)
-    // ---------------------------------------------------------
-    window.toggleAuditStatus = async function(kmlId, status) {
-        if (!checkHasAuditPermission()) return;
-        
-        try {
-            Swal.close(); 
-
-            if (status) {
-                const { value: count } = await Swal.fire({
-                    title: '設定必填照片張數', 
-                    input: 'select', 
-                    inputOptions: { '2':'2張','3':'3張','5':'5張' }, 
-                    inputValue: '2',
-                    showCancelButton: true
-                });
-                
-                if (count) {
-                    Swal.fire({ title: '正在開啟清查...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-                    
-                    await firebase.firestore().collection(APP_PATH).doc(kmlId).set({ 
-                        isAuditing: true, 
-                        targetPhotos: parseInt(count, 10) 
-                    }, { merge: true });
-                    
-                    Swal.fire({ icon: 'success', title: '已開啟清查模式', timer: 1000, showConfirmButton: false });
-                } else {
-                    window.showAuditActionModal();
-                }
-            } else {
-                Swal.fire({ title: '正在關閉清查...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-                
-                await firebase.firestore().collection(APP_PATH).doc(kmlId).set({ 
-                    isAuditing: false 
-                }, { merge: true });
-                
-                Swal.fire({ icon: 'success', title: '已關閉清查模式', timer: 1000, showConfirmButton: false });
-            }
-        } catch (error) {
-            console.error("切換清查狀態失敗:", error);
-            Swal.fire({
-                icon: 'error',
-                title: '同步至資料庫失敗',
-                text: `請檢查網路連線或權限設定。\n(${error.message})`,
-                confirmButtonText: '返回管理視窗'
-            }).then(() => {
-                window.showAuditActionModal();
-            });
-        }
-    };
-
-    // ---------------------------------------------------------
+    
+// ---------------------------------------------------------
     // 5. 清查資料編輯與上傳邏輯
     // ---------------------------------------------------------
     window.openAuditEditor = async function(isModifyMode = false) {
@@ -417,7 +377,7 @@
         const currentStatus = historyRecord.deviceStatus || '';
         const currentNote = historyRecord.note || '';
 
-        // 暫存圖片預覽處理函式
+        // 圖片處理快照函式
         window._tempPreview = function(input, index) {
             if (input.files && input.files[0]) {
                 const reader = new FileReader();
@@ -445,44 +405,33 @@
             }
         };
 
-        // 1. 正確補全 photoHtml 的宣告與迴圈構建
-        let photoHtml = '<div class="audit-photo-grid" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(80px, 1fr)); gap:8px; margin:5px 0 15px 0;">';
-        
+        // 拼接照片上傳 UI (整理 HTML 結構)
+        let photoHtml = '';
         for (let i = 0; i < maxPhotos; i++) {
             const photoData = currentPhotos[i] || '';
-            const imgDisplay = photoData ? 'block' : 'none';
-            const iconDisplay = photoData ? 'none' : 'flex';
-
+            
             photoHtml += `
-                <div class="audit-photo-box" style="position:relative; border:1px dashed #ccc; height:80px; text-align:center;">
-                    <!-- 1. 主拍照點擊區 (適用手機拍攝) -->
-                    <input class="audit-photo-input-main" 
-                           type="file" accept="image/*" capture="environment" 
-                           onchange="window._tempPreview(this, ${i})" 
-                           style="position:absolute; top:0; left:0; width:100%; height:100%; opacity:0; z-index:2; cursor:pointer;"
-                           title="拍照上傳照片 ${i + 1}">
+                <div style="position:relative; margin-bottom:20px;">
+                    <!-- 1. 照片上傳容器 (高度 85px) -->
+                    <div style="border:2px dashed #ccc; height:85px; position:relative; display:flex; align-items:center; justify-content:center; background:#fafafa; border-radius:8px; overflow:hidden; cursor:pointer;">
+                        <!-- 預覽圖 -->
+                        <img id="audit-prev-${i}" src="${photoData}" style="width:100%; height:100%; object-fit:cover; display:${photoData ? 'block' : 'none'}; position:absolute; top:0; left:0; z-index:1;">
+                        
+                        <!-- 預設相機圖示 -->
+                        <span id="audit-icon-${i}" style="font-size:24px; color:#bbb; display:${photoData ? 'none' : 'block'}; z-index:1;">📷</span>
                     
-                    <!-- 2. 圖示與文字 -->
-                    <div id="audit-icon-${i}" class="audit-photo-placeholder" style="display:${iconDisplay}; flex-direction:column; justify-content:center; align-items:center; height:100%;">
-                        <span class="icon">📷</span>
-                        <span class="text" style="font-size:11px;">照片 ${i + 1}</span>
+                        <!-- 拍照 Input (覆蓋上方區域，觸發相機) -->
+                        <input type="file" accept="image/*" capture="environment" onchange="window._tempPreview(this, ${i})" style="position:absolute; width:100%; height:100%; opacity:0; z-index:2; cursor:pointer;" title="現場拍照">
                     </div>
-
-                    <!-- 3. 預覽圖 -->
-                    <img id="audit-prev-${i}" class="audit-photo-img" src="${photoData}" style="display:${imgDisplay}; width:100%; height:100%; object-fit:cover;">
-
-                    <!-- 4. 右下角：開啟舊檔按鈕 -->
-                    <div class="audit-photo-btn-sub" style="position:absolute; bottom:2px; right:2px; z-index:3; background:rgba(0,0,0,0.6); padding:2px 4px; border-radius:3px;">
-                        <label for="audit-file-${i}" style="color:white; font-size:10px; cursor:pointer;">開啟舊檔</label>
-                        <input id="audit-file-${i}" type="file" accept="image/*" 
-                               onchange="window._tempPreview(this, ${i})" 
-                               style="display:none;">
-                    </div>
+                    
+                    <!-- 2. 舊檔按鈕 (壓在邊緣下方) -->
+                    <label style="position:absolute; left:50%; transform:translateX(-50%); bottom:-12px; z-index:3; background:#555; color:#fff; font-size:11px; padding:3px 10px; border-radius:12px; cursor:pointer; display:flex; align-items:center; gap:4px; box-shadow:0 2px 4px rgba(0,0,0,0.2); white-space:nowrap; border:1px solid #777;">
+                        <span>🖼️</span> 舊檔
+                        <input type="file" accept="image/*" onchange="window._tempPreview(this, ${i})" style="display:none;">
+                    </label>
                 </div>`;
         }
-        photoHtml += '</div>';
 
-        // 2. 開啟 SweetAlert2 填寫對話框
         const { value: res } = await Swal.fire({
             title: `<div style="font-size:18px;">${isModifyMode ? '修改' : '填寫'}清查紀錄：${escapeHtml(pointKey)}</div>`,
             html: `<div style="text-align:left;">
@@ -494,7 +443,9 @@
                     <option value="遺失" ${currentStatus==='遺失'?'selected':''}>遺失</option>
                 </select>
                 <label style="font-size:14px;"><b>現場照片 (需拍${maxPhotos}張)</b></label>
-                ${photoHtml}
+                <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(90px, 1fr)); gap:10px; margin:10px 0 15px 0;">
+                    ${photoHtml}
+                </div>
                 <textarea id="swal-note" class="swal2-textarea" style="width:100%;height:60px;margin:0;" placeholder="輸入備註事項...">${escapeHtml(currentNote)}</textarea>
             </div>`,
             showCancelButton: true,
@@ -507,10 +458,8 @@
             }
         });
 
-        // 清理全域暫存函式
         delete window._tempPreview;
 
-        // 3. 上傳 Firebase Storage & 寫入 Firestore
         if (res) {
             Swal.fire({ title: '正在處理並上傳資料...', didOpen: () => Swal.showLoading(), allowOutsideClick: false });
             try {
@@ -588,6 +537,10 @@
             confirmButtonText: '關閉'
         });
     };
+
+    
+    
+
 
     // ---------------------------------------------------------
     // 打包 Firebase Storage 照片 (使用 CORS 代理下載)
