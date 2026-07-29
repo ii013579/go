@@ -838,100 +838,105 @@ canvas {
     font-size: 16px;
 }
 
-/* 外層 Grid 容器：強迫填滿 SweetAlert 寬度 */
+
+
+/* 1. 強制 Grid 父容器：給予 min-width: 100%，並強迫以 block/grid 展開 */
 .audit-photo-grid {
     display: grid !important;
     grid-template-columns: repeat(4, 1fr) !important;
-    gap: 10px !important;
+    gap: 8px !important;
     width: 100% !important;
+    min-width: 100% !important;
+    max-width: 100% !important;
     box-sizing: border-box !important;
-    margin-top: 12px !important;
-    margin-bottom: 20px !important;
+    margin-top: 10px !important;
+    margin-bottom: 15px !important;
+    clear: both !important;
 }
 
-/* 個別照片方塊：給予最小高度保底，絕對不被壓縮 */
+/* 2. 單一方塊：取消 min-height，改給固定 width:100% 與保底高度 */
 .audit-photo-box {
     width: 100% !important;
-    min-height: 80px !important;
-    aspect-ratio: 1 / 1 !important;
-    border: 2px dashed #b0b0b0 !important;
-    background-color: #fafafa !important;
-    border-radius: 8px !important;
+    min-width: 0 !important; /* 💡 關鍵：允許 grid 子元素縮放不受內容擠壓 */
+    height: 0 !important;
+    padding-bottom: 100% !important; /* 💡 用 Padding 技巧做絕對正方形，100% 支援舊版/移動端瀏覽器 */
     position: relative !important;
+    border: 1px dashed #a0a0a0 !important;
+    background-color: #fafafa !important;
+    border-radius: 6px !important;
+    box-sizing: border-box !important;
+    overflow: hidden !important; /* 貼合邊界 */
+}
+
+/* 3. 內容層 (相機圖示 + 文字)：填滿 Padding 產生的正方形 */
+.audit-photo-placeholder {
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
     display: flex !important;
     flex-direction: column !important;
     align-items: center !important;
     justify-content: center !important;
-    box-sizing: border-box !important;
-    overflow: hidden !important; /* 💡 設為 hidden，完美裁切邊角不突出 */
-}
-
-/* 相機圖示與提示字容器 */
-.audit-photo-placeholder {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    pointer-events: none;
-    z-index: 1;
+    pointer-events: none !important;
+    z-index: 1 !important;
 }
 
 .audit-photo-placeholder .icon {
-    font-size: 26px;
-    line-height: 1;
-    color: #777;
+    font-size: 22px !important;
+    line-height: 1 !important;
 }
 
 .audit-photo-placeholder .text {
-    font-size: 11px;
-    color: #555;
-    font-weight: bold;
-    margin-top: 4px;
+    font-size: 10px !important;
+    color: #444 !important;
+    font-weight: bold !important;
+    margin-top: 2px !important;
+    white-space: nowrap !important;
 }
 
-/* 預覽圖 */
+/* 4. 預覽圖 */
 .audit-photo-img {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    border-radius: 6px;
-    z-index: 1;
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: cover !important;
+    z-index: 1 !important;
 }
 
-/* 主拍照點擊層 (全滿覆蓋) */
+/* 5. 點擊上傳層 */
 .audit-photo-input-main {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    opacity: 0;
-    z-index: 2;
-    cursor: pointer;
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    opacity: 0 !important;
+    z-index: 2 !important;
+    cursor: pointer !important;
 }
 
-/* 右下角「開啟舊檔」標籤容器 */
+/* 6. 右下角：開啟舊檔按鈕 */
 .audit-photo-btn-sub {
-    position: absolute;
-    bottom: 2px !important; /* 💡 從 -6px 改為 2px (貼合內側右下角) */
-    right: 2px !important;  /* 💡 從 -6px 改為 2px */
-    z-index: 4;
+    position: absolute !important;
+    bottom: 2px !important;
+    right: 2px !important;
+    z-index: 4 !important;
 }
 
 .audit-photo-btn-sub label {
-    display: inline-block !important;
-    font-size: 9px !important; /* 微調字體大小，避免佔據太大視覺空間 */
-    line-height: 1.1 !important;
+    display: block !important;
+    font-size: 9px !important;
+    line-height: 1 !important;
     white-space: nowrap !important;
-    color: #333 !important;
-    cursor: pointer;
-    background: rgba(255, 255, 255, 0.95) !important; /* 帶一點透明白底，不遮擋背景 */
-    padding: 2px 4px !important;
-    border: 1px solid #777 !important;
+    color: #222 !important;
+    cursor: pointer !important;
+    background: rgba(255, 255, 255, 0.9) !important;
+    padding: 2px 3px !important;
+    border: 1px solid #888 !important;
     border-radius: 3px !important;
     box-shadow: 0 1px 2px rgba(0,0,0,0.2) !important;
-    font-weight: normal !important;
 }

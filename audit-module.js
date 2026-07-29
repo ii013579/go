@@ -406,42 +406,33 @@
 
        
         // 核心修正：強制 min-width / min-height，並將寬度 100% 寫死
-        let photoHtml = '<div class="audit-photo-grid">';
+        let photoHtml = '<div style="width:100%; box-sizing:border-box;"><div class="audit-photo-grid">';
         
         for (let i = 0; i < maxPhotos; i++) {
             const photoData = currentPhotos[i] || '';
             const imgDisplay = photoData ? 'block' : 'none';
             const iconDisplay = photoData ? 'none' : 'flex';
-
+        
             photoHtml += `
                 <div class="audit-photo-box">
+                    <input class="audit-photo-input-main" type="file" accept="image/*" capture="environment" onchange="window._tempPreview(this, ${i})">
                     
-                    <!-- 1. 主拍照點擊區 -->
-                    <input class="audit-photo-input-main" 
-                           type="file" accept="image/*" capture="environment" 
-                           onchange="window._tempPreview(this, ${i})" 
-                           title="拍照上傳照片 ${i + 1}">
-                    
-                    <!-- 2. 圖示與文字 -->
                     <div id="audit-icon-${i}" class="audit-photo-placeholder" style="display:${iconDisplay};">
                         <span class="icon">📷</span>
                         <span class="text">照片 ${i + 1}</span>
                     </div>
-
-                    <!-- 3. 預覽圖 -->
+        
                     <img id="audit-prev-${i}" class="audit-photo-img" src="${photoData}" style="display:${imgDisplay};">
-
-                    <!-- 4. 右下角：開啟舊檔按鈕 -->
+        
                     <div class="audit-photo-btn-sub">
                         <label for="audit-file-${i}">開啟舊檔</label>
-                        <input id="audit-file-${i}" type="file" accept="image/*" 
-                               onchange="window._tempPreview(this, ${i})" 
-                               style="display:none;">
+                        <input id="audit-file-${i}" type="file" accept="image/*" onchange="window._tempPreview(this, ${i})" style="display:none;">
                     </div>
                 </div>`;
         }
-
-        photoHtml += '</div>';
+        
+        photoHtml += '</div></div>';
+        
 
         const { value: res } = await Swal.fire({
             title: `<div style="font-size:18px;">${isModifyMode ? '修改' : '填寫'}清查紀錄：${escapeHtml(pointKey)}</div>`,
@@ -611,9 +602,9 @@
             let failCount = 0;
 
             // 免設定 CORS 的跨域代理伺服器
-            const PROXY_URL = 'https://corsproxy.io/?';
+            const PROXY_URL = 'https://images.weserv.nl/?url=';
 
-            // 4. 分批拉取照片 (一次 3 個，避免請求過於頻繁)
+            // 4. 分批拉取照片 (一次 3 個，避免併發過多)
             const BATCH_SIZE = 3;
             for (let i = 0; i < items.length; i += BATCH_SIZE) {
                 const batch = items.slice(i, i + BATCH_SIZE);
@@ -622,18 +613,20 @@
                     try {
                         const fileName = fileRef.name;
                         
-                        // A. 取得 Firebase Storage 帶 Token 的下載網址
+                        // A. 取得帶有 token 的原始網址
                         const downloadUrl = await fileRef.getDownloadURL();
 
-                        // B. 加上 CORS 代理，繞過瀏覽器同源限制
-                        const proxiedUrl = PROXY_URL + encodeURIComponent(downloadUrl);
+                        // B. 將網址中的 https:// 去掉，丟給 weserv 代理處理
+                        // 範例：https://images.weserv.nl/?url=firebasestorage.googleapis.com/...
+                        const cleanUrl = downloadUrl.replace(/^https?:\/\//, '');
+                        const proxiedUrl = PROXY_URL + encodeURIComponent(cleanUrl);
 
-                        // C. 抓取照片二進制 Buffer
+                        // C. 抓取照片 ArrayBuffer
                         const resp = await fetch(proxiedUrl);
                         if (!resp.ok) throw new Error(`HTTP Error ${resp.status}`);
                         const arrayBuffer = await resp.arrayBuffer();
 
-                        // D. 將照片寫入 ZIP
+                        // D. 寫入 ZIP
                         rootFolder.file(fileName, arrayBuffer);
 
                         // E. 記錄至 CSV
