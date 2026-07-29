@@ -405,18 +405,19 @@
         const layerProps = activePoint.feature?.properties || activePoint.properties || {};
         const pointKey = layerProps.name || layerProps.title || layerProps.id || "未知點位"; 
         const kmlId = layerProps.kmlId || window.mapNamespace?.currentKmlLayerId;
-        const config = window.globalAuditConfigs[kmlId] || { targetPhotos: 2 };
-        const maxPhotos = config.targetPhotos;
+        const config = (window.globalAuditConfigs && window.globalAuditConfigs[kmlId]) || { targetPhotos: 2 };
+        const maxPhotos = config.targetPhotos || 2;
 
         const selectEl = document.getElementById('kmlLayerSelect');
         const rawLayerName = selectEl?.options[selectEl.selectedIndex]?.getAttribute('data-basename') || '預設區域';
         const kmlLayerName = rawLayerName.replace(/\.kml$/i, '').trim(); 
 
-        const historyRecord = isModifyMode ? (window.auditLayersState[kmlId]?.[pointKey] || {}) : {};
+        const historyRecord = isModifyMode ? (window.auditLayersState?.[kmlId]?.[pointKey] || {}) : {};
         const currentPhotos = Array.isArray(historyRecord.photos) ? [...historyRecord.photos] : new Array(maxPhotos).fill('');
         const currentStatus = historyRecord.deviceStatus || '';
         const currentNote = historyRecord.note || '';
 
+        // 暫存圖片預覽處理函式
         window._tempPreview = function(input, index) {
             if (input.files && input.files[0]) {
                 const reader = new FileReader();
@@ -444,40 +445,44 @@
             }
         };
 
-       
-        // 核心修正：強制 min-width / min-height，並將寬度 100% 寫死
+        // 1. 正確補全 photoHtml 的宣告與迴圈構建
+        let photoHtml = '<div class="audit-photo-grid" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(80px, 1fr)); gap:8px; margin:5px 0 15px 0;">';
+        
+        for (let i = 0; i < maxPhotos; i++) {
+            const photoData = currentPhotos[i] || '';
+            const imgDisplay = photoData ? 'block' : 'none';
+            const iconDisplay = photoData ? 'none' : 'flex';
+
             photoHtml += `
-                <div class="audit-photo-box">
-                    
-                    <!-- 1. 主拍照點擊區 -->
+                <div class="audit-photo-box" style="position:relative; border:1px dashed #ccc; height:80px; text-align:center;">
+                    <!-- 1. 主拍照點擊區 (適用手機拍攝) -->
                     <input class="audit-photo-input-main" 
                            type="file" accept="image/*" capture="environment" 
                            onchange="window._tempPreview(this, ${i})" 
+                           style="position:absolute; top:0; left:0; width:100%; height:100%; opacity:0; z-index:2; cursor:pointer;"
                            title="拍照上傳照片 ${i + 1}">
                     
                     <!-- 2. 圖示與文字 -->
-                    <div id="audit-icon-${i}" class="audit-photo-placeholder" style="display:${iconDisplay};">
+                    <div id="audit-icon-${i}" class="audit-photo-placeholder" style="display:${iconDisplay}; flex-direction:column; justify-content:center; align-items:center; height:100%;">
                         <span class="icon">📷</span>
-                        <span class="text">照片 ${i + 1}</span>
+                        <span class="text" style="font-size:11px;">照片 ${i + 1}</span>
                     </div>
 
                     <!-- 3. 預覽圖 -->
-                    <img id="audit-prev-${i}" class="audit-photo-img" src="${photoData}" style="display:${imgDisplay};">
+                    <img id="audit-prev-${i}" class="audit-photo-img" src="${photoData}" style="display:${imgDisplay}; width:100%; height:100%; object-fit:cover;">
 
                     <!-- 4. 右下角：開啟舊檔按鈕 -->
-                    <div class="audit-photo-btn-sub">
-                        <label for="audit-file-${i}">開啟舊檔</label>
+                    <div class="audit-photo-btn-sub" style="position:absolute; bottom:2px; right:2px; z-index:3; background:rgba(0,0,0,0.6); padding:2px 4px; border-radius:3px;">
+                        <label for="audit-file-${i}" style="color:white; font-size:10px; cursor:pointer;">開啟舊檔</label>
                         <input id="audit-file-${i}" type="file" accept="image/*" 
                                onchange="window._tempPreview(this, ${i})" 
                                style="display:none;">
                     </div>
                 </div>`;
         }
+        photoHtml += '</div>';
 
-        photoHtml += '</div></div>';
-
-        
-
+        // 2. 開啟 SweetAlert2 填寫對話框
         const { value: res } = await Swal.fire({
             title: `<div style="font-size:18px;">${isModifyMode ? '修改' : '填寫'}清查紀錄：${escapeHtml(pointKey)}</div>`,
             html: `<div style="text-align:left;">
@@ -489,7 +494,7 @@
                     <option value="遺失" ${currentStatus==='遺失'?'selected':''}>遺失</option>
                 </select>
                 <label style="font-size:14px;"><b>現場照片 (需拍${maxPhotos}張)</b></label>
-                <div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(80px, 1fr));gap:8px;margin:5px 0 15px 0;">${photoHtml}</div>
+                ${photoHtml}
                 <textarea id="swal-note" class="swal2-textarea" style="width:100%;height:60px;margin:0;" placeholder="輸入備註事項...">${escapeHtml(currentNote)}</textarea>
             </div>`,
             showCancelButton: true,
@@ -502,8 +507,10 @@
             }
         });
 
+        // 清理全域暫存函式
         delete window._tempPreview;
 
+        // 3. 上傳 Firebase Storage & 寫入 Firestore
         if (res) {
             Swal.fire({ title: '正在處理並上傳資料...', didOpen: () => Swal.showLoading(), allowOutsideClick: false });
             try {
@@ -540,12 +547,14 @@
                     .doc(pointKey) 
                     .set(structuredData, { merge: true });
                 
-                await generateLayerCsvReport(kmlId, kmlLayerName, maxPhotos);
+                if (typeof generateLayerCsvReport === 'function') {
+                    await generateLayerCsvReport(kmlId, kmlLayerName, maxPhotos);
+                }
 
                 Swal.fire({ icon: 'success', title: '儲存成功', timer: 1000, showConfirmButton: false });
                 
-                forceMapRefresh();
-                setTimeout(updateBottomBtnState, 300);
+                if (typeof forceMapRefresh === 'function') forceMapRefresh();
+                if (typeof updateBottomBtnState === 'function') setTimeout(updateBottomBtnState, 300);
             } catch (e) { 
                 console.error("儲存清查資料失敗:", e);
                 Swal.fire('錯誤', e.message || '儲存失敗', 'error'); 
