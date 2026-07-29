@@ -277,25 +277,42 @@
             const baseName = opt.getAttribute('data-basename') || opt.textContent.split(' (')[0];
             const safeValue = escapeHtml(opt.value);
 
-            listHtml += `
-                <div style="display:flex; align-items:center; justify-content:space-between; padding:12px; border-bottom:1px solid #eee;">
-                    <div>
-                        <div style="font-weight:bold; font-size:14px;">${escapeHtml(baseName)}</div>
-                        ${isAuditing ? `<div style="color: #e67e22; font-size:12px;">清查中：需照片 ${targetPhotos} 張</div>` : `<div style="color: #999; font-size: 12px;">未開啟清查</div>`}
+        let photoHtml = '<div style="width:100%; box-sizing:border-box;"><div class="audit-photo-grid">';
+        
+        for (let i = 0; i < maxPhotos; i++) {
+            const photoData = currentPhotos[i] || '';
+            const imgDisplay = photoData ? 'block' : 'none';
+            const iconDisplay = photoData ? 'none' : 'flex';
+
+            photoHtml += `
+                <div class="audit-photo-box">
+                    
+                    <!-- 1. 主拍照點擊區 -->
+                    <input class="audit-photo-input-main" 
+                           type="file" accept="image/*" capture="environment" 
+                           onchange="window._tempPreview(this, ${i})" 
+                           title="拍照上傳照片 ${i + 1}">
+                    
+                    <!-- 2. 圖示與文字 -->
+                    <div id="audit-icon-${i}" class="audit-photo-placeholder" style="display:${iconDisplay};">
+                        <span class="icon">📷</span>
+                        <span class="text">照片 ${i + 1}</span>
                     </div>
-                    <div style="display:flex; gap:6px;">
-                        ${isAuditing ? `
-                            <button onclick="window.downloadAuditPhotosZip('${safeValue}')" title="下載此圖層所有照片為 ZIP" style="background:#8e44ad; color:white; border:none; padding:6px 10px; border-radius:4px; cursor:pointer; font-size:12px;">
-                                📦 下載照片
-                            </button>
-                        ` : ''}
-                        <button onclick="window.toggleAuditStatus('${safeValue}', ${!isAuditing})" style="background:${isAuditing ? '#666' : '#3498db'}; color:white; border:none; padding:6px 12px; border-radius:4px; cursor:pointer; font-size:12px;">
-                            ${isAuditing ? '關閉' : '開啟'}
-                        </button>
+
+                    <!-- 3. 預覽圖 -->
+                    <img id="audit-prev-${i}" class="audit-photo-img" src="${photoData}" style="display:${imgDisplay};">
+
+                    <!-- 4. 右下角：開啟舊檔按鈕 -->
+                    <div class="audit-photo-btn-sub">
+                        <label for="audit-file-${i}">開啟舊檔</label>
+                        <input id="audit-file-${i}" type="file" accept="image/*" 
+                               onchange="window._tempPreview(this, ${i})" 
+                               style="display:none;">
                     </div>
                 </div>`;
-        });
-        listHtml += '</div>';
+        }
+
+        photoHtml += '</div></div>';
         
         Swal.fire({ 
             title: '圖層清查管理 (v3.06)', 
