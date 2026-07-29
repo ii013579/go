@@ -620,7 +620,7 @@
                         const downloadUrl = await fileRef.getDownloadURL();
 
                         // B. 將網址透過 CORS Proxy 代理封裝，繞過瀏覽器跨網域限制
-                        const proxiedUrl = 'https://corsproxy.io/?' + encodeURIComponent(downloadUrl);
+                        const proxiedUrl = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(downloadUrl);
 
                         // C. 透過 Fetch 取得圖片的 Blob 資料
                         const response = await fetch(proxiedUrl);
