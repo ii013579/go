@@ -406,7 +406,7 @@
 
        
         // 核心修正：強制 min-width / min-height，並將寬度 100% 寫死
-        let photoHtml = '<div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:10px; margin-top:10px; margin-bottom:20px; width:100% !important; min-width:100%; box-sizing:border-box;">';
+        let photoHtml = '<div class="audit-photo-grid">';
         
         for (let i = 0; i < maxPhotos; i++) {
             const photoData = currentPhotos[i] || '';
@@ -414,26 +414,26 @@
             const iconDisplay = photoData ? 'none' : 'flex';
 
             photoHtml += `
-                <div style="width:100% !important; min-height:85px; aspect-ratio:1/1; border:2px dashed #bbb; position:relative; display:flex; flex-direction:column; align-items:center; justify-content:center; background:#fafafa; border-radius:8px; overflow:visible; box-sizing:border-box;">
+                <div class="audit-photo-box">
                     
                     <!-- 1. 主拍照點擊區 -->
-                    <input type="file" accept="image/*" capture="environment" 
+                    <input class="audit-photo-input-main" 
+                           type="file" accept="image/*" capture="environment" 
                            onchange="window._tempPreview(this, ${i})" 
-                           style="position:absolute; width:100%; height:100%; top:0; left:0; opacity:0; z-index:2; cursor:pointer;"
                            title="拍照上傳照片 ${i + 1}">
                     
                     <!-- 2. 圖示與文字 -->
-                    <div id="audit-icon-${i}" style="display:${iconDisplay}; flex-direction:column; align-items:center; justify-content:center; pointer-events:none; z-index:1;">
-                        <span style="font-size:26px; line-height:1; color:#888;">📷</span>
-                        <span style="font-size:11px; color:#555; margin-top:3px; font-weight:bold;">照片 ${i + 1}</span>
+                    <div id="audit-icon-${i}" class="audit-photo-placeholder" style="display:${iconDisplay};">
+                        <span class="icon">📷</span>
+                        <span class="text">照片 ${i + 1}</span>
                     </div>
 
                     <!-- 3. 預覽圖 -->
-                    <img id="audit-prev-${i}" src="${photoData}" style="position:absolute; top:0; left:0; width:100%; height:100%; object-fit:cover; border-radius:6px; display:${imgDisplay}; z-index:1;">
+                    <img id="audit-prev-${i}" class="audit-photo-img" src="${photoData}" style="display:${imgDisplay};">
 
                     <!-- 4. 右下角：開啟舊檔按鈕 -->
-                    <div style="position:absolute; bottom:-6px; right:-6px; z-index:4;">
-                        <label for="audit-file-${i}" style="display:inline-block !important; font-size:10px !important; line-height:1.2 !important; white-space:nowrap !important; color:#000 !important; cursor:pointer; background:#fff !important; padding:2px 4px !important; border:1px solid #000 !important; border-radius:3px !important; box-shadow:0 1px 3px rgba(0,0,0,0.3); font-weight:normal;">開啟舊檔</label>
+                    <div class="audit-photo-btn-sub">
+                        <label for="audit-file-${i}">開啟舊檔</label>
                         <input id="audit-file-${i}" type="file" accept="image/*" 
                                onchange="window._tempPreview(this, ${i})" 
                                style="display:none;">
