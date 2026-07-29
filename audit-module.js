@@ -277,7 +277,7 @@
             const baseName = opt.getAttribute('data-basename') || opt.textContent.split(' (')[0];
             const safeValue = escapeHtml(opt.value);
 
-        let photoHtml = '<div style="width:100%; box-sizing:border-box;"><div class="audit-photo-grid">';
+         let photoHtml = '<div style="width:100%; box-sizing:border-box;"><div class="audit-photo-grid">';
         
         for (let i = 0; i < maxPhotos; i++) {
             const photoData = currentPhotos[i] || '';
@@ -370,7 +370,59 @@
             });
         }
     };
-    
+
+    // ---------------------------------------------------------
+    // 5. 切換清查狀態 (寫入 Firestore)
+    // ---------------------------------------------------------
+    window.toggleAuditStatus = async function(kmlId, status) {
+        if (!checkHasAuditPermission()) return;
+        
+        try {
+            Swal.close(); 
+
+            if (status) {
+                const { value: count } = await Swal.fire({
+                    title: '設定必填照片張數', 
+                    input: 'select', 
+                    inputOptions: { '2':'2張','3':'3張','5':'5張' }, 
+                    inputValue: '2',
+                    showCancelButton: true
+                });
+                
+                if (count) {
+                    Swal.fire({ title: '正在開啟清查...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+                    
+                    await firebase.firestore().collection(APP_PATH).doc(kmlId).set({ 
+                        isAuditing: true, 
+                        targetPhotos: parseInt(count, 10) 
+                    }, { merge: true });
+                    
+                    Swal.fire({ icon: 'success', title: '已開啟清查模式', timer: 1000, showConfirmButton: false });
+                } else {
+                    window.showAuditActionModal();
+                }
+            } else {
+                Swal.fire({ title: '正在關閉清查...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+                
+                await firebase.firestore().collection(APP_PATH).doc(kmlId).set({ 
+                    isAuditing: false 
+                }, { merge: true });
+                
+                Swal.fire({ icon: 'success', title: '已關閉清查模式', timer: 1000, showConfirmButton: false });
+            }
+        } catch (error) {
+            console.error("切換清查狀態失敗:", error);
+            Swal.fire({
+                icon: 'error',
+                title: '同步至資料庫失敗',
+                text: `請檢查網路連線或權限設定。\n(${error.message})`,
+                confirmButtonText: '返回管理視窗'
+            }).then(() => {
+                window.showAuditActionModal();
+            });
+        }
+    };
+
     // ---------------------------------------------------------
     // 5. 清查資料編輯與上傳邏輯
     // ---------------------------------------------------------
