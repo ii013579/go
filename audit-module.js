@@ -613,23 +613,29 @@
                     try {
                         const fileName = fileRef.name;
                         
-                        // A. 取得帶有 token 的原始網址
+                        // A. 取得 Firebase Storage 帶 token 的下載網址
                         const downloadUrl = await fileRef.getDownloadURL();
 
-                        // B. 將網址中的 https:// 去掉，丟給 weserv 代理處理
-                        // 範例：https://images.weserv.nl/?url=firebasestorage.googleapis.com/...
-                        const cleanUrl = downloadUrl.replace(/^https?:\/\//, '');
-                        const proxiedUrl = PROXY_URL + encodeURIComponent(cleanUrl);
+                        // B. 使用原生 XHR / Blob 繞過第三方 Proxy 的網址解析問題
+                        const blob = await new Promise((resolve, reject) => {
+                            const xhr = new XMLHttpRequest();
+                            xhr.responseType = 'blob';
+                            xhr.onload = (event) => {
+                                if (xhr.status >= 200 && xhr.status < 300) {
+                                    resolve(xhr.response);
+                                } else {
+                                    reject(new Error(`HTTP Error ${xhr.status}`));
+                                }
+                            };
+                            xhr.onerror = () => reject(new Error('Network Error'));
+                            xhr.open('GET', downloadUrl);
+                            xhr.send();
+                        });
 
-                        // C. 抓取照片 ArrayBuffer
-                        const resp = await fetch(proxiedUrl);
-                        if (!resp.ok) throw new Error(`HTTP Error ${resp.status}`);
-                        const arrayBuffer = await resp.arrayBuffer();
+                        // C. 寫入 ZIP (直接傳入 Blob)
+                        rootFolder.file(fileName, blob);
 
-                        // D. 寫入 ZIP
-                        rootFolder.file(fileName, arrayBuffer);
-
-                        // E. 記錄至 CSV
+                        // D. 記錄至 CSV
                         const safeFileName = fileName.replace(/"/g, '""');
                         const safeFullPath = fileRef.fullPath.replace(/"/g, '""');
                         const safeUrl = downloadUrl.replace(/"/g, '""');
