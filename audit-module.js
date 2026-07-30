@@ -620,7 +620,7 @@
             await firebase.firestore()
                 .collection(APP_PATH)
                 .doc(kmlId)
-                .collection('audit_records')
+                .collection('auditrecords')
                 .doc(data.pointKey)
                 .set(recordData, { merge: true });
     
