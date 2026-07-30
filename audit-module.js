@@ -1058,7 +1058,6 @@
                 if (data.isAuditing) startAuditDataListener(doc.id);
             });
             updateKmlSelectUI();
-            updateAuditAddPointBtnUI(); // ⚡ 當 Firestore 設定變更時，即時更新右下角按鈕狀態
             forceMapRefresh();
         }, err => {
             console.warn("監聽根目錄圖層配置受限或中斷:", err.message);
@@ -1067,12 +1066,7 @@
 
     function startAuditDataListener(kmlId) {
         if (auditUnsubscribes[kmlId]) return;
-        
-        // 修正：集合名稱與寫入邏輯統一使用 'audit_records' (底線底線)
-        auditUnsubscribes[kmlId] = firebase.firestore()
-            .collection(APP_PATH)
-            .doc(kmlId)
-            .collection('audit_records')
+        auditUnsubscribes[kmlId] = firebase.firestore().collection(APP_PATH).doc(kmlId).collection('auditRecords')
             .onSnapshot(snapshot => {
                 const updates = {};
                 snapshot.forEach(doc => {
@@ -1104,36 +1098,7 @@
             if (!opt.getAttribute('data-basename')) opt.setAttribute('data-basename', baseName);
             opt.textContent = config?.isAuditing ? `${baseName} (清查中:${config.targetPhotos}張)` : baseName;
         });
-        
-        // 選單變更時順便切換右下角按鈕顯隱狀態
-        updateAuditAddPointBtnUI();
     }
-
-    /**
-     * 專用控制 UI：切換右下角「新增點位」按鈕顯隱
-     */
-    window.updateAuditAddPointBtnUI = function() {
-        const targetKmlId = window.currentActiveKmlId;
-        const addBtnEl = window.addPointControlRef?._container;
-        if (!addBtnEl) return;
-
-        if (!targetKmlId) {
-            addBtnEl.style.display = 'none';
-            return;
-        }
-
-        const config = window.globalAuditConfigs?.[targetKmlId] || {};
-        const isAuditing = config.isAuditing || false;
-        const hasPermission = typeof checkHasAuditPermission === 'function' ? checkHasAuditPermission() : false;
-
-        // 只有在「開啟清查」且「具備權限」時，右下角常駐按鈕才會顯示
-        if (isAuditing && hasPermission) {
-            addBtnEl.style.display = 'block';
-        } else {
-            addBtnEl.style.display = 'none';
-        }
-    };
-
 
     // ---------------------------------------------------------
     // 9. Leaflet 地圖初始化掛載 (輪詢檢查)
