@@ -426,7 +426,7 @@
     };
        
     // =========================================================
-    // 4.1獨立區段：手動新增點位功能 (Add Custom Point Module)
+    // 4.1 獨立區段：手動新增點位功能 (Add Custom Point Module)
     // =========================================================
     
     // 安全轉義字串 (防止 XSS 與 escapeHtml 未定義引發的 Error)
@@ -446,7 +446,7 @@
      * @param {string} kmlId - 目前選擇的圖層 ID
      */
     window.startAddCustomPoint = function(kmlId) {
-        if (!checkHasAuditPermission()) {
+        if (typeof checkHasAuditPermission === 'function' && !checkHasAuditPermission()) {
             Swal.fire('權限不足', '您的帳號角色不允許新增點位！', 'warning');
             return;
         }
@@ -502,7 +502,7 @@
         // 重置暫存照片全域變數
         window._tempAddPointPhotos = currentPhotos;
     
-        // 生成動態照片拍格 HTML (給予獨立 id 與預覽容器，避免覆蓋 input)
+        // 生成動態照片拍格 HTML (獨立預覽層，保留 input 節點)
         const photoHtml = Array.from({ length: maxPhotos }, (_, i) => `
             <div style="position:relative; width:100%; aspect-ratio:1; border:2px dashed #ccc; border-radius:6px; display:flex; align-items:center; justify-content:center; overflow:hidden; background:#f9f9f9;" id="add-photo-box-${i}">
                 <input type="file" accept="image/*" capture="environment" onchange="window.handleAddPointPhotoChange(event, ${i})" style="position:absolute; width:100%; height:100%; opacity:0; cursor:pointer; z-index:2;">
@@ -537,7 +537,6 @@
             cancelButtonText: '取消',
             focusConfirm: false,
             willClose: () => {
-                // 視窗關閉時自動清空記憶體
                 delete window._tempAddPointPhotos;
             },
             preConfirm: () => {
@@ -564,14 +563,13 @@
             }
         });
     
-        // 確認送出時寫入資料庫
         if (res) {
             await window.saveNewPointToFirestore(kmlId, res);
         }
     };
     
     /**
-     * 3. 處理新增點位視窗中的照片預覽轉換
+     * 3. 處理照片預覽轉碼
      */
     window.handleAddPointPhotoChange = function(event, index) {
         const file = event.target.files[0];
@@ -588,8 +586,7 @@
             
             if (containerBox && previewEl) {
                 containerBox.style.border = '2px solid #2ecc71';
-                // 只更新預覽區域的 HTML，保留原本透明的 <input type="file"> 不被覆蓋
-                previewEl.style.pointerEvents = 'none'; // 確保點擊能透傳給 input
+                previewEl.style.pointerEvents = 'none';
                 previewEl.innerHTML = `<img src="${base64Data}" style="width:100%; height:100%; object-fit:cover; position:absolute; top:0; left:0;">`;
             }
         };
@@ -597,21 +594,17 @@
     };
     
     /**
-     * 4. 寫入 Firestore 並在 Leaflet 地圖繪製點位
-     * @param {string} kmlId - 圖層 ID
-     * @param {object} data - 點位資料
+     * 4. 寫入 Firestore 並繪製 Marker
      */
     window.saveNewPointToFirestore = async function(kmlId, data) {
         Swal.fire({ title: '正在儲存新點位...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
     
         try {
-            // 1. 若有 Firebase Storage 模組，先進行照片上傳
             let finalPhotoUrls = data.photos;
             if (typeof window.uploadPhotosToStorage === 'function') {
                 finalPhotoUrls = await window.uploadPhotosToStorage(data.photos, kmlId, data.pointKey);
             }
     
-            // 2. 構建寫入資料庫格式
             const recordData = {
                 pointKey: data.pointKey,
                 status: '新增',
@@ -619,12 +612,11 @@
                 photos: finalPhotoUrls,
                 lat: data.lat,
                 lng: data.lng,
-                isCustomAdded: true, // 註記為手動新增點位
+                isCustomAdded: true,
                 updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
                 updatedBy: window.currentUserEmail || 'Unknown'
             };
     
-            // 寫入 Firestore 集合 (對應至該圖層的 audit_records)
             await firebase.firestore()
                 .collection(APP_PATH)
                 .doc(kmlId)
@@ -632,16 +624,15 @@
                 .doc(data.pointKey)
                 .set(recordData, { merge: true });
     
-            // 3. 在 Leaflet 地圖上即時畫出點位 (綠色點位)
             const map = window.mapNamespace?.map;
             if (map && typeof L !== 'undefined') {
                 const newMarker = L.circleMarker([data.lat, data.lng], {
                     radius: 7,
-                    fillColor: '#2ecc71', // 綠色
+                    fillColor: '#2ecc71',
                     color: '#27ae60',
                     weight: 2,
                     fillOpacity: 0.9,
-                    renderer: map.options.renderer // 繼承 Canvas 渲染器
+                    renderer: map.options.renderer
                 }).addTo(map);
     
                 newMarker.bindPopup(`
@@ -653,7 +644,6 @@
                     </div>
                 `);
     
-                // ⭐ 最佳化：若系統有全域 Marker 管理物件，建議同步存入
                 if (window.auditMarkersMap && kmlId) {
                     if (!window.auditMarkersMap[kmlId]) window.auditMarkersMap[kmlId] = {};
                     window.auditMarkersMap[kmlId][data.pointKey] = newMarker;
@@ -668,6 +658,58 @@
         }
     };
     
+    /**
+     * 5. 獨立控管 UI 渲染：向 Section 9 生成的容器注入按鈕 & 修正底部高度 (預防螢幕外遮擋)
+     */
+    window.renderAuditAddPointButton = function() {
+        const container = typeof bottomControl !== 'undefined' ? bottomControl._container : document.querySelector('.audit-bottom-menu');
+        if (!container) return;
+    
+        const currentKmlId = window.currentActiveKmlId;
+    
+        if (!currentKmlId) {
+            container.style.display = 'none';
+            return;
+        }
+    
+        // 💡 修正位置問題：自動升級 bottom 樣式，避開 iPhone/Android 底部導向列
+        container.style.bottom = 'calc(60px + env(safe-area-inset-bottom, 0px))';
+        container.style.display = 'flex';
+        container.style.gap = '10px';
+    
+        // 檢查或建立按鈕 (避免重複注入)
+        let btn = container.querySelector('#audit-add-point-btn');
+        if (!btn) {
+            btn = document.createElement('button');
+            btn.id = 'audit-add-point-btn';
+            btn.style.cssText = `
+                pointer-events: auto;
+                background: #2ecc71;
+                color: white;
+                border: none;
+                padding: 9px 18px;
+                border-radius: 25px;
+                font-weight: bold;
+                font-size: 14px;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+                cursor: pointer;
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                transition: transform 0.1s ease;
+            `;
+            btn.innerHTML = `➕ 新增點位`;
+            btn.onclick = () => window.startAddCustomPoint();
+            container.appendChild(btn);
+        }
+    };
+    
+    // 💡 監聽圖層切換事件，自動觸發渲染 (可配合專案中的切換圖層函式呼叫)
+    document.addEventListener('change', (e) => {
+        if (e.target && e.target.id === 'kmlLayerSelect') {
+            setTimeout(window.renderAuditAddPointButton, 200);
+        }
+    });    
     // ---------------------------------------------------------
     // 5. 清查資料編輯與上傳邏輯 (語法修復與 4 格狀態版)
     // ---------------------------------------------------------
@@ -1108,11 +1150,7 @@
                     this._container = L.DomUtil.create('div', 'audit-bottom-menu');
                     this._container.style.display = 'none';
                     this._container.style.position = 'fixed';
-                    
-                    // 💡 修改點 1：提高高度，並加入 iOS/Android 底部安全區域適應
-                    // env(safe-area-inset-bottom) 可以防止被手機底部的 Navigation Bar 擋住
-                    this._container.style.bottom = 'calc(60px + env(safe-area-inset-bottom, 0px))';
-                    
+                    this._container.style.bottom = '35px';
                     this._container.style.left = '50%';
                     this._container.style.transform = 'translateX(-50%)';
                     this._container.style.zIndex = '5000'; 
@@ -1122,14 +1160,7 @@
             });
             bottomControl = new AuditMenu();
             bottomControl.addTo(window.mapNamespace.map);
-    
-            if (typeof initGlobalConfigListener === 'function') {
-                initGlobalConfigListener();
-            }
-            if (typeof window.updateAuditBottomMenuUI === 'function') {
-                window.updateAuditBottomMenuUI();
-            }
-    
+            initGlobalConfigListener();
         } else if (checkAttempts >= maxAttempts) {
             clearInterval(checkMapInterval);
             console.warn("Leaflet 地圖載入逾時，停止清查選單初始化。");
