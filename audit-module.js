@@ -589,7 +589,7 @@
     // =========================================================
     // 4-4. 100% 復刻「新增點位清查紀錄」彈窗 UI 介面
     // =========================================================
-    window.uploadedPhotos = {}; // 暫存新增點位的上傳照片
+    window.uploadedPhotos = {}; // 暫存新增點位的上傳照片檔案
 
     window.openAddPointModal = async function(kmlId, lat, lng) {
         // 重置上傳照片快取
@@ -641,7 +641,7 @@
                 </div>
             </div>
 
-            <!-- 現場照片 -->
+            <!-- 現場照片 (100% 視覺復刻清查紀錄樣式) -->
             <div style="margin-bottom: 16px;">
                 <label style="display: block; font-size: 15px; font-weight: bold; color: #4a4a4a; margin-bottom: 8px;">
                     現場照片 (需拍 2 張) <span style="color: #e74c3c;">*必填</span>
@@ -659,10 +659,8 @@
                         align-items: center;
                         justify-content: center;
                         cursor: pointer;
-                    " onclick="document.getElementById('input-camera-1').click()">
+                    " onclick="window.triggerPhotoSelect('1')">
                         <span style="font-size: 24px;">📷</span>
-                        
-                        <!-- 舊檔標籤：阻擋冒泡並觸發圖庫 input -->
                         <div id="photo-tag-1" style="
                             position: absolute;
                             bottom: -8px;
@@ -672,12 +670,11 @@
                             padding: 2px 8px;
                             border-radius: 12px;
                             white-space: nowrap;
-                            cursor: pointer;
-                        " onclick="event.stopPropagation(); document.getElementById('input-gallery-1').click();">🖼️ 舊檔</div>
-
-                        <!-- 拍照用 Input (直接開啟相機) -->
+                            pointer-events: none;
+                        ">🖼️ 舊檔</div>
+                        
+                        <!-- 隱藏控制項：相機與相簿 -->
                         <input type="file" id="input-camera-1" accept="image/*" capture="environment" style="display: none;" onchange="window.handleAddPhotoUpload(this, 'photo-box-1', 'photo-tag-1')">
-                        <!-- 選舊檔用 Input (開啟相簿/檔案總管) -->
                         <input type="file" id="input-gallery-1" accept="image/*" style="display: none;" onchange="window.handleAddPhotoUpload(this, 'photo-box-1', 'photo-tag-1')">
                     </div>
 
@@ -693,10 +690,8 @@
                         align-items: center;
                         justify-content: center;
                         cursor: pointer;
-                    " onclick="document.getElementById('input-camera-2').click()">
+                    " onclick="window.triggerPhotoSelect('2')">
                         <span style="font-size: 24px;">📷</span>
-                        
-                        <!-- 舊檔標籤：阻擋冒泡並觸發圖庫 input -->
                         <div id="photo-tag-2" style="
                             position: absolute;
                             bottom: -8px;
@@ -706,12 +701,11 @@
                             padding: 2px 8px;
                             border-radius: 12px;
                             white-space: nowrap;
-                            cursor: pointer;
-                        " onclick="event.stopPropagation(); document.getElementById('input-gallery-2').click();">🖼️ 舊檔</div>
+                            pointer-events: none;
+                        ">🖼️ 舊檔</div>
 
-                        <!-- 拍照用 Input (直接開啟相機) -->
+                        <!-- 隱藏控制項：相機與相簿 -->
                         <input type="file" id="input-camera-2" accept="image/*" capture="environment" style="display: none;" onchange="window.handleAddPhotoUpload(this, 'photo-box-2', 'photo-tag-2')">
-                        <!-- 選舊檔用 Input (開啟相簿/檔案總管) -->
                         <input type="file" id="input-gallery-2" accept="image/*" style="display: none;" onchange="window.handleAddPhotoUpload(this, 'photo-box-2', 'photo-tag-2')">
                     </div>
                 </div>
@@ -785,6 +779,28 @@
         if (formValues && typeof window.submitNewCustomPoint === 'function') {
             await window.submitNewCustomPoint(formValues);
         }
+    };
+
+    /**
+     * 點擊照片框觸發選擇來源 (相機 vs 相簿)
+     */
+    window.triggerPhotoSelect = function(index) {
+        Swal.fire({
+            title: `選擇照片 (${index}) 來源`,
+            showDenyButton: true,
+            showCancelButton: true,
+            confirmButtonText: '📷 拍照',
+            denyButtonText: '🖼️ 從相簿選擇',
+            cancelButtonText: '取消',
+            confirmButtonColor: '#2ecc71',
+            denyButtonColor: '#3498db'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                document.getElementById(`input-camera-${index}`).click();
+            } else if (result.isDenied) {
+                document.getElementById(`input-gallery-${index}`).click();
+            }
+        });
     };
 
     /**
