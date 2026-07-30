@@ -213,12 +213,27 @@
     });
 
     // ---------------------------------------------------------
-    // 3. 專屬 CSV 總表生成
+    // 3. CSV 總表生成
     // ---------------------------------------------------------
     async function generateLayerCsvReport(kmlId, kmlLayerName, maxPhotos) {
         const records = window.auditLayersState[kmlId] || {};
         const ns = window.mapNamespace;
         const features = ns?.allKmlFeatures || [];
+
+        // 檔名解析輔助函式：提取檔名並剔除 .jpg / .jpeg
+        const getCleanPhotoName = (url) => {
+            if (!url) return "";
+            try {
+                // 取得最後檔名並解碼 UTF-8
+                let fileName = decodeURIComponent(url.split("?")[0].split("/").pop());
+                // 去除 .jpg 或 .jpeg 副檔名
+                fileName = fileName.replace(/\.jpe?g$/i, "");
+                // 雙引號轉義，確保 CSV 格式安全
+                return fileName.replace(/"/g, '""');
+            } catch (e) {
+                return url.replace(/"/g, '""');
+            }
+        };
 
         let headerArr = ["點名", "設備狀態"];
         for (let i = 1; i <= maxPhotos; i++) headerArr.push(`照片${i}`);
@@ -237,7 +252,7 @@
                 rowArr.push(`"${record.deviceStatus || '正常'}"`);
                 for (let i = 0; i < maxPhotos; i++) {
                     const url = record.photos && record.photos[i] ? record.photos[i] : "";
-                    rowArr.push(`"${url}"`);
+                    rowArr.push(`"${getCleanPhotoName(url)}"`);
                 }
                 rowArr.push(`"${(record.note || "").replace(/"/g, '""')}"`);
             } else {
@@ -642,12 +657,6 @@
                         // C. 寫入 ZIP (直接傳入 Blob)
                         rootFolder.file(fileName, blob);
 
-                        // D. 記錄至 CSV
-                        const safeFileName = fileName.replace(/"/g, '""');
-                        const safeFullPath = fileRef.fullPath.replace(/"/g, '""');
-                        const safeUrl = downloadUrl.replace(/"/g, '""');
-                        csvRows.push([`"${safeFileName}"`, `"${safeFullPath}"`, `"${safeUrl}"`]);
-
                     } catch (err) {
                         failCount++;
                         console.warn(`下載失敗 (${fileRef.name}):`, err);
@@ -663,10 +672,6 @@
             if (completedCount - failCount === 0) {
                 throw new Error('所有檔案下載皆失敗，請確認網路連線或 CORS 設定。');
             }
-
-            // 5. 生成 CSV (帶 UTF-8 BOM 避免 Excel 開啟亂碼)
-            const csvContent = '\uFEFF' + csvRows.map(e => e.join(',')).join('\n');
-            rootFolder.file(`照片清冊目錄_${cleanLayerName}.csv`, csvContent);
 
             if (progressEl) progressEl.textContent = '檔案下載完成，正在壓縮 ZIP...';
 
