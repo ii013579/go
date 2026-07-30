@@ -176,30 +176,45 @@
             const currentRecords = window.auditLayersState[kmlId] || {};
             const isAudited = currentRecords[pointKey] !== undefined;
 
+            // 💡 統一膠囊按鈕通用 Style（防黑框干擾、統一尺寸 shape、保留前景背景色）
+            const btnBaseStyle = `
+                color: white; 
+                border: none; 
+                padding: 8px 20px; 
+                border-radius: 25px; 
+                font-weight: bold; 
+                font-size: 15px; 
+                box-shadow: 0 3px 10px rgba(0,0,0,0.3); 
+                cursor: pointer;
+                outline: none;
+                line-height: 1.4;
+            `;
+
             let btnHtml = '';
             if (isAudited) {
                 btnHtml = `
                     <button onclick="window.viewAuditDetailOnly('${safePointKey}')" 
-                            style="background: #e91e63; color: white; border: 2px solid #ffffff; padding: 10px 22px; border-radius: 50px; font-weight: bold; font-size: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); cursor: pointer;">
+                            style="background: #e91e63; ${btnBaseStyle}">
                         查看
                     </button>
                     <button onclick="window.openAuditEditor(true)" 
-                            style="background: #f39c12; color: white; border: 2px solid #ffffff; padding: 10px 22px; border-radius: 50px; font-weight: bold; font-size: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); cursor: pointer;">
+                            style="background: #f39c12; ${btnBaseStyle}">
                         修改
                     </button>
                 `;
             } else {
                 btnHtml = `
                     <button onclick="window.openAuditEditor(false)" 
-                            style="background: #2ecc71; color: white; border: 2px solid #ffffff; padding: 12px 35px; border-radius: 50px; font-weight: bold; font-size: 16px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); cursor: pointer;">
+                            style="background: #2ecc71; ${btnBaseStyle}">
                         清查點位
                     </button>
                 `;
             }
 
             bottomControl._container.style.display = 'block';
+            // 💡 移除黑色半透明背景 (rgba(0,0,0,0.6)) 與毛玻璃效果，改為透明容器
             bottomControl._container.innerHTML = `
-                <div style="text-align: center; pointer-events: auto; display: flex; gap: 10px; justify-content: center; background: rgba(0,0,0,0.6); padding: 8px 18px; border-radius: 50px; backdrop-filter: blur(5px);">
+                <div style="text-align: center; pointer-events: auto; display: flex; gap: 10px; justify-content: center; background: transparent; padding: 0;">
                     ${btnHtml}
                 </div>`;
         } else {
@@ -450,24 +465,9 @@
             return;
         }
     
-        // 💡 智慧防錯邏輯：
-        // 優先順序 1: 傳入的 kmlId
-        // 優先順序 2: 全域變數 window.currentActiveKmlId
-        // 優先順序 3: 直接從頂部「選擇資料庫/圖層」下拉選單讀取當前選中的 value
-        let targetKmlId = kmlId || window.currentActiveKmlId;
-    
+        const targetKmlId = kmlId || window.currentActiveKmlId;
         if (!targetKmlId) {
-            // 嘗試自動尋找頁面上常見的圖層選單 ID 或 class
-            const selectEl = document.querySelector('#select-kml-db, #kml-select, select[name="kmlSelect"], .kml-dropdown select');
-            if (selectEl && selectEl.value) {
-                targetKmlId = selectEl.value;
-                window.currentActiveKmlId = targetKmlId; // 順便幫全域變數補補上
-            }
-        }
-    
-        // 萬一真的連下拉選單都沒有或選單是空的，才做最後防線提示
-        if (!targetKmlId) {
-            Swal.fire('提示', '無法取得當前開啟的圖層資訊，請重新選擇一次下拉選單圖層！', 'info');
+            Swal.fire('提示', '請先開啟或選擇一個目標圖層！', 'info');
             return;
         }
     
