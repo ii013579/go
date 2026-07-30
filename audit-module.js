@@ -327,11 +327,11 @@
             Swal.close(); 
 
             if (status) {
-                // 1. 讀取先前儲存的選項，若無設定則給予預設值 (正常,損壞,變更,遺失)
+                // 1. 讀取先前儲存的選項，若無設定則給予預設值 (正常, 損壞, 變更, 遺失)
                 const savedOptions = localStorage.getItem('audit_status_options');
                 const defaultStatusStr = savedOptions 
                     ? JSON.parse(savedOptions).join(', ') 
-                    : '正常,損壞,變更,遺失';
+                    : '正常, 損壞, 變更, 遺失';
 
                 // 2. 單一彈窗頁面：同時設定照片張數與設備狀態
                 const { value: formValues } = await Swal.fire({
@@ -816,27 +816,15 @@
     }
 
     // ---------------------------------------------------------
-    // 9. Leaflet 地圖初始化掛載 (輪詢檢查 & 效能優化)
+    // 9. Leaflet 地圖初始化掛載 (輪詢檢查)
     // ---------------------------------------------------------
     let checkAttempts = 0;
-    const maxAttempts = 30; // 最高嘗試 15 秒 (30 * 500ms)
-    
+    const maxAttempts = 30; 
     const checkMapInterval = setInterval(() => {
         checkAttempts++;
-        
-        // 檢查全域地圖物件與 Leaflet (L) 是否已加載完成
         if (window.mapNamespace?.map && typeof L !== 'undefined') {
             clearInterval(checkMapInterval);
             
-            const map = window.mapNamespace.map;
-
-            // ⚡ 效能優化 (解決 500+ 點位卡頓)：
-            // 若地圖未配置預設渲染器，強制建立 Canvas 繪製器供大型圖層使用
-            if (!map.options.renderer) {
-                map.options.renderer = L.canvas({ padding: 0.5 });
-            }
-
-            // 定義清查模式懸浮控制選單 (Bottom Control Menu)
             const AuditMenu = L.Control.extend({
                 onAdd: function() {
                     this._container = L.DomUtil.create('div', 'audit-bottom-menu');
@@ -847,27 +835,15 @@
                     this._container.style.transform = 'translateX(-50%)';
                     this._container.style.zIndex = '5000'; 
                     this._container.style.pointerEvents = 'none';
-
-                    // ⚡ 防止選單上的點擊與滾動事件穿透到下方地圖 (避免地圖誤點與不必要的重繪 Lag)
-                    L.DomEvent.disableClickPropagation(this._container);
-                    L.DomEvent.disableScrollPropagation(this._container);
-
                     return this._container;
                 }
             });
-
-            // 掛載選單至地圖
             bottomControl = new AuditMenu();
-            bottomControl.addTo(map);
-
-            // 啟動 Firestore 全域清查配置與狀態即時監聽
+            bottomControl.addTo(window.mapNamespace.map);
             initGlobalConfigListener();
-
-            console.log("✅ 清查模組 (Audit Module) 已成功掛載至 Leaflet 地圖。");
-            
         } else if (checkAttempts >= maxAttempts) {
             clearInterval(checkMapInterval);
-            console.warn("⚠️ Leaflet 地圖載入逾時，停止清查選單初始化。");
+            console.warn("Leaflet 地圖載入逾時，停止清查選單初始化。");
         }
     }, 500);
 
