@@ -641,7 +641,7 @@
                 </div>
             </div>
 
-            <!-- 現場照片 (對齊清查紀錄 80x80 縮圖與標籤) -->
+            <!-- 現場照片 -->
             <div style="margin-bottom: 16px;">
                 <label style="display: block; font-size: 15px; font-weight: bold; color: #4a4a4a; margin-bottom: 8px;">
                     現場照片 (需拍 2 張) <span style="color: #e74c3c;">*必填</span>
@@ -659,8 +659,10 @@
                         align-items: center;
                         justify-content: center;
                         cursor: pointer;
-                    " onclick="document.getElementById('input-photo-1').click()">
+                    " onclick="document.getElementById('input-camera-1').click()">
                         <span style="font-size: 24px;">📷</span>
+                        
+                        <!-- 舊檔標籤：阻擋冒泡並觸發圖庫 input -->
                         <div id="photo-tag-1" style="
                             position: absolute;
                             bottom: -8px;
@@ -670,8 +672,13 @@
                             padding: 2px 8px;
                             border-radius: 12px;
                             white-space: nowrap;
-                        ">🖼️ 舊檔</div>
-                        <input type="file" id="input-photo-1" accept="image/*" capture="environment" style="display: none;" onchange="window.handleAddPhotoUpload(this, 'photo-box-1', 'photo-tag-1')">
+                            cursor: pointer;
+                        " onclick="event.stopPropagation(); document.getElementById('input-gallery-1').click();">🖼️ 舊檔</div>
+
+                        <!-- 拍照用 Input (直接開啟相機) -->
+                        <input type="file" id="input-camera-1" accept="image/*" capture="environment" style="display: none;" onchange="window.handleAddPhotoUpload(this, 'photo-box-1', 'photo-tag-1')">
+                        <!-- 選舊檔用 Input (開啟相簿/檔案總管) -->
+                        <input type="file" id="input-gallery-1" accept="image/*" style="display: none;" onchange="window.handleAddPhotoUpload(this, 'photo-box-1', 'photo-tag-1')">
                     </div>
 
                     <!-- 照片 2 -->
@@ -686,8 +693,10 @@
                         align-items: center;
                         justify-content: center;
                         cursor: pointer;
-                    " onclick="document.getElementById('input-photo-2').click()">
+                    " onclick="document.getElementById('input-camera-2').click()">
                         <span style="font-size: 24px;">📷</span>
+                        
+                        <!-- 舊檔標籤：阻擋冒泡並觸發圖庫 input -->
                         <div id="photo-tag-2" style="
                             position: absolute;
                             bottom: -8px;
@@ -697,13 +706,18 @@
                             padding: 2px 8px;
                             border-radius: 12px;
                             white-space: nowrap;
-                        ">🖼️ 舊檔</div>
-                        <input type="file" id="input-photo-2" accept="image/*" capture="environment" style="display: none;" onchange="window.handleAddPhotoUpload(this, 'photo-box-2', 'photo-tag-2')">
+                            cursor: pointer;
+                        " onclick="event.stopPropagation(); document.getElementById('input-gallery-2').click();">🖼️ 舊檔</div>
+
+                        <!-- 拍照用 Input (直接開啟相機) -->
+                        <input type="file" id="input-camera-2" accept="image/*" capture="environment" style="display: none;" onchange="window.handleAddPhotoUpload(this, 'photo-box-2', 'photo-tag-2')">
+                        <!-- 選舊檔用 Input (開啟相簿/檔案總管) -->
+                        <input type="file" id="input-gallery-2" accept="image/*" style="display: none;" onchange="window.handleAddPhotoUpload(this, 'photo-box-2', 'photo-tag-2')">
                     </div>
                 </div>
             </div>
 
-            <!-- 備註事項 ( margin-bottom 改為 0px 壓縮下方多餘空白) -->
+            <!-- 備註事項 -->
             <div style="margin-bottom: 0px;">
                 <label style="display: block; font-size: 15px; font-weight: bold; color: #4a4a4a; margin-bottom: 8px;">
                     備註事項 <span style="color: #909399; font-weight: normal;">(選填)</span>
