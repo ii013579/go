@@ -662,8 +662,18 @@
      * 5. 獨立控管 UI 渲染：向 Section 9 生成的容器注入按鈕 & 修正底部高度 (預防螢幕外遮擋)
      */
     window.renderAuditAddPointButton = function() {
-        const container = typeof bottomControl !== 'undefined' ? bottomControl._container : document.querySelector('.audit-bottom-menu');
-        if (!container) return;
+        // 優先找 Section 9 生成的 audit-bottom-menu 容器，找不到則退回 body
+        let container = typeof bottomControl !== 'undefined' ? bottomControl._container : document.querySelector('.audit-bottom-menu');
+        
+        // 如果 Section 9 的容器還沒準備好，自動幫它建立一個掛在 body 上
+        if (!container) {
+            container = document.getElementById('global-audit-btn-container');
+            if (!container) {
+                container = document.createElement('div');
+                container.id = 'global-audit-btn-container';
+                document.body.appendChild(container);
+            }
+        }
     
         const currentKmlId = window.currentActiveKmlId;
     
@@ -672,8 +682,13 @@
             return;
         }
     
-        // 💡 修正位置問題：自動升級 bottom 樣式，避開 iPhone/Android 底部導向列
-        container.style.bottom = 'calc(60px + env(safe-area-inset-bottom, 0px))';
+        // 💡 關鍵修正：將固定位置大幅往上提 (120px)，並確保 z-index 極高
+        container.style.position = 'fixed';
+        container.style.bottom = 'calc(120px + env(safe-area-inset-bottom, 0px))'; // 往上提 120px
+        container.style.left = '50%';
+        container.style.transform = 'translateX(-50%)';
+        container.style.zIndex = '99999'; // 最高層級，防止被任何底圖/選單遮擋
+        container.style.pointerEvents = 'auto';
         container.style.display = 'flex';
         container.style.gap = '10px';
     
@@ -686,17 +701,17 @@
                 pointer-events: auto;
                 background: #2ecc71;
                 color: white;
-                border: none;
-                padding: 9px 18px;
+                border: 2px solid #ffffff;
+                padding: 10px 20px;
                 border-radius: 25px;
                 font-weight: bold;
-                font-size: 14px;
-                box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+                font-size: 15px;
+                box-shadow: 0 4px 15px rgba(0,0,0,0.4);
                 cursor: pointer;
                 display: flex;
                 align-items: center;
                 gap: 6px;
-                transition: transform 0.1s ease;
+                transition: all 0.2s ease;
             `;
             btn.innerHTML = `➕ 新增點位`;
             btn.onclick = () => window.startAddCustomPoint();
