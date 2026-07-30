@@ -450,9 +450,24 @@
             return;
         }
     
-        const targetKmlId = kmlId || window.currentActiveKmlId;
+        // 💡 智慧防錯邏輯：
+        // 優先順序 1: 傳入的 kmlId
+        // 優先順序 2: 全域變數 window.currentActiveKmlId
+        // 優先順序 3: 直接從頂部「選擇資料庫/圖層」下拉選單讀取當前選中的 value
+        let targetKmlId = kmlId || window.currentActiveKmlId;
+    
         if (!targetKmlId) {
-            Swal.fire('提示', '請先開啟或選擇一個目標圖層！', 'info');
+            // 嘗試自動尋找頁面上常見的圖層選單 ID 或 class
+            const selectEl = document.querySelector('#select-kml-db, #kml-select, select[name="kmlSelect"], .kml-dropdown select');
+            if (selectEl && selectEl.value) {
+                targetKmlId = selectEl.value;
+                window.currentActiveKmlId = targetKmlId; // 順便幫全域變數補補上
+            }
+        }
+    
+        // 萬一真的連下拉選單都沒有或選單是空的，才做最後防線提示
+        if (!targetKmlId) {
+            Swal.fire('提示', '無法取得當前開啟的圖層資訊，請重新選擇一次下拉選單圖層！', 'info');
             return;
         }
     
