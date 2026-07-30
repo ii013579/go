@@ -589,11 +589,37 @@
     // =========================================================
     // 4-4. 100% 復刻「新增點位清查紀錄」彈窗 UI 介面
     // =========================================================
-    window.uploadedPhotos = {}; // 暫存新增點位的上傳照片檔案
+    window.uploadedPhotos = {}; // 暫存新增點位的上傳照片
 
     window.openAddPointModal = async function(kmlId, lat, lng) {
         // 重置上傳照片快取
         window.uploadedPhotos = {};
+
+        // 拼接照片上傳 UI (完全採用清查紀錄 DOM 與 z-index 層級邏輯)
+        const maxPhotos = 2;
+        let photoHtml = '';
+        for (let i = 0; i < maxPhotos; i++) {
+            photoHtml += `
+                <div style="position:relative; margin-bottom:15px; width:80px;">
+                    <!-- 照片預覽與相機框 -->
+                    <div style="border:2px dashed #ccc; height:80px; width:80px; position:relative; display:flex; align-items:center; justify-content:center; background:#fafafa; border-radius:12px; overflow:hidden; cursor:pointer;">
+                        <!-- 圖片預覽圖層 (z-index: 1) -->
+                        <img id="add-prev-${i}" src="" style="width:100%; height:100%; object-fit:cover; display:none; position:absolute; top:0; left:0; z-index:1;">
+                        
+                        <!-- 相機 Icon (z-index: 1) -->
+                        <span id="add-icon-${i}" style="font-size:24px; color:#bbb; display:block; z-index:1;">📷</span>
+                        
+                        <!-- 現場拍照 Input (z-index: 2, 透明覆蓋全框) -->
+                        <input type="file" accept="image/*" capture="environment" onchange="window.handleAddPhotoPreview(this, ${i})" style="position:absolute; width:100%; height:100%; opacity:0; z-index:2; cursor:pointer;" title="現場拍照">
+                    </div>
+
+                    <!-- 舊檔/相簿選擇標籤 (z-index: 3, 層級高於相機 Input) -->
+                    <label style="position:absolute; left:50%; transform:translateX(-50%); bottom:-10px; z-index:3; background:#555; color:#fff; font-size:11px; padding:2px 8px; border-radius:12px; cursor:pointer; display:flex; align-items:center; gap:4px; box-shadow:0 2px 4px rgba(0,0,0,0.2); white-space:nowrap; border:1px solid #777;">
+                        <span>🖼️</span> <span id="add-tag-text-${i}">舊檔</span>
+                        <input type="file" accept="image/*" onchange="window.handleAddPhotoPreview(this, ${i})" style="display:none;">
+                    </label>
+                </div>`;
+        }
 
         const modalHtml = `
         <div style="text-align: left; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; color: #333; padding: 0 5px;">
@@ -641,73 +667,13 @@
                 </div>
             </div>
 
-            <!-- 現場照片 (100% 視覺復刻清查紀錄樣式) -->
+            <!-- 現場照片區塊 -->
             <div style="margin-bottom: 16px;">
                 <label style="display: block; font-size: 15px; font-weight: bold; color: #4a4a4a; margin-bottom: 8px;">
                     現場照片 (需拍 2 張) <span style="color: #e74c3c;">*必填</span>
                 </label>
                 <div style="display: flex; gap: 15px;">
-                    <!-- 照片 1 -->
-                    <div id="photo-box-1" style="
-                        position: relative;
-                        width: 80px;
-                        height: 80px;
-                        border: 2px dashed #c0c4cc;
-                        border-radius: 12px;
-                        background-color: #f5f7fa;
-                        display: flex;
-                        align-items: center;
-                        justify-content: center;
-                        cursor: pointer;
-                    " onclick="window.triggerPhotoSelect('1')">
-                        <span style="font-size: 24px;">📷</span>
-                        <div id="photo-tag-1" style="
-                            position: absolute;
-                            bottom: -8px;
-                            background: #4a4a4a;
-                            color: white;
-                            font-size: 11px;
-                            padding: 2px 8px;
-                            border-radius: 12px;
-                            white-space: nowrap;
-                            pointer-events: none;
-                        ">🖼️ 舊檔</div>
-                        
-                        <!-- 隱藏控制項：相機與相簿 -->
-                        <input type="file" id="input-camera-1" accept="image/*" capture="environment" style="display: none;" onchange="window.handleAddPhotoUpload(this, 'photo-box-1', 'photo-tag-1')">
-                        <input type="file" id="input-gallery-1" accept="image/*" style="display: none;" onchange="window.handleAddPhotoUpload(this, 'photo-box-1', 'photo-tag-1')">
-                    </div>
-
-                    <!-- 照片 2 -->
-                    <div id="photo-box-2" style="
-                        position: relative;
-                        width: 80px;
-                        height: 80px;
-                        border: 2px dashed #c0c4cc;
-                        border-radius: 12px;
-                        background-color: #f5f7fa;
-                        display: flex;
-                        align-items: center;
-                        justify-content: center;
-                        cursor: pointer;
-                    " onclick="window.triggerPhotoSelect('2')">
-                        <span style="font-size: 24px;">📷</span>
-                        <div id="photo-tag-2" style="
-                            position: absolute;
-                            bottom: -8px;
-                            background: #4a4a4a;
-                            color: white;
-                            font-size: 11px;
-                            padding: 2px 8px;
-                            border-radius: 12px;
-                            white-space: nowrap;
-                            pointer-events: none;
-                        ">🖼️ 舊檔</div>
-
-                        <!-- 隱藏控制項：相機與相簿 -->
-                        <input type="file" id="input-camera-2" accept="image/*" capture="environment" style="display: none;" onchange="window.handleAddPhotoUpload(this, 'photo-box-2', 'photo-tag-2')">
-                        <input type="file" id="input-gallery-2" accept="image/*" style="display: none;" onchange="window.handleAddPhotoUpload(this, 'photo-box-2', 'photo-tag-2')">
-                    </div>
+                    ${photoHtml}
                 </div>
             </div>
 
@@ -752,14 +718,14 @@
             preConfirm: () => {
                 const name = document.getElementById('add-point-name').value.trim();
                 const remark = document.getElementById('add-point-remark').value.trim();
-                const photo1 = window.uploadedPhotos['photo-box-1'];
-                const photo2 = window.uploadedPhotos['photo-box-2'];
+                const photo0 = window.uploadedPhotos[0];
+                const photo1 = window.uploadedPhotos[1];
 
                 if (!name) {
                     Swal.showValidationMessage('請填寫點位名稱！');
                     return false;
                 }
-                if (!photo1 || !photo2) {
+                if (!photo0 || !photo1) {
                     Swal.showValidationMessage('請至少上傳 2 張現場照片！');
                     return false;
                 }
@@ -771,7 +737,7 @@
                     name: name,
                     status: '新增',
                     remark: remark,
-                    photos: [photo1, photo2]
+                    photos: [photo0, photo1]
                 };
             }
         });
@@ -782,50 +748,30 @@
     };
 
     /**
-     * 點擊照片框觸發選擇來源 (相機 vs 相簿)
+     * 照片預覽與狀態處理
      */
-    window.triggerPhotoSelect = function(index) {
-        Swal.fire({
-            title: `選擇照片 (${index}) 來源`,
-            showDenyButton: true,
-            showCancelButton: true,
-            confirmButtonText: '📷 拍照',
-            denyButtonText: '🖼️ 從相簿選擇',
-            cancelButtonText: '取消',
-            confirmButtonColor: '#2ecc71',
-            denyButtonColor: '#3498db'
-        }).then((result) => {
-            if (result.isConfirmed) {
-                document.getElementById(`input-camera-${index}`).click();
-            } else if (result.isDenied) {
-                document.getElementById(`input-gallery-${index}`).click();
-            }
-        });
-    };
-
-    /**
-     * 新增點位專用照片上傳處理
-     */
-    window.handleAddPhotoUpload = function(input, boxId, tagId) {
+    window.handleAddPhotoPreview = function(input, index) {
         if (input.files && input.files[0]) {
             const file = input.files[0];
             const reader = new FileReader();
             reader.onload = function(e) {
-                window.uploadedPhotos[boxId] = file;
-                const box = document.getElementById(boxId);
-                const tag = document.getElementById(tagId);
+                // 暫存檔案
+                window.uploadedPhotos[index] = file;
 
-                box.style.backgroundImage = `url('${e.target.result}')`;
-                box.style.backgroundSize = 'cover';
-                box.style.backgroundPosition = 'center';
-                box.style.border = '2px solid #2ecc71';
-                
-                const iconSpan = box.querySelector('span');
-                if (iconSpan) iconSpan.style.display = 'none';
-                
-                if (tag) {
-                    tag.innerText = '✓ 已選取';
-                    tag.style.background = '#2ecc71';
+                // 更新圖片與 Icon
+                const img = document.getElementById(`add-prev-${index}`);
+                const icon = document.getElementById(`add-icon-${index}`);
+                const tagText = document.getElementById(`add-tag-text-${index}`);
+
+                if (img) {
+                    img.src = e.target.result;
+                    img.style.display = 'block';
+                }
+                if (icon) {
+                    icon.style.display = 'none';
+                }
+                if (tagText) {
+                    tagText.innerText = '已選取';
                 }
             };
             reader.readAsDataURL(file);
