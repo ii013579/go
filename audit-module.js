@@ -228,7 +228,7 @@
     });
 
     // ---------------------------------------------------------
-    // 3. CSV 總表生成
+    // 3. CSV 總表生成 (已修正：支援自訂新增點位與 Firebase 上傳)
     // ---------------------------------------------------------
     async function generateLayerCsvReport(kmlId, kmlLayerName, maxPhotos) {
         const records = window.auditLayersState[kmlId] || {};
@@ -239,51 +239,74 @@
         const getCleanPhotoName = (url) => {
             if (!url) return "";
             try {
-                // 取得最後檔名並解碼 UTF-8
                 let fileName = decodeURIComponent(url.split("?")[0].split("/").pop());
-                // 去除 .jpg 或 .jpeg 副檔名
                 fileName = fileName.replace(/\.jpe?g$/i, "");
-                // 雙引號轉義，確保 CSV 格式安全
                 return fileName.replace(/"/g, '""');
             } catch (e) {
                 return url.replace(/"/g, '""');
             }
         };
 
+        // 1. 建立標頭
         let headerArr = ["點名", "設備狀態"];
         for (let i = 1; i <= maxPhotos; i++) headerArr.push(`照片${i}`);
         headerArr.push("備註");
         
         let csvContent = "\uFEFF" + headerArr.join(",") + "\n";
 
+        // 2. 收集所有要輸出的點名 (合併原 KML 點位 + 自訂新增點位)
+        const allPointKeys = new Set();
+        
+        // 加入原本 KML 的點位
         features.forEach(f => {
-            const pointKey = f.properties?.name || f.properties?.title || f.id || "未知點位";
-            const record = records[pointKey]; 
+            const key = f.properties?.name || f.properties?.title || f.id;
+            if (key) allPointKeys.add(key);
+        });
 
+        // 加入手動新增/紀錄過的點位 (避免新增點位沒被迴圈跑到的問題)
+        Object.keys(records).forEach(key => allPointKeys.add(key));
+
+        // 3. 逐筆產生 CSV 列數據
+        allPointKeys.forEach(pointKey => {
+            const record = records[pointKey]; 
             let rowArr = [];
+            
+            // 點名
             rowArr.push(`"${pointKey.replace(/"/g, '""')}"`);
 
             if (record) {
-                rowArr.push(`"${record.deviceStatus || '正常'}"`);
+                // 設備狀態 (相容 deviceStatus 與 status)
+                const status = record.deviceStatus || record.status || '正常';
+                rowArr.push(`"${status}"`);
+
+                // 照片檔名解析
                 for (let i = 0; i < maxPhotos; i++) {
                     const url = record.photos && record.photos[i] ? record.photos[i] : "";
                     rowArr.push(`"${getCleanPhotoName(url)}"`);
                 }
-                rowArr.push(`"${(record.note || "").replace(/"/g, '""')}"`);
+
+                // 備註 (相容 remark 與 note)
+                const note = record.remark || record.note || "";
+                rowArr.push(`"${note.replace(/"/g, '""')}"`);
             } else {
+                // 原有 KML 點位但未進行清查紀錄者
                 rowArr.push('""');
                 for (let i = 0; i < maxPhotos; i++) rowArr.push('""');
                 rowArr.push('""');
             }
+
             csvContent += rowArr.join(",") + "\n";
         });
 
+        // 4. 上傳 Firebase Storage
         try {
             const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
             const csvStoragePath = `${STORAGE_ROOT}/${kmlLayerName}/${kmlLayerName}_清查總表.csv`;
+            
             await firebase.storage().ref().child(csvStoragePath).put(blob);
+            console.log("✅ CSV 清查總表已成功更新至 Firebase Storage:", csvStoragePath);
         } catch (err) {
-            console.warn("Firebase Storage 寫入 CSV 權限受限，已略過總表產出:", err.message);
+            console.warn("⚠️ Firebase Storage 寫入 CSV 權限受限或失敗:", err.message);
         }
     }
 
