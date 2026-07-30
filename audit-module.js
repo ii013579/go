@@ -457,7 +457,7 @@
     };
     
     /**
-     * 1. 觸發挑選位置模式 (點擊「新增點位」按鈕)
+     * 1. 觸發挑選位置模式 (點擊「新增點位」按鈕) & 自動渲染獨立按鈕
      */
     window.startAddCustomPoint = function(kmlId) {
         if (typeof checkHasAuditPermission === 'function' && !checkHasAuditPermission()) {
@@ -465,15 +465,16 @@
             return;
         }
     
-        const targetKmlId = kmlId || window.currentActiveKmlId;
+        const targetKmlId = kmlId || window.currentActiveKmlId || window.mapNamespace?.currentKmlLayerId;
         if (!targetKmlId) {
-            Swal.fire('提示', '請先開啟或選擇一個目標圖層！', 'info');
+            Swal.fire('提示', '請先從選單開啟或選擇一個目標圖層再進行新增！', 'info');
             return;
         }
     
         const map = window.mapNamespace?.map;
         if (!map) return;
     
+        // 頂部 Toast 提示
         Swal.mixin({
             toast: true,
             position: 'top',
@@ -485,13 +486,63 @@
             title: '📍 請在地圖上點擊要新增點位的實體位置' 
         });
     
+        // 更改地圖滑鼠游標為十字準心
         map.getContainer().style.cursor = 'crosshair';
     
+        // 單次監聽地圖點擊事件
         map.once('click', async function(e) {
             map.getContainer().style.cursor = '';
-            await window.openAddPointModal(targetKmlId, e.latlng.lat, e.latlng.lng);
+            const lat = e.latlng.lat;
+            const lng = e.latlng.lng;
+    
+            await window.openAddPointModal(targetKmlId, lat, lng);
         });
     };
+    
+    /**
+     * 自動生成獨立的「新增點位」膠囊按鈕
+     * (高度與清查點位平齊，無黑框，樣式統一)
+     */
+    (function renderStandaloneAddButton() {
+        // 避免重複建立
+        let btn = document.getElementById('btn-standalone-add-point');
+        if (!btn) {
+            btn = document.createElement('button');
+            btn.id = 'btn-standalone-add-point';
+            btn.innerHTML = '➕ 新增點位';
+            document.body.appendChild(btn);
+        }
+    
+        // 強制套用與「清查點位」完全相同的膠囊樣式與同高度定位
+        btn.setAttribute('style', `
+            position: fixed !important;
+            bottom: 20px !important;
+            left: 200px !important;
+            z-index: 4000 !important;
+            background-color: #2ecc71 !important;
+            color: #ffffff !important;
+            border: none !important;
+            padding: 8px 20px !important;
+            border-radius: 25px !important;
+            font-weight: bold !important;
+            font-size: 15px !important;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.3) !important;
+            cursor: pointer !important;
+            display: inline-flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            gap: 6px !important;
+            outline: none !important;
+            line-height: 1.4 !important;
+            white-space: nowrap !important;
+        `);
+    
+        // 點擊事件
+        btn.onclick = function(e) {
+            e.stopPropagation();
+            window.startAddCustomPoint();
+        };
+    })();
     
     /**
      * 2. 彈出新增點位表單視窗
