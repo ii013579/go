@@ -499,9 +499,9 @@
         });
     };
     
-    /**
-     * 獨立「新增點位」膠囊按鈕 (固定於右下角手繪紅框處)
-     */
+    // =========================================================
+    // 4-2. 動態渲染獨立「新增點位」膠囊按鈕（固定於右下角）
+    // =========================================================
     (function renderStandaloneAddButton() {
         let btn = document.getElementById('btn-standalone-add-point');
         if (!btn) {
@@ -511,7 +511,7 @@
             document.body.appendChild(btn);
         }
     
-        // 將定位改為 right: 15px, bottom: 20px (精準對齊右下角)
+        // 固定在右下角 (bottom: 20px, right: 15px)
         btn.setAttribute('style', `
             position: fixed !important;
             bottom: 20px !important;
@@ -535,7 +535,6 @@
             white-space: nowrap !important;
         `);
     
-        // 點擊觸發新增點位邏輯
         btn.onclick = function(e) {
             e.stopPropagation();
             if (typeof window.startAddCustomPoint === 'function') {
@@ -544,13 +543,60 @@
         };
     })();
     
-    /**
-     * 100% 復刻「新增點位清查紀錄」彈窗介面
-     */
+    // =========================================================
+    // 4-3. 觸發挑選位置模式 (點擊「新增點位」按鈕時呼叫)
+    // =========================================================
+    window.startAddCustomPoint = function(kmlId) {
+        if (typeof checkHasAuditPermission === 'function' && !checkHasAuditPermission()) {
+            Swal.fire('權限不足', '您的帳號角色不允許新增點位！', 'warning');
+            return;
+        }
+    
+        const targetKmlId = kmlId || window.currentActiveKmlId || window.mapNamespace?.currentKmlLayerId;
+        if (!targetKmlId) {
+            Swal.fire('提示', '請先從選單開啟或選擇一個目標圖層再進行新增！', 'info');
+            return;
+        }
+    
+        const map = window.mapNamespace?.map;
+        if (!map) return;
+    
+        // 頂部 Toast 提示
+        Swal.mixin({
+            toast: true,
+            position: 'top',
+            showConfirmButton: false,
+            timer: 3000,
+            timerProgressBar: true
+        }).fire({ 
+            icon: 'info', 
+            title: '📍 請在地圖上點擊要新增點位的實體位置' 
+        });
+    
+        // 更改地圖滑鼠游標為十字準心
+        map.getContainer().style.cursor = 'crosshair';
+    
+        // 單次監聽地圖點擊事件
+        map.once('click', async function(e) {
+            map.getContainer().style.cursor = '';
+            const lat = e.latlng.lat;
+            const lng = e.latlng.lng;
+    
+            await window.openAddPointModal(targetKmlId, lat, lng);
+        });
+    };
+    
+    // =========================================================
+    // 4-4. 100% 復刻「新增點位清查紀錄」彈窗 UI 介面
+    // =========================================================
+    window.uploadedPhotos = {}; // 暫存上傳照片
+    
     window.openAddPointModal = async function(kmlId, lat, lng) {
-        // 格式化座標顯示至小數點 6 位
         const formattedLat = parseFloat(lat).toFixed(6);
         const formattedLng = parseFloat(lng).toFixed(6);
+    
+        // 重置上傳照片快取
+        window.uploadedPhotos = {};
     
         const modalHtml = `
         <div style="text-align: left; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; color: #333; padding: 5px 10px;">
@@ -685,8 +731,8 @@
             showCancelButton: true,
             confirmButtonText: '確認並新增上傳',
             cancelButtonText: '取消',
-            confirmButtonColor: '#7066e0', // 原圖紫色按鈕
-            cancelButtonColor: '#707a86',  // 原圖灰色按鈕
+            confirmButtonColor: '#7066e0', // 圖片中的紫色
+            cancelButtonColor: '#707a86',  // 圖片中的灰色
             buttonsStyling: true,
             customClass: {
                 popup: 'custom-audit-modal-popup',
@@ -697,8 +743,8 @@
             preConfirm: () => {
                 const name = document.getElementById('add-point-name').value.trim();
                 const remark = document.getElementById('add-point-remark').value.trim();
-                const photo1 = window.uploadedPhotos?.['photo-box-1'];
-                const photo2 = window.uploadedPhotos?.['photo-box-2'];
+                const photo1 = window.uploadedPhotos['photo-box-1'];
+                const photo2 = window.uploadedPhotos['photo-box-2'];
     
                 if (!name) {
                     Swal.showValidationMessage('請填寫點位名稱！');
@@ -722,18 +768,17 @@
         });
     
         if (formValues) {
-            console.log("表單提交資料：", formValues);
-            // 此處串接您的 Firebase / Firestore 上傳邏輯
+            console.log("新增點位資料：", formValues);
+            // 此處可接您的 Firebase / API 上傳邏輯
             if (typeof window.submitNewCustomPoint === 'function') {
                 await window.submitNewCustomPoint(formValues);
             }
         }
     };
     
-    /**
-     * 處理照片預覽輔助函式
-     */
-    window.uploadedPhotos = {};
+    // =========================================================
+    // 4-4. 照片上傳與預覽處理輔助函式
+    // =========================================================
     window.handlePhotoUpload = function(input, boxId) {
         if (input.files && input.files[0]) {
             const file = input.files[0];
@@ -745,7 +790,7 @@
                 box.style.backgroundSize = 'cover';
                 box.style.backgroundPosition = 'center';
                 box.style.border = '2px solid #2ecc71';
-                box.innerHTML = ''; // 清除文字圖示
+                box.innerHTML = ''; // 上傳後清空文字圖示
             };
             reader.readAsDataURL(file);
         }
