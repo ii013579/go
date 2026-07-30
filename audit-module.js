@@ -391,7 +391,7 @@
                         else { if (height > max_size) { width *= max_size / height; height = max_size; } }
                         canvas.width = width; canvas.height = height;
                         canvas.getContext('2d').drawImage(img, 0, 0, width, height);
-                        const base64 = canvas.toDataURL('image/jpeg', 0.9);
+                        const base64 = canvas.toDataURL('image/jpeg', 0.8);
                         
                         const prevEl = document.getElementById('audit-prev-' + index);
                         const iconEl = document.getElementById('audit-icon-' + index);
