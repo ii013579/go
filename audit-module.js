@@ -589,39 +589,30 @@
     // =========================================================
     // 4-4. 100% 復刻「新增點位清查紀錄」彈窗 UI 介面
     // =========================================================
-    window.uploadedPhotos = {}; // 暫存上傳照片
-    
+    window.uploadedPhotos = {}; // 暫存新增點位的上傳照片
+
     window.openAddPointModal = async function(kmlId, lat, lng) {
-        const formattedLat = parseFloat(lat).toFixed(6);
-        const formattedLng = parseFloat(lng).toFixed(6);
-    
         // 重置上傳照片快取
         window.uploadedPhotos = {};
-    
+
         const modalHtml = `
-        <div style="text-align: left; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; color: #333; padding: 5px 10px;">
+        <div style="text-align: left; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; color: #333; padding: 0 5px;">
             
             <!-- 標題 -->
             <div style="text-align: center; font-size: 20px; font-weight: bold; color: #4a4a4a; margin-bottom: 20px; display: flex; align-items: center; justify-content: center; gap: 8px;">
                 <span style="color: #7c5acb; font-size: 24px; font-weight: 900;">➕</span>
                 <span>新增點位清查紀錄</span>
             </div>
-    
-            <!-- 座標提示區塊 -->
-            <div style="background-color: #e8f8f5; border-radius: 6px; padding: 10px 14px; margin-bottom: 20px; font-size: 15px; font-weight: bold; color: #2ecc71; display: flex; align-items: center; gap: 6px;">
-                <span>📍</span>
-                <span>點擊座標：<span style="color: #2ecc71;">${formattedLat}, ${formattedLng}</span></span>
-            </div>
-    
+
             <!-- 點位名稱 / 點名 -->
-            <div style="margin-bottom: 20px;">
+            <div style="margin-bottom: 16px;">
                 <label style="display: block; font-size: 15px; font-weight: bold; color: #4a4a4a; margin-bottom: 8px;">
                     點位名稱 / 點名 <span style="color: #e74c3c;">*必填</span>
                 </label>
                 <input type="text" id="add-point-name" placeholder="例如：新設電桿-01" style="
                     width: 100%;
-                    padding: 12px 14px;
-                    font-size: 16px;
+                    padding: 10px 14px;
+                    font-size: 15px;
                     border: 1px solid #dcdfe6;
                     border-radius: 8px;
                     outline: none;
@@ -630,16 +621,16 @@
                     background-color: #fff;
                 ">
             </div>
-    
+
             <!-- 設備狀態 -->
-            <div style="margin-bottom: 20px;">
+            <div style="margin-bottom: 16px;">
                 <label style="display: block; font-size: 15px; font-weight: bold; color: #4a4a4a; margin-bottom: 8px;">
                     設備狀態
                 </label>
                 <div style="
                     width: 100%;
-                    padding: 12px 16px;
-                    font-size: 18px;
+                    padding: 10px 16px;
+                    font-size: 16px;
                     font-weight: bold;
                     color: #2c3e50;
                     background-color: #eef1f6;
@@ -649,68 +640,78 @@
                     新增
                 </div>
             </div>
-    
-            <!-- 現場照片 -->
-            <div style="margin-bottom: 20px;">
+
+            <!-- 現場照片 (對齊清查紀錄 80x80 縮圖與標籤) -->
+            <div style="margin-bottom: 16px;">
                 <label style="display: block; font-size: 15px; font-weight: bold; color: #4a4a4a; margin-bottom: 8px;">
                     現場照片 (需拍 2 張) <span style="color: #e74c3c;">*必填</span>
                 </label>
                 <div style="display: flex; gap: 15px;">
                     <!-- 照片 1 -->
                     <div id="photo-box-1" style="
-                        width: 120px;
-                        height: 120px;
+                        position: relative;
+                        width: 80px;
+                        height: 80px;
                         border: 2px dashed #c0c4cc;
                         border-radius: 12px;
                         background-color: #f5f7fa;
                         display: flex;
-                        flex-direction: column;
                         align-items: center;
                         justify-content: center;
                         cursor: pointer;
-                        color: #909399;
-                        font-size: 13px;
-                        line-height: 1.4;
-                        text-align: center;
                     " onclick="document.getElementById('input-photo-1').click()">
-                        <span style="font-size: 18px; margin-bottom: 4px;">📷</span>
-                        <span>點擊拍照<br>(1)</span>
-                        <input type="file" id="input-photo-1" accept="image/*" capture="environment" style="display: none;" onchange="handlePhotoUpload(this, 'photo-box-1')">
+                        <span style="font-size: 24px;">📷</span>
+                        <div id="photo-tag-1" style="
+                            position: absolute;
+                            bottom: -8px;
+                            background: #4a4a4a;
+                            color: white;
+                            font-size: 11px;
+                            padding: 2px 8px;
+                            border-radius: 12px;
+                            white-space: nowrap;
+                        ">🖼️ 舊檔</div>
+                        <input type="file" id="input-photo-1" accept="image/*" capture="environment" style="display: none;" onchange="window.handleAddPhotoUpload(this, 'photo-box-1', 'photo-tag-1')">
                     </div>
-    
+
                     <!-- 照片 2 -->
                     <div id="photo-box-2" style="
-                        width: 120px;
-                        height: 120px;
+                        position: relative;
+                        width: 80px;
+                        height: 80px;
                         border: 2px dashed #c0c4cc;
                         border-radius: 12px;
                         background-color: #f5f7fa;
                         display: flex;
-                        flex-direction: column;
                         align-items: center;
                         justify-content: center;
                         cursor: pointer;
-                        color: #909399;
-                        font-size: 13px;
-                        line-height: 1.4;
-                        text-align: center;
                     " onclick="document.getElementById('input-photo-2').click()">
-                        <span style="font-size: 18px; margin-bottom: 4px;">📷</span>
-                        <span>點擊拍照<br>(2)</span>
-                        <input type="file" id="input-photo-2" accept="image/*" capture="environment" style="display: none;" onchange="handlePhotoUpload(this, 'photo-box-2')">
+                        <span style="font-size: 24px;">📷</span>
+                        <div id="photo-tag-2" style="
+                            position: absolute;
+                            bottom: -8px;
+                            background: #4a4a4a;
+                            color: white;
+                            font-size: 11px;
+                            padding: 2px 8px;
+                            border-radius: 12px;
+                            white-space: nowrap;
+                        ">🖼️ 舊檔</div>
+                        <input type="file" id="input-photo-2" accept="image/*" capture="environment" style="display: none;" onchange="window.handleAddPhotoUpload(this, 'photo-box-2', 'photo-tag-2')">
                     </div>
                 </div>
             </div>
-    
-            <!-- 備註事項 -->
-            <div style="margin-bottom: 25px;">
+
+            <!-- 備註事項 ( margin-bottom 改為 0px 壓縮下方多餘空白) -->
+            <div style="margin-bottom: 0px;">
                 <label style="display: block; font-size: 15px; font-weight: bold; color: #4a4a4a; margin-bottom: 8px;">
                     備註事項 <span style="color: #909399; font-weight: normal;">(選填)</span>
                 </label>
                 <textarea id="add-point-remark" placeholder="輸入備註事項..." style="
                     width: 100%;
                     height: 80px;
-                    padding: 12px 14px;
+                    padding: 10px 14px;
                     font-size: 15px;
                     border: 1px solid #dcdfe6;
                     border-radius: 8px;
@@ -721,18 +722,18 @@
                     font-family: inherit;
                 "></textarea>
             </div>
-    
+
         </div>
         `;
-    
+
         // 呼叫 SweetAlert2 彈窗
         const { value: formValues } = await Swal.fire({
             html: modalHtml,
             showCancelButton: true,
             confirmButtonText: '確認並新增上傳',
             cancelButtonText: '取消',
-            confirmButtonColor: '#7066e0', // 圖片中的紫色
-            cancelButtonColor: '#707a86',  // 圖片中的灰色
+            confirmButtonColor: '#7066e0',
+            cancelButtonColor: '#707a86',
             buttonsStyling: true,
             customClass: {
                 popup: 'custom-audit-modal-popup',
@@ -745,7 +746,7 @@
                 const remark = document.getElementById('add-point-remark').value.trim();
                 const photo1 = window.uploadedPhotos['photo-box-1'];
                 const photo2 = window.uploadedPhotos['photo-box-2'];
-    
+
                 if (!name) {
                     Swal.showValidationMessage('請填寫點位名稱！');
                     return false;
@@ -754,7 +755,7 @@
                     Swal.showValidationMessage('請至少上傳 2 張現場照片！');
                     return false;
                 }
-    
+
                 return {
                     kmlId: kmlId,
                     lat: lat,
@@ -766,31 +767,36 @@
                 };
             }
         });
-    
-        if (formValues) {
-            console.log("新增點位資料：", formValues);
-            // 此處可接您的 Firebase / API 上傳邏輯
-            if (typeof window.submitNewCustomPoint === 'function') {
-                await window.submitNewCustomPoint(formValues);
-            }
+
+        if (formValues && typeof window.submitNewCustomPoint === 'function') {
+            await window.submitNewCustomPoint(formValues);
         }
     };
-    
-    // =========================================================
-    // 4-4. 照片上傳與預覽處理輔助函式
-    // =========================================================
-    window.handlePhotoUpload = function(input, boxId) {
+
+    /**
+     * 新增點位專用照片上傳處理
+     */
+    window.handleAddPhotoUpload = function(input, boxId, tagId) {
         if (input.files && input.files[0]) {
             const file = input.files[0];
             const reader = new FileReader();
             reader.onload = function(e) {
                 window.uploadedPhotos[boxId] = file;
                 const box = document.getElementById(boxId);
+                const tag = document.getElementById(tagId);
+
                 box.style.backgroundImage = `url('${e.target.result}')`;
                 box.style.backgroundSize = 'cover';
                 box.style.backgroundPosition = 'center';
                 box.style.border = '2px solid #2ecc71';
-                box.innerHTML = ''; // 上傳後清空文字圖示
+                
+                const iconSpan = box.querySelector('span');
+                if (iconSpan) iconSpan.style.display = 'none';
+                
+                if (tag) {
+                    tag.innerText = '✓ 已選取';
+                    tag.style.background = '#2ecc71';
+                }
             };
             reader.readAsDataURL(file);
         }
