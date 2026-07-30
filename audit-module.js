@@ -429,7 +429,7 @@
     // 4.1 獨立區段：手動新增點位功能 (Add Custom Point Module)
     // =========================================================
     
-    // 安全轉義字串 (防止 XSS 與 escapeHtml 未定義引發的 Error)
+    // 安全轉義字串 (防止 XSS 與 escapeHtml 未定義)
     const safeEscape = (str) => {
         if (typeof window.escapeHtml === 'function') return window.escapeHtml(str);
         if (!str) return '';
@@ -442,8 +442,7 @@
     };
     
     /**
-     * 1. 觸發挑選位置模式 (點擊「新增點位」按鈕呼叫此函式)
-     * @param {string} kmlId - 目前選擇的圖層 ID
+     * 1. 觸發挑選位置模式 (點擊「新增點位」按鈕時呼叫)
      */
     window.startAddCustomPoint = function(kmlId) {
         if (typeof checkHasAuditPermission === 'function' && !checkHasAuditPermission()) {
@@ -453,7 +452,7 @@
     
         const targetKmlId = kmlId || window.currentActiveKmlId;
         if (!targetKmlId) {
-            Swal.fire('提示', '請先選擇或開啟一個目標圖層再進行新增！', 'info');
+            Swal.fire('提示', '請先從選單開啟或選擇一個目標圖層再進行新增！', 'info');
             return;
         }
     
@@ -477,32 +476,24 @@
     
         // 單次監聽地圖點擊事件
         map.once('click', async function(e) {
-            // 恢復預設游標
             map.getContainer().style.cursor = '';
-            
             const lat = e.latlng.lat;
             const lng = e.latlng.lng;
     
-            // 開啟新增點位填寫對話框
             await window.openAddPointModal(targetKmlId, lat, lng);
         });
     };
     
     /**
      * 2. 彈出新增點位表單視窗
-     * @param {string} kmlId - 圖層 ID
-     * @param {number} lat - 緯度
-     * @param {number} lng - 經度
      */
     window.openAddPointModal = async function(kmlId, lat, lng) {
         const layerConfig = window.globalAuditConfigs?.[kmlId] || {};
         const maxPhotos = layerConfig.targetPhotos || 2;
         let currentPhotos = new Array(maxPhotos).fill(null);
     
-        // 重置暫存照片全域變數
         window._tempAddPointPhotos = currentPhotos;
     
-        // 生成動態照片拍格 HTML (獨立預覽層，保留 input 節點)
         const photoHtml = Array.from({ length: maxPhotos }, (_, i) => `
             <div style="position:relative; width:100%; aspect-ratio:1; border:2px dashed #ccc; border-radius:6px; display:flex; align-items:center; justify-content:center; overflow:hidden; background:#f9f9f9;" id="add-photo-box-${i}">
                 <input type="file" accept="image/*" capture="environment" onchange="window.handleAddPointPhotoChange(event, ${i})" style="position:absolute; width:100%; height:100%; opacity:0; cursor:pointer; z-index:2;">
@@ -510,7 +501,6 @@
             </div>
         `).join('');
     
-        // 彈出 SweetAlert2 表單
         const { value: res } = await Swal.fire({
             title: `<div style="font-size:18px;">➕ 新增點位清查紀錄</div>`,
             html: `<div style="text-align:left;">
@@ -620,7 +610,7 @@
             await firebase.firestore()
                 .collection(APP_PATH)
                 .doc(kmlId)
-                .collection('auditrecords')
+                .collection('audit_records')
                 .doc(data.pointKey)
                 .set(recordData, { merge: true });
     
@@ -659,72 +649,64 @@
     };
     
     /**
-     * 5. 獨立控管 UI 渲染：向 Section 9 生成的容器注入按鈕 & 修正底部高度 (預防螢幕外遮擋)
+     * 5. 使用 Leaflet 原生 L.Control 直接掛載於地圖右上角 (與清查選單相同模式)
      */
-    window.renderAuditAddPointButton = function() {
-        // 優先找 Section 9 生成的 audit-bottom-menu 容器，找不到則退回 body
-        let container = typeof bottomControl !== 'undefined' ? bottomControl._container : document.querySelector('.audit-bottom-menu');
-        
-        // 如果 Section 9 的容器還沒準備好，自動幫它建立一個掛在 body 上
-        if (!container) {
-            container = document.getElementById('global-audit-btn-container');
-            if (!container) {
-                container = document.createElement('div');
-                container.id = 'global-audit-btn-container';
-                document.body.appendChild(container);
+    let addPointMapControl = null;
+    
+    window.initAddPointLeafletControl = function() {
+        const map = window.mapNamespace?.map;
+        if (!map || typeof L === 'undefined') return;
+    
+        // 避免重複初始化
+        if (addPointMapControl) return;
+    
+        const AddPointControl = L.Control.extend({
+            options: {
+                position: 'topright' // 可改為 'topleft', 'bottomright' 等
+            },
+            onAdd: function() {
+                const container = L.DomUtil.create('div', 'leaflet-bar leaflet-control');
+                container.style.background = '#ffffff';
+                container.style.border = '2px solid rgba(0,0,0,0.2)';
+                container.style.borderRadius = '8px';
+                container.style.boxShadow = '0 2px 8px rgba(0,0,0,0.3)';
+                container.style.overflow = 'hidden';
+    
+                const btn = L.DomUtil.create('button', '', container);
+                btn.innerHTML = '➕ 新增點位';
+                btn.style.background = '#2ecc71';
+                btn.style.color = '#ffffff';
+                btn.style.border = 'none';
+                btn.style.padding = '8px 14px';
+                btn.style.fontWeight = 'bold';
+                btn.style.fontSize = '14px';
+                btn.style.cursor = 'pointer';
+                btn.style.display = 'block';
+    
+                // 防止點擊按鈕時觸發地圖的縮放或拖拽
+                L.DomEvent.disableClickPropagation(container);
+                L.DomEvent.disableScrollPropagation(container);
+    
+                btn.onclick = function() {
+                    window.startAddCustomPoint();
+                };
+    
+                return container;
             }
-        }
+        });
     
-        const currentKmlId = window.currentActiveKmlId;
-    
-        if (!currentKmlId) {
-            container.style.display = 'none';
-            return;
-        }
-    
-        // 💡 關鍵修正：將固定位置大幅往上提 (120px)，並確保 z-index 極高
-        container.style.position = 'fixed';
-        container.style.bottom = 'calc(120px + env(safe-area-inset-bottom, 0px))'; // 往上提 120px
-        container.style.left = '50%';
-        container.style.transform = 'translateX(-50%)';
-        container.style.zIndex = '99999'; // 最高層級，防止被任何底圖/選單遮擋
-        container.style.pointerEvents = 'auto';
-        container.style.display = 'flex';
-        container.style.gap = '10px';
-    
-        // 檢查或建立按鈕 (避免重複注入)
-        let btn = container.querySelector('#audit-add-point-btn');
-        if (!btn) {
-            btn = document.createElement('button');
-            btn.id = 'audit-add-point-btn';
-            btn.style.cssText = `
-                pointer-events: auto;
-                background: #2ecc71;
-                color: white;
-                border: 2px solid #ffffff;
-                padding: 10px 20px;
-                border-radius: 25px;
-                font-weight: bold;
-                font-size: 15px;
-                box-shadow: 0 4px 15px rgba(0,0,0,0.4);
-                cursor: pointer;
-                display: flex;
-                align-items: center;
-                gap: 6px;
-                transition: all 0.2s ease;
-            `;
-            btn.innerHTML = `➕ 新增點位`;
-            btn.onclick = () => window.startAddCustomPoint();
-            container.appendChild(btn);
-        }
+        addPointMapControl = new AddPointControl();
+        addPointMapControl.addTo(map);
     };
     
-    // 💡 監聽圖層切換事件，自動觸發渲染 (可配合專案中的切換圖層函式呼叫)
-    document.addEventListener('change', (e) => {
-        if (e.target && e.target.id === 'kmlLayerSelect') {
-            setTimeout(window.renderAuditAddPointButton, 200);
+    // 輪詢確保地圖載入後立即掛載懸浮按鈕
+    const initControlInterval = setInterval(() => {
+        if (window.mapNamespace?.map && typeof L !== 'undefined') {
+            clearInterval(initControlInterval);
+            window.initAddPointLeafletControl();
         }
-    });    
+    }, 500);
+    
     // ---------------------------------------------------------
     // 5. 清查資料編輯與上傳邏輯 (語法修復與 4 格狀態版)
     // ---------------------------------------------------------
