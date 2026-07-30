@@ -181,18 +181,18 @@
                 btnHtml = `
                     <button onclick="window.viewAuditDetailOnly('${safePointKey}')" 
                             style="background: #e91e63; color: white; border: 2px solid #ffffff; padding: 10px 22px; border-radius: 50px; font-weight: bold; font-size: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); cursor: pointer;">
-                        查看
+                        🔍 查看
                     </button>
                     <button onclick="window.openAuditEditor(true)" 
                             style="background: #f39c12; color: white; border: 2px solid #ffffff; padding: 10px 22px; border-radius: 50px; font-weight: bold; font-size: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); cursor: pointer;">
-                        修改
+                        ✏️ 修改
                     </button>
                 `;
             } else {
                 btnHtml = `
                     <button onclick="window.openAuditEditor(false)" 
                             style="background: #2ecc71; color: white; border: 2px solid #ffffff; padding: 12px 35px; border-radius: 50px; font-weight: bold; font-size: 16px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); cursor: pointer;">
-                        清查點位
+                        📋 清查點位
                     </button>
                 `;
             }
@@ -313,13 +313,28 @@
 
             if (status) {
                 const { value: count } = await Swal.fire({
-                    title: '設定必填照片張數', 
-                    input: 'select', 
-                    inputOptions: { '2':'2張','3':'3張','5':'5張' }, 
-                    inputValue: '2',
-                    showCancelButton: true
-                });
-                
+                    title: '照片張數 (1~12)',
+                    input: 'number',
+                    inputValue: 2, 
+                    inputAttributes: {
+                        min: 1,    
+                        max: 12,   
+                        step: 1
+                    },
+                    showCancelButton: true,
+                    confirmButtonText: '確定',
+                    cancelButtonText: '取消',
+                    inputValidator: (value) => {
+                        const val = parseInt(value, 10);
+                        if (!value || isNaN(val)) {
+                            return '請輸入有效的數字！';
+                        }
+                        if (val < 1 || val > 12) {
+                            return '張數必須介於 1 到 12 張之間！';
+                        }
+                    }
+                }); 
+                               
                 if (count) {
                     Swal.fire({ title: '正在開啟清查...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
                     
@@ -391,7 +406,7 @@
                         else { if (height > max_size) { width *= max_size / height; height = max_size; } }
                         canvas.width = width; canvas.height = height;
                         canvas.getContext('2d').drawImage(img, 0, 0, width, height);
-                        const base64 = canvas.toDataURL('image/jpeg', 0.83);
+                        const base64 = canvas.toDataURL('image/jpeg', 0.82);
                         
                         const prevEl = document.getElementById('audit-prev-' + index);
                         const iconEl = document.getElementById('audit-icon-' + index);
