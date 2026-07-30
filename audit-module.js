@@ -181,18 +181,18 @@
                 btnHtml = `
                     <button onclick="window.viewAuditDetailOnly('${safePointKey}')" 
                             style="background: #e91e63; color: white; border: 2px solid #ffffff; padding: 10px 22px; border-radius: 50px; font-weight: bold; font-size: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); cursor: pointer;">
-                        🔍 查看
+                        查看
                     </button>
                     <button onclick="window.openAuditEditor(true)" 
                             style="background: #f39c12; color: white; border: 2px solid #ffffff; padding: 10px 22px; border-radius: 50px; font-weight: bold; font-size: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); cursor: pointer;">
-                        ✏️ 修改
+                        修改
                     </button>
                 `;
             } else {
                 btnHtml = `
                     <button onclick="window.openAuditEditor(false)" 
                             style="background: #2ecc71; color: white; border: 2px solid #ffffff; padding: 12px 35px; border-radius: 50px; font-weight: bold; font-size: 16px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); cursor: pointer;">
-                        📋 清查點位
+                        清查點位
                     </button>
                 `;
             }
@@ -301,7 +301,7 @@
                     <div style="display:flex; gap:6px;">
                         ${isAuditing ? `
                             <button onclick="window.downloadAuditPhotosZip('${safeValue}')" title="下載此圖層所有照片為 ZIP" style="background:#8e44ad; color:white; border:none; padding:6px 10px; border-radius:4px; cursor:pointer; font-size:12px;">
-                                📦 下載照片
+                                下載照片
                             </button>
                         ` : ''}
                         <button onclick="window.toggleAuditStatus('${safeValue}', ${!isAuditing})" style="background:${isAuditing ? '#666' : '#3498db'}; color:white; border:none; padding:6px 12px; border-radius:4px; cursor:pointer; font-size:12px;">
@@ -385,7 +385,7 @@
     };
     
     // ---------------------------------------------------------
-    // 5. 清查資料編輯與上傳邏輯
+    // 5. 清查資料編輯與上傳邏輯 (語法修復與 4 格狀態版)
     // ---------------------------------------------------------
     window.openAuditEditor = async function(isModifyMode = false) {
         if (!checkHasAuditPermission()) return;
@@ -407,7 +407,7 @@
         const currentStatus = historyRecord.deviceStatus || '';
         const currentNote = historyRecord.note || '';
 
-        // 圖片處理快照函式
+        // 圖片處理快照函式 (上限 1920px, 品質 0.82)
         window._tempPreview = function(input, index) {
             if (input.files && input.files[0]) {
                 const reader = new FileReader();
@@ -435,26 +435,18 @@
             }
         };
 
-        // 拼接照片上傳 UI (整理 HTML 結構)
+        // 拼接照片上傳 UI
         let photoHtml = '';
         for (let i = 0; i < maxPhotos; i++) {
             const photoData = currentPhotos[i] || '';
             
             photoHtml += `
                 <div style="position:relative; margin-bottom:20px;">
-                    <!-- 1. 照片上傳容器 (高度 85px) -->
                     <div style="border:2px dashed #ccc; height:85px; position:relative; display:flex; align-items:center; justify-content:center; background:#fafafa; border-radius:8px; overflow:hidden; cursor:pointer;">
-                        <!-- 預覽圖 -->
                         <img id="audit-prev-${i}" src="${photoData}" style="width:100%; height:100%; object-fit:cover; display:${photoData ? 'block' : 'none'}; position:absolute; top:0; left:0; z-index:1;">
-                        
-                        <!-- 預設相機圖示 -->
                         <span id="audit-icon-${i}" style="font-size:24px; color:#bbb; display:${photoData ? 'none' : 'block'}; z-index:1;">📷</span>
-                    
-                        <!-- 拍照 Input (覆蓋上方區域，觸發相機) -->
                         <input type="file" accept="image/*" capture="environment" onchange="window._tempPreview(this, ${i})" style="position:absolute; width:100%; height:100%; opacity:0; z-index:2; cursor:pointer;" title="現場拍照">
                     </div>
-                    
-                    <!-- 2. 舊檔按鈕 (壓在邊緣下方) -->
                     <label style="position:absolute; left:50%; transform:translateX(-50%); bottom:-12px; z-index:3; background:#555; color:#fff; font-size:11px; padding:3px 10px; border-radius:12px; cursor:pointer; display:flex; align-items:center; gap:4px; box-shadow:0 2px 4px rgba(0,0,0,0.2); white-space:nowrap; border:1px solid #777;">
                         <span>🖼️</span> 舊檔
                         <input type="file" accept="image/*" onchange="window._tempPreview(this, ${i})" style="display:none;">
@@ -462,34 +454,55 @@
                 </div>`;
         }
 
+        // 自定義 4 格設備狀態選項
+        const statusOptions = ['正常', '損壞', '變更', '遺失'];
+        const statusOptionsHtml = statusOptions.map(opt => 
+            `<option value="${opt}" ${currentStatus === opt ? 'selected' : ''}>${opt}</option>`
+        ).join('');
+
+        // 彈出 SweetAlert2 對話框
         const { value: res } = await Swal.fire({
             title: `<div style="font-size:18px;">${isModifyMode ? '修改' : '填寫'}清查紀錄：${escapeHtml(pointKey)}</div>`,
             html: `<div style="text-align:left;">
-                <label style="font-size:14px;"><b>設備狀態 <span style="color:red;">*必選</span></b></label>
-                <select id="swal-status" class="swal2-input" style="width:100%;margin:5px 0 15px 0;">
-                    <option value="" ${!currentStatus ? 'selected' : ''}>--- 請選擇狀態 ---</option>
-                    <option value="正常" ${currentStatus==='正常'?'selected':''}>正常</option>
-                    <option value="微創" ${currentStatus==='微創'?'selected':''}>微創</option>
-                    <option value="遺失" ${currentStatus==='遺失'?'selected':''}>遺失</option>
+                <label style="font-size:14px; font-weight:bold;">設備狀態 <span style="color:red;">*必選</span></label>
+                <select id="swal-status" class="swal2-input" style="width:100%; margin:6px 0 16px 0;">
+                    <option value="" ${!currentStatus ? 'selected' : ''}>--- 請選擇設備狀態 ---</option>
+                    ${statusOptionsHtml}
                 </select>
-                <label style="font-size:14px;"><b>現場照片 (需拍${maxPhotos}張)</b></label>
-                <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(90px, 1fr)); gap:10px; margin:10px 0 15px 0;">
+
+                <label style="font-size:14px; font-weight:bold;">現場照片 (需拍 ${maxPhotos} 張) <span style="color:red;">*必填</span></label>
+                <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(90px, 1fr)); gap:10px; margin:8px 0 16px 0;">
                     ${photoHtml}
                 </div>
-                <textarea id="swal-note" class="swal2-textarea" style="width:100%;height:60px;margin:0;" placeholder="輸入備註事項...">${escapeHtml(currentNote)}</textarea>
+
+                <label style="font-size:14px; font-weight:bold;">備註事項 <span style="color:#888; font-weight:normal;">(選填)</span></label>
+                <textarea id="swal-note" class="swal2-textarea" style="width:100%; height:70px; margin:6px 0 0 0; resize:vertical;" placeholder="輸入備註事項...">${escapeHtml(currentNote)}</textarea>
             </div>`,
             showCancelButton: true,
             confirmButtonText: isModifyMode ? '覆蓋更新' : '確認並上傳',
+            cancelButtonText: '取消',
             preConfirm: () => {
                 const statusValue = document.getElementById('swal-status').value;
-                if (!statusValue) { Swal.showValidationMessage('請選擇設備狀態'); return false; }
-                if (currentPhotos.filter(Boolean).length < maxPhotos) { Swal.showValidationMessage(`請拍滿 ${maxPhotos} 張照片`); return false; }
-                return { status: statusValue, note: document.getElementById('swal-note').value, photos: currentPhotos };
+                if (!statusValue) { 
+                    Swal.showValidationMessage('請選擇設備狀態'); 
+                    return false; 
+                }
+                if (currentPhotos.filter(Boolean).length < maxPhotos) { 
+                    Swal.showValidationMessage(`請拍滿 ${maxPhotos} 張照片`); 
+                    return false; 
+                }
+                return { 
+                    status: statusValue, 
+                    note: document.getElementById('swal-note').value, 
+                    photos: currentPhotos 
+                };
             }
         });
 
+        // 銷毀暫存預覽函式
         delete window._tempPreview;
 
+        // 表單確認後的上傳邏輯
         if (res) {
             Swal.fire({ title: '正在處理並上傳資料...', didOpen: () => Swal.showLoading(), allowOutsideClick: false });
             try {
