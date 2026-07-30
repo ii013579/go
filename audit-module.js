@@ -1094,78 +1094,42 @@
 
 
     // ---------------------------------------------------------
-    // 9. Leaflet 地圖初始化掛載 (輪詢檢查 & 常駐選單)
+    // 9. Leaflet 地圖初始化掛載 (輪詢檢查)
     // ---------------------------------------------------------
     let checkAttempts = 0;
     const maxAttempts = 30; 
-    let addPointControl = null; // 全域宣告右下角按鈕控制項
-
     const checkMapInterval = setInterval(() => {
         checkAttempts++;
         if (window.mapNamespace?.map && typeof L !== 'undefined') {
             clearInterval(checkMapInterval);
             
-            const map = window.mapNamespace.map;
-
-            // 效能優化 (500+ 點位 Canvas 防卡頓)
-            if (!map.options.renderer) {
-                map.options.renderer = L.canvas({ padding: 0.5 });
-            }
-
-            // 1. 底部中央清查選單
             const AuditMenu = L.Control.extend({
                 onAdd: function() {
                     this._container = L.DomUtil.create('div', 'audit-bottom-menu');
                     this._container.style.display = 'none';
                     this._container.style.position = 'fixed';
-                    this._container.style.bottom = '35px';
+                    
+                    // 💡 修改點 1：提高高度，並加入 iOS/Android 底部安全區域適應
+                    // env(safe-area-inset-bottom) 可以防止被手機底部的 Navigation Bar 擋住
+                    this._container.style.bottom = 'calc(60px + env(safe-area-inset-bottom, 0px))';
+                    
                     this._container.style.left = '50%';
                     this._container.style.transform = 'translateX(-50%)';
                     this._container.style.zIndex = '5000'; 
                     this._container.style.pointerEvents = 'none';
-
-                    // 防點擊與滾動穿透地圖
-                    L.DomEvent.disableClickPropagation(this._container);
-                    L.DomEvent.disableScrollPropagation(this._container);
-
                     return this._container;
                 }
             });
             bottomControl = new AuditMenu();
-            bottomControl.addTo(map);
-
-            // 2. 【右下角常駐】新增點位按鈕控制項
-            const AddPointMenu = L.Control.extend({
-                options: { position: 'bottomright' },
-                onAdd: function() {
-                    this._container = L.DomUtil.create('div', 'audit-add-point-btn-container');
-                    this._container.style.display = 'none'; // 預設隱藏
-                    this._container.style.marginBottom = '25px';
-                    this._container.style.marginRight = '15px';
-                    this._container.style.zIndex = '5000';
-
-                    // 防點擊穿透地圖
-                    L.DomEvent.disableClickPropagation(this._container);
-                    L.DomEvent.disableScrollPropagation(this._container);
-
-                    this._container.innerHTML = `
-                        <button onclick="window.startAddCustomPoint()" 
-                                style="background:#2ecc71; color:white; border:none; padding:10px 16px; border-radius:30px; font-weight:bold; cursor:pointer; font-size:14px; display:flex; align-items:center; gap:6px; box-shadow:0 4px 12px rgba(0,0,0,0.3); transition:transform 0.1s ease;">
-                            ➕ 新增點位
-                        </button>
-                    `;
-                    return this._container;
-                }
-            });
-            addPointControl = new AddPointMenu();
-            addPointControl.addTo(map);
-            window.addPointControlRef = addPointControl; // 賦值給全域引用供 UI 更新使用
-
-            // 啟動 Firestore 全域清查配置監聽
-            initGlobalConfigListener();
-
-            console.log("清查模組與右下角新增點位按鈕已成功掛載至 Leaflet。");
-
+            bottomControl.addTo(window.mapNamespace.map);
+    
+            if (typeof initGlobalConfigListener === 'function') {
+                initGlobalConfigListener();
+            }
+            if (typeof window.updateAuditBottomMenuUI === 'function') {
+                window.updateAuditBottomMenuUI();
+            }
+    
         } else if (checkAttempts >= maxAttempts) {
             clearInterval(checkMapInterval);
             console.warn("Leaflet 地圖載入逾時，停止清查選單初始化。");
