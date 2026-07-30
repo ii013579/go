@@ -273,7 +273,7 @@
     }
 
     // ---------------------------------------------------------
-    // 4. 清查管理對話框 (整合 ZIP 打包按鈕)
+    // 4. 清查管理對話框 (整合單一頁面設定與 ZIP 打包按鈕)
     // ---------------------------------------------------------
     window.showAuditActionModal = async function() {
         if (!checkHasAuditPermission()) {
@@ -286,7 +286,7 @@
         let listHtml = '<div style="max-height: 380px; overflow-y: auto; text-align: left;">';
         Array.from(select.options).forEach(opt => {
             if (!opt.value) return;
-            const config = window.globalAuditConfigs[opt.value] || {};
+            const config = window.globalAuditConfigs?.[opt.value] || {};
             const isAuditing = config.isAuditing || false;
             const targetPhotos = config.targetPhotos || 2;
             const baseName = opt.getAttribute('data-basename') || opt.textContent.split(' (')[0];
@@ -327,42 +327,83 @@
             Swal.close(); 
 
             if (status) {
-                const { value: count } = await Swal.fire({
-                    title: '照片張數 (1~12)',
-                    input: 'number',
-                    inputValue: 2, 
-                    inputAttributes: {
-                        min: 1,    
-                        max: 12,   
-                        step: 1
-                    },
+                // 1. 讀取先前儲存的選項，若無設定則給予預設值 (正常, 損壞, 變更, 遺失)
+                const savedOptions = localStorage.getItem('audit_status_options');
+                const defaultStatusStr = savedOptions 
+                    ? JSON.parse(savedOptions).join(', ') 
+                    : '正常, 損壞, 變更, 遺失';
+
+                // 2. 單一彈窗頁面：同時設定照片張數與設備狀態
+                const { value: formValues } = await Swal.fire({
+                    title: '⚙️ 清查模式設定',
+                    html: `
+                        <div style="text-align:left; font-size:14px;">
+                            <div style="margin-bottom: 16px;">
+                                <label style="font-weight:bold; display:block; margin-bottom:6px;">1. 設定必填照片張數 (1~12 張)</label>
+                                <input id="swal-input-count" type="number" class="swal2-input" value="2" min="1" max="12" step="1" style="width:100%; margin:0; box-sizing:border-box;">
+                            </div>
+                            <div>
+                                <label style="font-weight:bold; display:block; margin-bottom:6px;">2. 設定設備狀態選項 (用逗號或換行分隔)</label>
+                                <textarea id="swal-input-status" class="swal2-textarea" style="width:100%; height:80px; margin:0; box-sizing:border-box; resize:vertical;">${defaultStatusStr}</textarea>
+                            </div>
+                        </div>
+                    `,
                     showCancelButton: true,
-                    confirmButtonText: '確定',
+                    confirmButtonText: '確定並開啟清查',
                     cancelButtonText: '取消',
-                    inputValidator: (value) => {
-                        const val = parseInt(value, 10);
-                        if (!value || isNaN(val)) {
-                            return '請輸入有效的數字！';
+                    focusConfirm: false,
+                    preConfirm: () => {
+                        const countVal = parseInt(document.getElementById('swal-input-count').value, 10);
+                        const statusVal = document.getElementById('swal-input-status').value.trim();
+
+                        if (!countVal || isNaN(countVal) || countVal < 1 || countVal > 12) {
+                            Swal.showValidationMessage('照片張數必須介於 1 到 12 張之間！');
+                            return false;
                         }
-                        if (val < 1 || val > 12) {
-                            return '張數必須介於 1 到 12 張之間！';
+                        if (!statusVal) {
+                            Swal.showValidationMessage('設備狀態選項不能為空！');
+                            return false;
                         }
+
+                        // 解析選項字串為陣列
+                        const optionsArray = statusVal
+                            .split(/[,，\n]/)
+                            .map(s => s.trim())
+                            .filter(Boolean);
+
+                        if (optionsArray.length === 0) {
+                            Swal.showValidationMessage('請至少輸入一個有效的設備狀態選項！');
+                            return false;
+                        }
+
+                        return {
+                            count: countVal,
+                            options: optionsArray
+                        };
                     }
-                }); 
-                               
-                if (count) {
+                });
+
+                if (formValues) {
+                    const { count, options } = formValues;
+
+                    // 儲存至本地快照 (LocalStorage)
+                    localStorage.setItem('audit_status_options', JSON.stringify(options));
+
+                    // 顯示 Loading 並同步寫入 Firestore 資料庫
                     Swal.fire({ title: '正在開啟清查...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
                     
                     await firebase.firestore().collection(APP_PATH).doc(kmlId).set({ 
                         isAuditing: true, 
-                        targetPhotos: parseInt(count, 10) 
+                        targetPhotos: count,
+                        statusOptions: options
                     }, { merge: true });
                     
-                    Swal.fire({ icon: 'success', title: '已開啟清查模式', timer: 1000, showConfirmButton: false });
+                    Swal.fire({ icon: 'success', title: '已成功開啟清查模式', timer: 1200, showConfirmButton: false });
                 } else {
                     window.showAuditActionModal();
                 }
             } else {
+                // 關閉清查模式
                 Swal.fire({ title: '正在關閉清查...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
                 
                 await firebase.firestore().collection(APP_PATH).doc(kmlId).set({ 
@@ -383,7 +424,7 @@
             });
         }
     };
-    
+       
     // ---------------------------------------------------------
     // 5. 清查資料編輯與上傳邏輯 (語法修復與 4 格狀態版)
     // ---------------------------------------------------------
@@ -454,8 +495,13 @@
                 </div>`;
         }
 
-        // 自定義 4 格設備狀態選項
-        const statusOptions = ['正常', '損壞', '變更', '遺失'];
+        // ---------------------------------------------------------
+        // 動態讀取設備狀態選項 (優先從圖層設定檔抓取，其次讀取 localStorage，最後才用預設值)
+        // ---------------------------------------------------------
+        const layerConfig = window.globalAuditConfigs?.[kmlId] || {};
+        const statusOptions = layerConfig.statusOptions || 
+                              (localStorage.getItem('audit_status_options') ? JSON.parse(localStorage.getItem('audit_status_options')) : ['正常', '損壞', '變更', '遺失']);
+
         const statusOptionsHtml = statusOptions.map(opt => 
             `<option value="${opt}" ${currentStatus === opt ? 'selected' : ''}>${opt}</option>`
         ).join('');
@@ -501,7 +547,7 @@
 
         // 銷毀暫存預覽函式
         delete window._tempPreview;
-
+        
         // 表單確認後的上傳邏輯
         if (res) {
             Swal.fire({ title: '正在處理並上傳資料...', didOpen: () => Swal.showLoading(), allowOutsideClick: false });
