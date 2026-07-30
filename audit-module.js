@@ -342,11 +342,11 @@
             Swal.close(); 
 
             if (status) {
-                // 1. 讀取先前儲存的選項，若無設定則給予預設值 (正常, 損壞, 變更, 遺失)
+                // 1. 讀取先前儲存的選項，若無設定則給予預設值 (正常, 損壞, 遺失)
                 const savedOptions = localStorage.getItem('audit_status_options');
                 const defaultStatusStr = savedOptions 
                     ? JSON.parse(savedOptions).join(', ') 
-                    : '正常, 損壞, 變更, 遺失';
+                    : '正常, 損壞, 遺失';
 
                 // 2. 單一彈窗頁面：同時設定照片張數與設備狀態
                 const { value: formValues } = await Swal.fire({
@@ -500,11 +500,9 @@
     };
     
     /**
-     * 自動生成獨立的「新增點位」膠囊按鈕
-     * (高度與清查點位平齊，無黑框，樣式統一)
+     * 獨立「新增點位」膠囊按鈕 (固定於右下角手繪紅框處)
      */
     (function renderStandaloneAddButton() {
-        // 避免重複建立
         let btn = document.getElementById('btn-standalone-add-point');
         if (!btn) {
             btn = document.createElement('button');
@@ -513,11 +511,11 @@
             document.body.appendChild(btn);
         }
     
-        // 強制套用與「清查點位」完全相同的膠囊樣式與同高度定位
+        // 將定位改為 right: 15px, bottom: 20px (精準對齊右下角)
         btn.setAttribute('style', `
             position: fixed !important;
             bottom: 20px !important;
-            left: 200px !important;
+            right: 15px !important;
             z-index: 4000 !important;
             background-color: #2ecc71 !important;
             color: #ffffff !important;
@@ -537,110 +535,220 @@
             white-space: nowrap !important;
         `);
     
-        // 點擊事件
+        // 點擊觸發新增點位邏輯
         btn.onclick = function(e) {
             e.stopPropagation();
-            window.startAddCustomPoint();
+            if (typeof window.startAddCustomPoint === 'function') {
+                window.startAddCustomPoint();
+            }
         };
     })();
     
     /**
-     * 2. 彈出新增點位表單視窗
+     * 100% 復刻「新增點位清查紀錄」彈窗介面
      */
     window.openAddPointModal = async function(kmlId, lat, lng) {
-        const layerConfig = window.globalAuditConfigs?.[kmlId] || {};
-        const maxPhotos = layerConfig.targetPhotos || 2;
-        let currentPhotos = new Array(maxPhotos).fill(null);
+        // 格式化座標顯示至小數點 6 位
+        const formattedLat = parseFloat(lat).toFixed(6);
+        const formattedLng = parseFloat(lng).toFixed(6);
     
-        window._tempAddPointPhotos = currentPhotos;
-    
-        const photoHtml = Array.from({ length: maxPhotos }, (_, i) => `
-            <div style="position:relative; width:100%; aspect-ratio:1; border:2px dashed #ccc; border-radius:6px; display:flex; align-items:center; justify-content:center; overflow:hidden; background:#f9f9f9;" id="add-photo-box-${i}">
-                <input type="file" accept="image/*" capture="environment" onchange="window.handleAddPointPhotoChange(event, ${i})" style="position:absolute; width:100%; height:100%; opacity:0; cursor:pointer; z-index:2;">
-                <div id="add-photo-preview-${i}" style="font-size:12px; color:#888; text-align:center; pointer-events:none;">📷 點擊拍照<br>(${i+1})</div>
+        const modalHtml = `
+        <div style="text-align: left; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; color: #333; padding: 5px 10px;">
+            
+            <!-- 標題 -->
+            <div style="text-align: center; font-size: 20px; font-weight: bold; color: #4a4a4a; margin-bottom: 20px; display: flex; align-items: center; justify-content: center; gap: 8px;">
+                <span style="color: #7c5acb; font-size: 24px; font-weight: 900;">➕</span>
+                <span>新增點位清查紀錄</span>
             </div>
-        `).join('');
     
-        const { value: res } = await Swal.fire({
-            title: `<div style="font-size:18px;">➕ 新增點位清查紀錄</div>`,
-            html: `<div style="text-align:left;">
-                <div style="margin-bottom:12px; font-size:12px; color:#27ae60; background:#e8f8f5; padding:6px 10px; border-radius:4px; font-weight:bold;">
-                    📍 點擊座標：${lat.toFixed(6)}, ${lng.toFixed(6)}
+            <!-- 座標提示區塊 -->
+            <div style="background-color: #e8f8f5; border-radius: 6px; padding: 10px 14px; margin-bottom: 20px; font-size: 15px; font-weight: bold; color: #2ecc71; display: flex; align-items: center; gap: 6px;">
+                <span>📍</span>
+                <span>點擊座標：<span style="color: #2ecc71;">${formattedLat}, ${formattedLng}</span></span>
+            </div>
+    
+            <!-- 點位名稱 / 點名 -->
+            <div style="margin-bottom: 20px;">
+                <label style="display: block; font-size: 15px; font-weight: bold; color: #4a4a4a; margin-bottom: 8px;">
+                    點位名稱 / 點名 <span style="color: #e74c3c;">*必填</span>
+                </label>
+                <input type="text" id="add-point-name" placeholder="例如：新設電桿-01" style="
+                    width: 100%;
+                    padding: 12px 14px;
+                    font-size: 16px;
+                    border: 1px solid #dcdfe6;
+                    border-radius: 8px;
+                    outline: none;
+                    box-sizing: border-box;
+                    color: #333;
+                    background-color: #fff;
+                ">
+            </div>
+    
+            <!-- 設備狀態 -->
+            <div style="margin-bottom: 20px;">
+                <label style="display: block; font-size: 15px; font-weight: bold; color: #4a4a4a; margin-bottom: 8px;">
+                    設備狀態
+                </label>
+                <div style="
+                    width: 100%;
+                    padding: 12px 16px;
+                    font-size: 18px;
+                    font-weight: bold;
+                    color: #2c3e50;
+                    background-color: #eef1f6;
+                    border-radius: 8px;
+                    box-sizing: border-box;
+                ">
+                    新增
                 </div>
+            </div>
     
-                <label style="font-size:14px; font-weight:bold;">點位名稱 / 點名 <span style="color:red;">*必填</span></label>
-                <input id="swal-add-point-name" class="swal2-input" style="width:100%; margin:6px 0 14px 0; box-sizing:border-box;" placeholder="例如：新設電桿-01">
+            <!-- 現場照片 -->
+            <div style="margin-bottom: 20px;">
+                <label style="display: block; font-size: 15px; font-weight: bold; color: #4a4a4a; margin-bottom: 8px;">
+                    現場照片 (需拍 2 張) <span style="color: #e74c3c;">*必填</span>
+                </label>
+                <div style="display: flex; gap: 15px;">
+                    <!-- 照片 1 -->
+                    <div id="photo-box-1" style="
+                        width: 120px;
+                        height: 120px;
+                        border: 2px dashed #c0c4cc;
+                        border-radius: 12px;
+                        background-color: #f5f7fa;
+                        display: flex;
+                        flex-direction: column;
+                        align-items: center;
+                        justify-content: center;
+                        cursor: pointer;
+                        color: #909399;
+                        font-size: 13px;
+                        line-height: 1.4;
+                        text-align: center;
+                    " onclick="document.getElementById('input-photo-1').click()">
+                        <span style="font-size: 18px; margin-bottom: 4px;">📷</span>
+                        <span>點擊拍照<br>(1)</span>
+                        <input type="file" id="input-photo-1" accept="image/*" capture="environment" style="display: none;" onchange="handlePhotoUpload(this, 'photo-box-1')">
+                    </div>
     
-                <label style="font-size:14px; font-weight:bold;">設備狀態</label>
-                <input id="swal-add-status" class="swal2-input" value="新增" disabled style="width:100%; margin:6px 0 14px 0; background:#e9ecef; color:#495057; cursor:not-allowed; box-sizing:border-box; font-weight:bold;">
-    
-                <label style="font-size:14px; font-weight:bold;">現場照片 (需拍 ${maxPhotos} 張) <span style="color:red;">*必填</span></label>
-                <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(90px, 1fr)); gap:10px; margin:8px 0 14px 0;">
-                    ${photoHtml}
+                    <!-- 照片 2 -->
+                    <div id="photo-box-2" style="
+                        width: 120px;
+                        height: 120px;
+                        border: 2px dashed #c0c4cc;
+                        border-radius: 12px;
+                        background-color: #f5f7fa;
+                        display: flex;
+                        flex-direction: column;
+                        align-items: center;
+                        justify-content: center;
+                        cursor: pointer;
+                        color: #909399;
+                        font-size: 13px;
+                        line-height: 1.4;
+                        text-align: center;
+                    " onclick="document.getElementById('input-photo-2').click()">
+                        <span style="font-size: 18px; margin-bottom: 4px;">📷</span>
+                        <span>點擊拍照<br>(2)</span>
+                        <input type="file" id="input-photo-2" accept="image/*" capture="environment" style="display: none;" onchange="handlePhotoUpload(this, 'photo-box-2')">
+                    </div>
                 </div>
+            </div>
     
-                <label style="font-size:14px; font-weight:bold;">備註事項 <span style="color:#888; font-weight:normal;">(選填)</span></label>
-                <textarea id="swal-add-note" class="swal2-textarea" style="width:100%; height:70px; margin:6px 0 0 0; resize:vertical; box-sizing:border-box;" placeholder="輸入備註事項..."></textarea>
-            </div>`,
+            <!-- 備註事項 -->
+            <div style="margin-bottom: 25px;">
+                <label style="display: block; font-size: 15px; font-weight: bold; color: #4a4a4a; margin-bottom: 8px;">
+                    備註事項 <span style="color: #909399; font-weight: normal;">(選填)</span>
+                </label>
+                <textarea id="add-point-remark" placeholder="輸入備註事項..." style="
+                    width: 100%;
+                    height: 80px;
+                    padding: 12px 14px;
+                    font-size: 15px;
+                    border: 1px solid #dcdfe6;
+                    border-radius: 8px;
+                    outline: none;
+                    box-sizing: border-box;
+                    resize: vertical;
+                    color: #333;
+                    font-family: inherit;
+                "></textarea>
+            </div>
+    
+        </div>
+        `;
+    
+        // 呼叫 SweetAlert2 彈窗
+        const { value: formValues } = await Swal.fire({
+            html: modalHtml,
             showCancelButton: true,
             confirmButtonText: '確認並新增上傳',
             cancelButtonText: '取消',
-            focusConfirm: false,
-            willClose: () => {
-                delete window._tempAddPointPhotos;
+            confirmButtonColor: '#7066e0', // 原圖紫色按鈕
+            cancelButtonColor: '#707a86',  // 原圖灰色按鈕
+            buttonsStyling: true,
+            customClass: {
+                popup: 'custom-audit-modal-popup',
+                confirmButton: 'custom-audit-confirm-btn',
+                cancelButton: 'custom-audit-cancel-btn'
             },
+            focusConfirm: false,
             preConfirm: () => {
-                const pointName = document.getElementById('swal-add-point-name').value.trim();
-                if (!pointName) { 
-                    Swal.showValidationMessage('請輸入點位名稱！'); 
-                    return false; 
+                const name = document.getElementById('add-point-name').value.trim();
+                const remark = document.getElementById('add-point-remark').value.trim();
+                const photo1 = window.uploadedPhotos?.['photo-box-1'];
+                const photo2 = window.uploadedPhotos?.['photo-box-2'];
+    
+                if (!name) {
+                    Swal.showValidationMessage('請填寫點位名稱！');
+                    return false;
                 }
-                
-                const validPhotos = (window._tempAddPointPhotos || []).filter(Boolean);
-                if (validPhotos.length < maxPhotos) { 
-                    Swal.showValidationMessage(`請拍滿 ${maxPhotos} 張照片！`); 
-                    return false; 
+                if (!photo1 || !photo2) {
+                    Swal.showValidationMessage('請至少上傳 2 張現場照片！');
+                    return false;
                 }
     
-                return { 
-                    pointKey: pointName,
-                    status: '新增', 
-                    note: document.getElementById('swal-add-note').value.trim(), 
-                    photos: window._tempAddPointPhotos,
+                return {
+                    kmlId: kmlId,
                     lat: lat,
-                    lng: lng
+                    lng: lng,
+                    name: name,
+                    status: '新增',
+                    remark: remark,
+                    photos: [photo1, photo2]
                 };
             }
         });
     
-        if (res) {
-            await window.saveNewPointToFirestore(kmlId, res);
+        if (formValues) {
+            console.log("表單提交資料：", formValues);
+            // 此處串接您的 Firebase / Firestore 上傳邏輯
+            if (typeof window.submitNewCustomPoint === 'function') {
+                await window.submitNewCustomPoint(formValues);
+            }
         }
     };
     
     /**
-     * 3. 處理照片預覽轉碼
+     * 處理照片預覽輔助函式
      */
-    window.handleAddPointPhotoChange = function(event, index) {
-        const file = event.target.files[0];
-        if (!file) return;
-    
-        const reader = new FileReader();
-        reader.onload = function(e) {
-            const base64Data = e.target.result;
-            if (!window._tempAddPointPhotos) window._tempAddPointPhotos = [];
-            window._tempAddPointPhotos[index] = base64Data;
-    
-            const containerBox = document.getElementById(`add-photo-box-${index}`);
-            const previewEl = document.getElementById(`add-photo-preview-${index}`);
-            
-            if (containerBox && previewEl) {
-                containerBox.style.border = '2px solid #2ecc71';
-                previewEl.style.pointerEvents = 'none';
-                previewEl.innerHTML = `<img src="${base64Data}" style="width:100%; height:100%; object-fit:cover; position:absolute; top:0; left:0;">`;
-            }
-        };
-        reader.readAsDataURL(file);
+    window.uploadedPhotos = {};
+    window.handlePhotoUpload = function(input, boxId) {
+        if (input.files && input.files[0]) {
+            const file = input.files[0];
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                window.uploadedPhotos[boxId] = file;
+                const box = document.getElementById(boxId);
+                box.style.backgroundImage = `url('${e.target.result}')`;
+                box.style.backgroundSize = 'cover';
+                box.style.backgroundPosition = 'center';
+                box.style.border = '2px solid #2ecc71';
+                box.innerHTML = ''; // 清除文字圖示
+            };
+            reader.readAsDataURL(file);
+        }
     };
     
     /**
@@ -865,7 +973,7 @@
         // ---------------------------------------------------------
         const layerConfig = window.globalAuditConfigs?.[kmlId] || {};
         const statusOptions = layerConfig.statusOptions || 
-                              (localStorage.getItem('audit_status_options') ? JSON.parse(localStorage.getItem('audit_status_options')) : ['正常','損壞','變更','遺失']);
+                              (localStorage.getItem('audit_status_options') ? JSON.parse(localStorage.getItem('audit_status_options')) : ['正常','損壞','遺失']);
 
         const statusOptionsHtml = statusOptions.map(opt => 
             `<option value="${opt}" ${currentStatus === opt ? 'selected' : ''}>${opt}</option>`
