@@ -426,10 +426,10 @@
     };
        
     // =========================================================
-    // 4.1 獨立區段：手動新增點位功能 (Add Custom Point Module)
+    // 4.1 獨立區段：手動新增點位功能 & 底部按鈕UI渲染
     // =========================================================
     
-    // 安全轉義字串 (防止 XSS 與 escapeHtml 未定義)
+    // 安全轉義字串 (防止 XSS)
     const safeEscape = (str) => {
         if (typeof window.escapeHtml === 'function') return window.escapeHtml(str);
         if (!str) return '';
@@ -442,7 +442,7 @@
     };
     
     /**
-     * 1. 觸發挑選位置模式 (點擊「新增點位」按鈕時呼叫)
+     * 1. 觸發挑選位置模式 (點擊「新增點位」按鈕)
      */
     window.startAddCustomPoint = function(kmlId) {
         if (typeof checkHasAuditPermission === 'function' && !checkHasAuditPermission()) {
@@ -452,14 +452,13 @@
     
         const targetKmlId = kmlId || window.currentActiveKmlId;
         if (!targetKmlId) {
-            Swal.fire('提示', '請先從選單開啟或選擇一個目標圖層再進行新增！', 'info');
+            Swal.fire('提示', '請先開啟或選擇一個目標圖層！', 'info');
             return;
         }
     
         const map = window.mapNamespace?.map;
         if (!map) return;
     
-        // 頂部 Toast 提示
         Swal.mixin({
             toast: true,
             position: 'top',
@@ -471,16 +470,11 @@
             title: '📍 請在地圖上點擊要新增點位的實體位置' 
         });
     
-        // 更改地圖滑鼠游標為十字準心
         map.getContainer().style.cursor = 'crosshair';
     
-        // 單次監聽地圖點擊事件
         map.once('click', async function(e) {
             map.getContainer().style.cursor = '';
-            const lat = e.latlng.lat;
-            const lng = e.latlng.lng;
-    
-            await window.openAddPointModal(targetKmlId, lat, lng);
+            await window.openAddPointModal(targetKmlId, e.latlng.lat, e.latlng.lng);
         });
     };
     
@@ -509,7 +503,7 @@
                 </div>
     
                 <label style="font-size:14px; font-weight:bold;">點位名稱 / 點名 <span style="color:red;">*必填</span></label>
-                <input id="swal-add-point-name" class="swal2-input" style="width:100%; margin:6px 0 14px 0; box-sizing:border-box;" placeholder="例如：新設電桿-01 或 燈桿-A1">
+                <input id="swal-add-point-name" class="swal2-input" style="width:100%; margin:6px 0 14px 0; box-sizing:border-box;" placeholder="例如：新設電桿-01">
     
                 <label style="font-size:14px; font-weight:bold;">設備狀態</label>
                 <input id="swal-add-status" class="swal2-input" value="新增" disabled style="width:100%; margin:6px 0 14px 0; background:#e9ecef; color:#495057; cursor:not-allowed; box-sizing:border-box; font-weight:bold;">
@@ -649,63 +643,86 @@
     };
     
     /**
-     * 5. 使用 Leaflet 原生 L.Control 直接掛載於地圖右上角 (與清查選單相同模式)
+     * 5. 通用按鈕輔助函式：產生統一膠囊風格按鈕
      */
-    let addPointMapControl = null;
-    
-    window.initAddPointLeafletControl = function() {
-        const map = window.mapNamespace?.map;
-        if (!map || typeof L === 'undefined') return;
-    
-        // 避免重複初始化
-        if (addPointMapControl) return;
-    
-        const AddPointControl = L.Control.extend({
-            options: {
-                position: 'topright' // 可改為 'topleft', 'bottomright' 等
-            },
-            onAdd: function() {
-                const container = L.DomUtil.create('div', 'leaflet-bar leaflet-control');
-                container.style.background = '#ffffff';
-                container.style.border = '2px solid rgba(0,0,0,0.2)';
-                container.style.borderRadius = '8px';
-                container.style.boxShadow = '0 2px 8px rgba(0,0,0,0.3)';
-                container.style.overflow = 'hidden';
-    
-                const btn = L.DomUtil.create('button', '', container);
-                btn.innerHTML = '➕ 新增點位';
-                btn.style.background = '#2ecc71';
-                btn.style.color = '#ffffff';
-                btn.style.border = 'none';
-                btn.style.padding = '8px 14px';
-                btn.style.fontWeight = 'bold';
-                btn.style.fontSize = '14px';
-                btn.style.cursor = 'pointer';
-                btn.style.display = 'block';
-    
-                // 防止點擊按鈕時觸發地圖的縮放或拖拽
-                L.DomEvent.disableClickPropagation(container);
-                L.DomEvent.disableScrollPropagation(container);
-    
-                btn.onclick = function() {
-                    window.startAddCustomPoint();
-                };
-    
-                return container;
-            }
-        });
-    
-        addPointMapControl = new AddPointControl();
-        addPointMapControl.addTo(map);
+    window.createUnifiedAuditButton = function(text, bgColor, onClickHandler) {
+        const btn = document.createElement('button');
+        btn.innerHTML = text;
+        btn.style.cssText = `
+            pointer-events: auto;
+            background: ${bgColor};
+            color: #ffffff;
+            border: none;
+            padding: 10px 22px;
+            border-radius: 25px;
+            font-weight: bold;
+            font-size: 15px;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.25);
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            transition: transform 0.1s ease, box-shadow 0.1s ease;
+            outline: none;
+        `;
+        btn.onclick = onClickHandler;
+        return btn;
     };
     
-    // 輪詢確保地圖載入後立即掛載懸浮按鈕
-    const initControlInterval = setInterval(() => {
-        if (window.mapNamespace?.map && typeof L !== 'undefined') {
-            clearInterval(initControlInterval);
-            window.initAddPointLeafletControl();
+    /**
+     * 6. 動態渲染底部選單 UI（包含：新增點位、清查點位、查看、修改）
+     */
+    window.updateAuditBottomMenuUI = function(mode, extraData) {
+        if (!bottomControl || !bottomControl._container) return;
+    
+        const container = bottomControl._container;
+        container.innerHTML = ''; // 清空內容
+    
+        const currentKmlId = window.currentActiveKmlId;
+        if (!currentKmlId) {
+            container.style.display = 'none';
+            return;
         }
-    }, 500);
+    
+        container.style.display = 'flex';
+        container.style.alignItems = 'center';
+    
+        // 根據模式產生相應的膠囊按鈕（保留原有前景顏色）
+        if (mode === 'VIEW_EDIT') {
+            // 「查看」按鈕 (桃紅色背景: #e91e63)
+            const viewBtn = window.createUnifiedAuditButton('查看', '#e91e63', () => {
+                if (typeof window.openAuditDetailModal === 'function') {
+                    window.openAuditDetailModal(extraData);
+                }
+            });
+            // 「修改」按鈕 (橘黃色背景: #f39c12)
+            const editBtn = window.createUnifiedAuditButton('修改', '#f39c12', () => {
+                if (typeof window.openAuditFormModal === 'function') {
+                    window.openAuditFormModal(extraData);
+                }
+            });
+    
+            container.appendChild(viewBtn);
+            container.appendChild(editBtn);
+    
+        } else if (mode === 'AUDIT_MAIN') {
+            // 「清查點位」按鈕 (綠色背景: #2ecc71)
+            const auditBtn = window.createUnifiedAuditButton('清查點位', '#2ecc71', () => {
+                if (typeof window.openAuditFormModal === 'function') {
+                    window.openAuditFormModal(extraData);
+                }
+            });
+            container.appendChild(auditBtn);
+    
+        } else {
+            // 預設/圖層開啟時：顯示「➕ 新增點位」與「清查點位」
+            const addBtn = window.createUnifiedAuditButton('➕ 新增點位', '#2ecc71', () => {
+                window.startAddCustomPoint(currentKmlId);
+            });
+            container.appendChild(addBtn);
+        }
+    };
     
     // ---------------------------------------------------------
     // 5. 清查資料編輯與上傳邏輯 (語法修復與 4 格狀態版)
@@ -1112,17 +1129,27 @@
                     this._container = L.DomUtil.create('div', 'audit-bottom-menu');
                     this._container.style.display = 'none';
                     this._container.style.position = 'fixed';
-                    this._container.style.bottom = '35px';
+                    this._container.style.bottom = '35px'; // 統一底端高度
                     this._container.style.left = '50%';
                     this._container.style.transform = 'translateX(-50%)';
                     this._container.style.zIndex = '5000'; 
-                    this._container.style.pointerEvents = 'none';
+                    this._container.style.pointerEvents = 'none'; // 容器不擋地圖，僅按鈕可點擊
+                    
+                    // 💡 關鍵：去除原本黑色的外框背景與邊框Padding
+                    this._container.style.background = 'transparent';
+                    this._container.style.padding = '0';
+                    this._container.style.boxShadow = 'none';
+                    this._container.style.gap = '12px'; // 按鈕之間的間距
+    
                     return this._container;
                 }
             });
             bottomControl = new AuditMenu();
             bottomControl.addTo(window.mapNamespace.map);
-            initGlobalConfigListener();
+            
+            if (typeof initGlobalConfigListener === 'function') {
+                initGlobalConfigListener();
+            }
         } else if (checkAttempts >= maxAttempts) {
             clearInterval(checkMapInterval);
             console.warn("Leaflet 地圖載入逾時，停止清查選單初始化。");
