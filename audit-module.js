@@ -228,87 +228,121 @@
     });
 
     // ---------------------------------------------------------
-    // 3. CSV 總表生成 (已修正：支援自訂新增點位與 Firebase 上傳)
+    // 3. CSV 總表生成 (除錯與相容加強版)
     // ---------------------------------------------------------
     async function generateLayerCsvReport(kmlId, kmlLayerName, maxPhotos) {
-        const records = window.auditLayersState[kmlId] || {};
+        console.log(`[CSV] 開始生成總表 - KML ID: ${kmlId}, LayerName: ${kmlLayerName}`);
+        
+        // 1. 取得狀態紀錄 (如果傳進來的 kmlId 找不到，嘗試從全域當前 ID 備用)
+        const activeKmlId = kmlId || window.currentActiveKmlId || window.mapNamespace?.currentKmlLayerId;
+        const records = (window.auditLayersState && window.auditLayersState[activeKmlId]) ? window.auditLayersState[activeKmlId] : {};
         const ns = window.mapNamespace;
         const features = ns?.allKmlFeatures || [];
 
-        // 檔名解析輔助函式：提取檔名並剔除 .jpg / .jpeg
+        // 檔名解析輔助函式
         const getCleanPhotoName = (url) => {
             if (!url) return "";
             try {
-                let fileName = decodeURIComponent(url.split("?")[0].split("/").pop());
+                let fileName = decodeURIComponent(String(url).split("?")[0].split("/").pop());
                 fileName = fileName.replace(/\.jpe?g$/i, "");
                 return fileName.replace(/"/g, '""');
             } catch (e) {
-                return url.replace(/"/g, '""');
+                return String(url).replace(/"/g, '""');
             }
         };
 
-        // 1. 建立標頭
+        // 2. 建立 CSV 標頭
         let headerArr = ["點名", "設備狀態"];
-        for (let i = 1; i <= maxPhotos; i++) headerArr.push(`照片${i}`);
+        const photoCount = parseInt(maxPhotos) || 2;
+        for (let i = 1; i <= photoCount; i++) headerArr.push(`照片${i}`);
         headerArr.push("備註");
         
         let csvContent = "\uFEFF" + headerArr.join(",") + "\n";
 
-        // 2. 收集所有要輸出的點名 (合併原 KML 點位 + 自訂新增點位)
+        // 3. 收集所有點位名稱 (去重)
         const allPointKeys = new Set();
         
-        // 加入原本 KML 的點位
-        features.forEach(f => {
-            const key = f.properties?.name || f.properties?.title || f.id;
-            if (key) allPointKeys.add(key);
+        if (Array.isArray(features)) {
+            features.forEach(f => {
+                const key = f.properties?.name || f.properties?.title || f.id;
+                if (key) allPointKeys.add(String(key));
+            });
+        }
+
+        Object.keys(records).forEach(key => {
+            if (key) allPointKeys.add(String(key));
         });
 
-        // 加入手動新增/紀錄過的點位 (避免新增點位沒被迴圈跑到的問題)
-        Object.keys(records).forEach(key => allPointKeys.add(key));
+        console.log(`[CSV] 預計處理點位總數: ${allPointKeys.size} 筆`);
 
-        // 3. 逐筆產生 CSV 列數據
+        // 4. 組合內文
         allPointKeys.forEach(pointKey => {
             const record = records[pointKey]; 
             let rowArr = [];
             
-            // 點名
             rowArr.push(`"${pointKey.replace(/"/g, '""')}"`);
 
             if (record) {
-                // 設備狀態 (相容 deviceStatus 與 status)
                 const status = record.deviceStatus || record.status || '正常';
-                rowArr.push(`"${status}"`);
+                rowArr.push(`"${String(status).replace(/"/g, '""')}"`);
 
-                // 照片檔名解析
-                for (let i = 0; i < maxPhotos; i++) {
+                for (let i = 0; i < photoCount; i++) {
                     const url = record.photos && record.photos[i] ? record.photos[i] : "";
                     rowArr.push(`"${getCleanPhotoName(url)}"`);
                 }
 
-                // 備註 (相容 remark 與 note)
                 const note = record.remark || record.note || "";
-                rowArr.push(`"${note.replace(/"/g, '""')}"`);
+                rowArr.push(`"${String(note).replace(/"/g, '""')}"`);
             } else {
-                // 原有 KML 點位但未進行清查紀錄者
                 rowArr.push('""');
-                for (let i = 0; i < maxPhotos; i++) rowArr.push('""');
+                for (let i = 0; i < photoCount; i++) rowArr.push('""');
                 rowArr.push('""');
             }
 
             csvContent += rowArr.join(",") + "\n";
         });
 
-        // 4. 上傳 Firebase Storage
+        // 5. 寫入 Firebase Storage (包含 STORAGE_ROOT 安全防護)
         try {
             const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-            const csvStoragePath = `${STORAGE_ROOT}/${kmlLayerName}/${kmlLayerName}_清查總表.csv`;
             
-            await firebase.storage().ref().child(csvStoragePath).put(blob);
-            console.log("✅ CSV 清查總表已成功更新至 Firebase Storage:", csvStoragePath);
+            // 檢查 STORAGE_ROOT 變數，若不存在給予預設值
+            const rootPath = (typeof STORAGE_ROOT !== 'undefined' && STORAGE_ROOT) ? STORAGE_ROOT : 'audit_reports';
+            const safeLayerName = kmlLayerName || 'default_layer';
+            const csvStoragePath = `${rootPath}/${safeLayerName}/${safeLayerName}_清查總表.csv`;
+
+            console.log(`[CSV] 正在上傳至 Storage 路徑: ${csvStoragePath}`);
+
+            // 確保 firebase 變數可用
+            if (typeof firebase === 'undefined' || !firebase.storage) {
+                throw new Error("Firebase Storage SDK 未初始化或未載入！");
+            }
+
+            const storageRef = firebase.storage().ref().child(csvStoragePath);
+            const snapshot = await storageRef.put(blob, { contentType: 'text/csv;charset=utf-8' });
+            
+            console.log("✅ [CSV 成功] 已成功產出並覆寫 Storage 檔案！", snapshot);
+            return snapshot;
+
         } catch (err) {
-            console.warn("⚠️ Firebase Storage 寫入 CSV 權限受限或失敗:", err.message);
+            console.error("❌ [CSV 失敗] 無法寫入 CSV 到 Firebase Storage：", err);
+            // 備用方案：若 Storage 寫入失敗，直接觸發瀏覽器下載，避免資料遺失
+            window.downloadCsvFallback(csvContent, `${kmlLayerName || '清查'}_總表.csv`);
         }
     }
+
+    // 瀏覽器本地下載備用機制
+    window.downloadCsvFallback = function(csvData, filename) {
+        console.warn("⚠️ 啟動本地 CSV 下載備用方案");
+        const blob = new Blob([csvData], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement("a");
+        const url = URL.createObjectURL(blob);
+        link.setAttribute("href", url);
+        link.setAttribute("download", filename);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
 
     // ---------------------------------------------------------
     // 4. 清查管理對話框 (整合單一頁面設定與 ZIP 打包按鈕)
