@@ -302,34 +302,43 @@
             csvContent += rowArr.join(",") + "\n";
         });
 
-        // 5. 寫入 Firebase Storage (包含 STORAGE_ROOT 安全防護)
+        // 5. 寫入 Firebase Storage
         try {
             const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
             
-            // 檢查 STORAGE_ROOT 變數，若不存在給予預設值
-            const rootPath = (typeof STORAGE_ROOT !== 'undefined' && STORAGE_ROOT) ? STORAGE_ROOT : 'audit_reports';
+            // 取得根路徑並清理多餘的前後斜線
+            let rootPath = (typeof STORAGE_ROOT !== 'undefined' && STORAGE_ROOT) ? STORAGE_ROOT : 'kmldata-d22fb/storage';
+            rootPath = rootPath.replace(/^\/+|\/+$/g, ''); // 移除頭尾斜線
+            
             const safeLayerName = kmlLayerName || 'default_layer';
+            
+            // 組合出精確的相對路徑: "kmldata-d22fb/storage/外業抽測/外業抽測_清查總表.csv"
             const csvStoragePath = `${rootPath}/${safeLayerName}/${safeLayerName}_清查總表.csv`;
 
-            console.log(`[CSV] 正在上傳至 Storage 路徑: ${csvStoragePath}`);
+            console.log(`[CSV] 正在發送至 Firebase Storage 相對路徑: ${csvStoragePath}`);
 
-            // 確保 firebase 變數可用
             if (typeof firebase === 'undefined' || !firebase.storage) {
-                throw new Error("Firebase Storage SDK 未初始化或未載入！");
+                throw new Error("Firebase Storage SDK 未初始化！");
             }
 
+            // 確保以 ref() 根節點延伸 child()
             const storageRef = firebase.storage().ref().child(csvStoragePath);
-            const snapshot = await storageRef.put(blob, { contentType: 'text/csv;charset=utf-8' });
             
-            console.log("✅ [CSV 成功] 已成功產出並覆寫 Storage 檔案！", snapshot);
+            // 指定 metadata 的 contentType 為 text/csv;charset=utf-8
+            const snapshot = await storageRef.put(blob, { 
+                contentType: 'text/csv;charset=utf-8' 
+            });
+            
+            console.log("✅ [CSV 成功] 已成功將清查總表寫入 Storage：", csvStoragePath);
             return snapshot;
 
         } catch (err) {
-            console.error("❌ [CSV 失敗] 無法寫入 CSV 到 Firebase Storage：", err);
-            // 備用方案：若 Storage 寫入失敗，直接觸發瀏覽器下載，避免資料遺失
-            window.downloadCsvFallback(csvContent, `${kmlLayerName || '清查'}_總表.csv`);
+            console.error("❌ [CSV 失敗] 上傳失敗原因：", err);
+            // 本地下載備用機制
+            if (typeof window.downloadCsvFallback === 'function') {
+                window.downloadCsvFallback(csvContent, `${kmlLayerName || '清查'}_總表.csv`);
+            }
         }
-    }
 
     // 瀏覽器本地下載備用機制
     window.downloadCsvFallback = function(csvData, filename) {
