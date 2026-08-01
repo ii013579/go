@@ -228,7 +228,7 @@
     });
 
     // ---------------------------------------------------------
-    // 3. CSV 總表生成 (除錯與相容加強版)
+    // 3. CSV 總表生成 (完整修復與強健上傳版)
     // ---------------------------------------------------------
     async function generateLayerCsvReport(kmlId, kmlLayerName, maxPhotos) {
         console.log(`[CSV] 開始生成總表 - KML ID: ${kmlId}, LayerName: ${kmlLayerName}`);
@@ -257,6 +257,7 @@
         for (let i = 1; i <= photoCount; i++) headerArr.push(`照片${i}`);
         headerArr.push("備註");
         
+        // \uFEFF 帶入 BOM 表頭，確保 Excel 打開 UTF-8 中文不卡亂碼
         let csvContent = "\uFEFF" + headerArr.join(",") + "\n";
 
         // 3. 收集所有點位名稱 (去重)
@@ -304,15 +305,14 @@
 
         // 5. 寫入 Firebase Storage
         try {
-            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            // 使用 text/csv 類型以精準匹配 Storage Rules
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8' });
             
             // 取得根路徑並清理多餘的前後斜線
             let rootPath = (typeof STORAGE_ROOT !== 'undefined' && STORAGE_ROOT) ? STORAGE_ROOT : 'kmldata-d22fb/storage';
-            rootPath = rootPath.replace(/^\/+|\/+$/g, ''); // 移除頭尾斜線
+            rootPath = rootPath.replace(/^\/+|\/+$/g, ''); 
             
             const safeLayerName = kmlLayerName || 'default_layer';
-            
-            // 組合出精確的相對路徑: "kmldata-d22fb/storage/外業抽測/外業抽測_清查總表.csv"
             const csvStoragePath = `${rootPath}/${safeLayerName}/${safeLayerName}_清查總表.csv`;
 
             console.log(`[CSV] 正在發送至 Firebase Storage 相對路徑: ${csvStoragePath}`);
@@ -321,12 +321,11 @@
                 throw new Error("Firebase Storage SDK 未初始化！");
             }
 
-            // 確保以 ref() 根節點延伸 child()
             const storageRef = firebase.storage().ref().child(csvStoragePath);
             
-            // 指定 metadata 的 contentType 為 text/csv;charset=utf-8
+            // 寫入 Storage
             const snapshot = await storageRef.put(blob, { 
-                contentType: 'text/csv;charset=utf-8' 
+                contentType: 'text/csv' 
             });
             
             console.log("✅ [CSV 成功] 已成功將清查總表寫入 Storage：", csvStoragePath);
@@ -339,6 +338,7 @@
                 window.downloadCsvFallback(csvContent, `${kmlLayerName || '清查'}_總表.csv`);
             }
         }
+    } // <-- 修復：補齊函式閉合括號
 
     // 瀏覽器本地下載備用機制
     window.downloadCsvFallback = function(csvData, filename) {
