@@ -228,48 +228,50 @@
     });
 
     // ---------------------------------------------------------
-    // 3. CSV 總表生成 (完整語法與結構修復版)
+    // 3. CSV 總表生成 (新增經緯度欄位)
     // ---------------------------------------------------------
     async function generateLayerCsvReport(kmlId, kmlLayerName, maxPhotos) {
         console.log(`[CSV] 開始生成總表 - KML ID: ${kmlId}, LayerName: ${kmlLayerName}`);
         
-        // 1. 取得狀態紀錄 (如果傳進來的 kmlId 找不到，嘗試從全域當前 ID 備用)
+        // 1. 取得狀態紀錄
         const activeKmlId = kmlId || window.currentActiveKmlId || window.mapNamespace?.currentKmlLayerId;
         const records = (window.auditLayersState && window.auditLayersState[activeKmlId]) ? window.auditLayersState[activeKmlId] : {};
         const ns = window.mapNamespace;
         const features = ns?.allKmlFeatures || [];
 
-        // 檔名解析輔助函式
+        // 檔名解析輔助函式：只提取最後檔名 (如 "A110_01")，自動剔除路徑與副檔名
         const getCleanPhotoName = (url) => {
             if (!url) return "";
             try {
-                let fileName = decodeURIComponent(String(url).split("?")[0].split("/").pop());
-                fileName = fileName.replace(/\.jpe?g$/i, "");
-                return fileName.replace(/"/g, '""');
+                let decoded = decodeURIComponent(String(url)).split("?")[0];
+                let fullName = decoded.split("/").pop() || "";
+                let fileNameOnly = fullName.replace(/\.[^/.]+$/, "");
+                return fileNameOnly.replace(/"/g, '""');
             } catch (e) {
                 return String(url).replace(/"/g, '""');
             }
         };
 
-        // 2. 建立 CSV 標頭
-        let headerArr = ["點名", "設備狀態"];
+        // 2. 建立 CSV 標頭 (加入 經度、緯度)
+        let headerArr = ["點名", "經度", "緯度", "設備狀態"];
         const photoCount = parseInt(maxPhotos) || 2;
         for (let i = 1; i <= photoCount; i++) headerArr.push(`照片${i}`);
         headerArr.push("備註");
         
-        // \uFEFF 帶入 BOM 表頭，確保 Excel 打開 UTF-8 中文不卡亂碼
         let csvContent = "\uFEFF" + headerArr.join(",") + "\n";
 
-        // 3. 收集所有點位名稱 (去重)
-        const allPointKeys = new Set();
-        
+        // 建立點名與 Feature 的 Map 對照，方便搜尋座標
+        const featureMap = new Map();
         if (Array.isArray(features)) {
             features.forEach(f => {
                 const key = f.properties?.name || f.properties?.title || f.id;
-                if (key) allPointKeys.add(String(key));
+                if (key) featureMap.set(String(key), f);
             });
         }
 
+        // 3. 收集所有點位名稱 (去重)
+        const allPointKeys = new Set();
+        featureMap.forEach((_, key) => allPointKeys.add(key));
         Object.keys(records).forEach(key => {
             if (key) allPointKeys.add(String(key));
         });
@@ -279,10 +281,33 @@
         // 4. 組合內文
         allPointKeys.forEach(pointKey => {
             const record = records[pointKey]; 
+            const feature = featureMap.get(pointKey);
             let rowArr = [];
             
+            // 點名
             rowArr.push(`"${pointKey.replace(/"/g, '""')}"`);
 
+            // --- 座標提取邏輯 ---
+            let lng = "";
+            let lat = "";
+
+            // 優先從 record (手動新增/紀錄) 拿座標
+            if (record && record.lng && record.lat) {
+                lng = record.lng;
+                lat = record.lat;
+            } 
+            // 備用：從原 KML feature 的 geometry 抓取
+            else if (feature && feature.geometry && feature.geometry.coordinates) {
+                const coords = feature.geometry.coordinates;
+                // GeoJSON 格式通常為 [lng, lat]
+                lng = coords[0] !== undefined ? coords[0] : "";
+                lat = coords[1] !== undefined ? coords[1] : "";
+            }
+
+            rowArr.push(`"${lng}"`);
+            rowArr.push(`"${lat}"`);
+
+            // 設備狀態、照片與備註
             if (record) {
                 const status = record.deviceStatus || record.status || '正常';
                 rowArr.push(`"${String(status).replace(/"/g, '""')}"`);
@@ -295,9 +320,9 @@
                 const note = record.remark || record.note || "";
                 rowArr.push(`"${String(note).replace(/"/g, '""')}"`);
             } else {
-                rowArr.push('""');
+                rowArr.push('""'); // 設備狀態空白
                 for (let i = 0; i < photoCount; i++) rowArr.push('""');
-                rowArr.push('""');
+                rowArr.push('""'); // 備註空白
             }
 
             csvContent += rowArr.join(",") + "\n";
@@ -305,10 +330,8 @@
 
         // 5. 寫入 Firebase Storage
         try {
-            // 使用 text/csv 類型以精準匹配 Storage Rules
             const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8' });
             
-            // 取得根路徑並清理多餘的前後斜線
             let rootPath = (typeof STORAGE_ROOT !== 'undefined' && STORAGE_ROOT) ? STORAGE_ROOT : 'kmldata-d22fb/storage';
             rootPath = rootPath.replace(/^\/+|\/+$/g, ''); 
             
@@ -322,23 +345,18 @@
             }
 
             const storageRef = firebase.storage().ref().child(csvStoragePath);
-            
-            // 寫入 Storage
-            const snapshot = await storageRef.put(blob, { 
-                contentType: 'text/csv' 
-            });
+            const snapshot = await storageRef.put(blob, { contentType: 'text/csv' });
             
             console.log("✅ [CSV 成功] 已成功將清查總表寫入 Storage：", csvStoragePath);
             return snapshot;
 
         } catch (err) {
             console.error("❌ [CSV 失敗] 上傳失敗原因：", err);
-            // 本地下載備用機制
             if (typeof window.downloadCsvFallback === 'function') {
                 window.downloadCsvFallback(csvContent, `${kmlLayerName || '清查'}_總表.csv`);
             }
         }
-    } // <-- 正確關閉 generateLayerCsvReport 函式
+    }
 
     // 瀏覽器本地下載備用機制
     window.downloadCsvFallback = function(csvData, filename) {
@@ -351,7 +369,7 @@
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
-    }; // <-- 修復：補齊 downloadCsvFallback 函式閉合括號
+    };
 
     // ---------------------------------------------------------
     // 4. 清查管理對話框 (整合單一頁面設定與 ZIP 打包按鈕)
