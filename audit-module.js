@@ -525,7 +525,7 @@
     };
        
     // =========================================================
-    // 4.1 獨立區段：手動新增點位功能 & 底部按鈕UI渲染
+    // 4.1 獨立區段：手動新增點位功能 & 底部按鈕 UI 渲染
     // =========================================================
     
     // 安全轉義字串 (防止 XSS)
@@ -541,7 +541,7 @@
     };
     
     /**
-     * 1. 觸發挑選位置模式 (點擊「新增點位」按鈕) & 自動渲染獨立按鈕
+     * 1. 觸發挑選位置模式 (點擊「新增點位」按鈕)
      */
     window.startAddCustomPoint = function(kmlId) {
         if (typeof checkHasAuditPermission === 'function' && !checkHasAuditPermission()) {
@@ -595,7 +595,6 @@
             document.body.appendChild(btn);
         }
     
-        // 固定在右下角 (bottom: 20px, right: 15px)
         btn.setAttribute('style', `
             position: fixed !important;
             bottom: 20px !important;
@@ -628,163 +627,60 @@
     })();
     
     // =========================================================
-    // 4-3. 觸發挑選位置模式 (點擊「新增點位」按鈕時呼叫)
-    // =========================================================
-    window.startAddCustomPoint = function(kmlId) {
-        if (typeof checkHasAuditPermission === 'function' && !checkHasAuditPermission()) {
-            Swal.fire('權限不足', '您的帳號角色不允許新增點位！', 'warning');
-            return;
-        }
-    
-        const targetKmlId = kmlId || window.currentActiveKmlId || window.mapNamespace?.currentKmlLayerId;
-        if (!targetKmlId) {
-            Swal.fire('提示', '請先從選單開啟或選擇一個目標圖層再進行新增！', 'info');
-            return;
-        }
-    
-        const map = window.mapNamespace?.map;
-        if (!map) return;
-    
-        // 頂部 Toast 提示
-        Swal.mixin({
-            toast: true,
-            position: 'top',
-            showConfirmButton: false,
-            timer: 3000,
-            timerProgressBar: true
-        }).fire({ 
-            icon: 'info', 
-            title: '📍 請在地圖上點擊要新增點位的實體位置' 
-        });
-    
-        // 更改地圖滑鼠游標為十字準心
-        map.getContainer().style.cursor = 'crosshair';
-    
-        // 單次監聽地圖點擊事件
-        map.once('click', async function(e) {
-            map.getContainer().style.cursor = '';
-            const lat = e.latlng.lat;
-            const lng = e.latlng.lng;
-    
-            await window.openAddPointModal(targetKmlId, lat, lng);
-        });
-    };
-    
-    // =========================================================
-    // 4-4. 100% 復刻「新增點位清查紀錄」彈窗 UI 介面
+    // 4-3. 彈窗 UI 介面與照片預覽
     // =========================================================
     window.uploadedPhotos = {}; // 暫存新增點位的上傳照片
-
+    
     window.openAddPointModal = async function(kmlId, lat, lng) {
-        // 重置上傳照片快取
-        window.uploadedPhotos = {};
-
-        // 拼接照片上傳 UI (完全採用清查紀錄 DOM 與 z-index 層級邏輯)
+        window.uploadedPhotos = {}; // 重置上傳照片快取
+    
         const maxPhotos = 2;
         let photoHtml = '';
         for (let i = 0; i < maxPhotos; i++) {
             photoHtml += `
                 <div style="position:relative; margin-bottom:15px; width:80px;">
-                    <!-- 照片預覽與相機框 -->
                     <div style="border:2px dashed #ccc; height:80px; width:80px; position:relative; display:flex; align-items:center; justify-content:center; background:#fafafa; border-radius:12px; overflow:hidden; cursor:pointer;">
-                        <!-- 圖片預覽圖層 (z-index: 1) -->
                         <img id="add-prev-${i}" src="" style="width:100%; height:100%; object-fit:cover; display:none; position:absolute; top:0; left:0; z-index:1;">
-                        
-                        <!-- 相機 Icon (z-index: 1) -->
                         <span id="add-icon-${i}" style="font-size:24px; color:#bbb; display:block; z-index:1;">📷</span>
-                        
-                        <!-- 現場拍照 Input (z-index: 2, 透明覆蓋全框) -->
                         <input type="file" accept="image/*" capture="environment" onchange="window.handleAddPhotoPreview(this, ${i})" style="position:absolute; width:100%; height:100%; opacity:0; z-index:2; cursor:pointer;" title="現場拍照">
                     </div>
-
-                    <!-- 舊檔/相簿選擇標籤 (z-index: 3, 層級高於相機 Input) -->
                     <label style="position:absolute; left:50%; transform:translateX(-50%); bottom:-10px; z-index:3; background:#555; color:#fff; font-size:11px; padding:2px 8px; border-radius:12px; cursor:pointer; display:flex; align-items:center; gap:4px; box-shadow:0 2px 4px rgba(0,0,0,0.2); white-space:nowrap; border:1px solid #777;">
                         <span>🖼️</span> <span id="add-tag-text-${i}">舊檔</span>
                         <input type="file" accept="image/*" onchange="window.handleAddPhotoPreview(this, ${i})" style="display:none;">
                     </label>
                 </div>`;
         }
-
+    
         const modalHtml = `
-        <div style="text-align: left; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; color: #333; padding: 0 5px;">
-            
-            <!-- 標題 -->
+        <div style="text-align: left; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #333; padding: 0 5px;">
             <div style="text-align: center; font-size: 20px; font-weight: bold; color: #4a4a4a; margin-bottom: 20px; display: flex; align-items: center; justify-content: center; gap: 8px;">
                 <span style="color: #7c5acb; font-size: 24px; font-weight: 900;">➕</span>
                 <span>新增點位清查紀錄</span>
             </div>
-
-            <!-- 點位名稱 / 點名 -->
             <div style="margin-bottom: 16px;">
                 <label style="display: block; font-size: 15px; font-weight: bold; color: #4a4a4a; margin-bottom: 8px;">
                     點位名稱 / 點名 <span style="color: #e74c3c;">*必填</span>
                 </label>
-                <input type="text" id="add-point-name" placeholder="例如：新設電桿-01" style="
-                    width: 100%;
-                    padding: 10px 14px;
-                    font-size: 15px;
-                    border: 1px solid #dcdfe6;
-                    border-radius: 8px;
-                    outline: none;
-                    box-sizing: border-box;
-                    color: #333;
-                    background-color: #fff;
-                ">
+                <input type="text" id="add-point-name" placeholder="例如：新設電桿-01" style="width: 100%; padding: 10px 14px; font-size: 15px; border: 1px solid #dcdfe6; border-radius: 8px; outline: none; box-sizing: border-border-box; color: #333; background-color: #fff;">
             </div>
-
-            <!-- 設備狀態 -->
             <div style="margin-bottom: 16px;">
-                <label style="display: block; font-size: 15px; font-weight: bold; color: #4a4a4a; margin-bottom: 8px;">
-                    設備狀態
-                </label>
-                <div style="
-                    width: 100%;
-                    padding: 10px 16px;
-                    font-size: 16px;
-                    font-weight: bold;
-                    color: #2c3e50;
-                    background-color: #eef1f6;
-                    border-radius: 8px;
-                    box-sizing: border-box;
-                ">
-                    新增
-                </div>
+                <label style="display: block; font-size: 15px; font-weight: bold; color: #4a4a4a; margin-bottom: 8px;">設備狀態</label>
+                <div style="width: 100%; padding: 10px 16px; font-size: 16px; font-weight: bold; color: #2c3e50; background-color: #eef1f6; border-radius: 8px; box-sizing: border-box;">新增</div>
             </div>
-
-            <!-- 現場照片區塊 -->
             <div style="margin-bottom: 16px;">
                 <label style="display: block; font-size: 15px; font-weight: bold; color: #4a4a4a; margin-bottom: 8px;">
                     現場照片 (需拍 2 張) <span style="color: #e74c3c;">*必填</span>
                 </label>
-                <div style="display: flex; gap: 15px;">
-                    ${photoHtml}
-                </div>
+                <div style="display: flex; gap: 15px;">${photoHtml}</div>
             </div>
-
-            <!-- 備註事項 -->
             <div style="margin-bottom: 0px;">
                 <label style="display: block; font-size: 15px; font-weight: bold; color: #4a4a4a; margin-bottom: 8px;">
                     備註事項 <span style="color: #909399; font-weight: normal;">(選填)</span>
                 </label>
-                <textarea id="add-point-remark" placeholder="輸入備註事項..." style="
-                    width: 100%;
-                    height: 80px;
-                    padding: 10px 14px;
-                    font-size: 15px;
-                    border: 1px solid #dcdfe6;
-                    border-radius: 8px;
-                    outline: none;
-                    box-sizing: border-box;
-                    resize: vertical;
-                    color: #333;
-                    font-family: inherit;
-                "></textarea>
+                <textarea id="add-point-remark" placeholder="輸入備註事項..." style="width: 100%; height: 80px; padding: 10px 14px; font-size: 15px; border: 1px solid #dcdfe6; border-radius: 8px; outline: none; box-sizing: border-box; resize: vertical; color: #333; font-family: inherit;"></textarea>
             </div>
-
-        </div>
-        `;
-
-        // 呼叫 SweetAlert2 彈窗
+        </div>`;
+    
         const { value: formValues } = await Swal.fire({
             html: modalHtml,
             showCancelButton: true,
@@ -804,7 +700,7 @@
                 const remark = document.getElementById('add-point-remark').value.trim();
                 const photo0 = window.uploadedPhotos[0];
                 const photo1 = window.uploadedPhotos[1];
-
+    
                 if (!name) {
                     Swal.showValidationMessage('請填寫點位名稱！');
                     return false;
@@ -813,11 +709,12 @@
                     Swal.showValidationMessage('請至少上傳 2 張現場照片！');
                     return false;
                 }
-
+    
                 return {
                     kmlId: kmlId,
                     lat: lat,
                     lng: lng,
+                    pointKey: name, // 將點名作為 Key 傳遞
                     name: name,
                     status: '新增',
                     remark: remark,
@@ -825,59 +722,68 @@
                 };
             }
         });
-
+    
         if (formValues && typeof window.submitNewCustomPoint === 'function') {
             await window.submitNewCustomPoint(formValues);
         }
     };
-
-    /**
-     * 照片預覽與狀態處理
-     */
+    
     window.handleAddPhotoPreview = function(input, index) {
         if (input.files && input.files[0]) {
             const file = input.files[0];
             const reader = new FileReader();
             reader.onload = function(e) {
-                // 暫存檔案
                 window.uploadedPhotos[index] = file;
-
-                // 更新圖片與 Icon
                 const img = document.getElementById(`add-prev-${index}`);
                 const icon = document.getElementById(`add-icon-${index}`);
                 const tagText = document.getElementById(`add-tag-text-${index}`);
-
+    
                 if (img) {
                     img.src = e.target.result;
                     img.style.display = 'block';
                 }
-                if (icon) {
-                    icon.style.display = 'none';
-                }
-                if (tagText) {
-                    tagText.innerText = '已選取';
-                }
+                if (icon) icon.style.display = 'none';
+                if (tagText) tagText.innerText = '已選取';
             };
             reader.readAsDataURL(file);
         }
     };
     
-    /**
-     * 4. 寫入 Firestore 並繪製 Marker
-     */
+    // =========================================================
+    // 4-4. 關鍵補全：提交與轉接處理函式
+    // =========================================================
+    window.submitNewCustomPoint = async function(formValues) {
+        const { kmlId, pointKey, lat, lng, remark, photos } = formValues;
+        
+        // 呼叫 Firestore 寫入與地圖繪製
+        await window.saveNewPointToFirestore(kmlId, {
+            pointKey: pointKey,
+            lat: lat,
+            lng: lng,
+            remark: remark,
+            photos: photos
+        });
+    };
+    
+    // =========================================================
+    // 4-5. 寫入 Firestore 並繪製 Marker
+    // =========================================================
     window.saveNewPointToFirestore = async function(kmlId, data) {
         Swal.fire({ title: '正在儲存新點位...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
     
         try {
             let finalPhotoUrls = data.photos;
+            
+            // 1. 若有定義圖片上傳至 Storage 函式，進行上傳作業
             if (typeof window.uploadPhotosToStorage === 'function') {
                 finalPhotoUrls = await window.uploadPhotosToStorage(data.photos, kmlId, data.pointKey);
             }
     
+            const basePath = typeof APP_PATH !== 'undefined' ? APP_PATH : (window.APP_PATH || 'kml_audits');
             const recordData = {
                 pointKey: data.pointKey,
                 status: '新增',
-                note: data.note || '',
+                note: data.remark || '',
                 photos: finalPhotoUrls,
                 lat: data.lat,
                 lng: data.lng,
@@ -886,13 +792,21 @@
                 updatedBy: window.currentUserEmail || 'Unknown'
             };
     
+            // 2. 寫入 Firestore 巡查紀錄集合
             await firebase.firestore()
-                .collection(APP_PATH)
+                .collection(basePath)
                 .doc(kmlId)
                 .collection('audit_records')
                 .doc(data.pointKey)
                 .set(recordData, { merge: true });
     
+            // 3. 更新記憶體快取 (確保 CSV 匯出或本地搜尋能抓到新點位)
+            if (window.auditRecordsMap) {
+                if (!window.auditRecordsMap[kmlId]) window.auditRecordsMap[kmlId] = {};
+                window.auditRecordsMap[kmlId][data.pointKey] = recordData;
+            }
+    
+            // 4. 地圖動態繪製 Marker
             const map = window.mapNamespace?.map;
             if (map && typeof L !== 'undefined') {
                 const newMarker = L.circleMarker([data.lat, data.lng], {
@@ -908,12 +822,12 @@
                     <div style="font-size:13px;">
                         <b style="color:#27ae60;">[手動新增] ${safeEscape(data.pointKey)}</b><br>
                         <b>狀態：</b>新增<br>
-                        <b>備註：</b>${safeEscape(data.note || '無')}<br>
+                        <b>備註：</b>${safeEscape(data.remark || '無')}<br>
                         <small style="color:#888;">座標: ${data.lat.toFixed(5)}, ${data.lng.toFixed(5)}</small>
                     </div>
                 `);
     
-                if (window.auditMarkersMap && kmlId) {
+                if (window.auditMarkersMap) {
                     if (!window.auditMarkersMap[kmlId]) window.auditMarkersMap[kmlId] = {};
                     window.auditMarkersMap[kmlId][data.pointKey] = newMarker;
                 }
