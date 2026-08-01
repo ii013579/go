@@ -599,7 +599,7 @@ window.startAddCustomPoint = function(kmlId) {
         await window.openAddPointModal(targetKmlId, lat, lng);
     };
 
-    // 支援 ESC 鍵取消選擇模式 (修正：僅在按下 Escape 時才解除監聽)
+    // 支援 ESC 鍵取消選擇模式 (僅在按下 Escape 時才解除監聽)
     const handleKeydown = function(e) {
         if (e.key === 'Escape') {
             cleanup();
@@ -794,7 +794,7 @@ window.submitNewCustomPoint = async function(formValues) {
 };
 
 // =========================================================
-// 4-5. 寫入 Firestore 並繪製 Marker (修正快取時間戳與傳入值)
+// 4-5. 寫入 Firestore 並繪製 Marker (修正正確的 Security Rules 相容路徑)
 // =========================================================
 window.saveNewPointToFirestore = async function(kmlId, data) {
     Swal.fire({ 
@@ -807,25 +807,24 @@ window.saveNewPointToFirestore = async function(kmlId, data) {
     try {
         let finalPhotoUrls = [];
 
-        // 1. 檢查並執行照片上傳 Firebase Storage
+        // 1. 上傳照片至 Firebase Storage
         if (typeof window.uploadPhotosToStorage === 'function') {
             finalPhotoUrls = await window.uploadPhotosToStorage(data.photos, kmlId, data.pointKey);
         } else {
-            console.warn("⚠️ 未找到 uploadPhotosToStorage 函式，請確認是否有實作照片上傳邏輯。");
-            finalPhotoUrls = []; 
+            console.warn("⚠️ 未找到 uploadPhotosToStorage 函式，請確認專案中是否有實現照片上傳邏輯。");
         }
 
-        // 2. 嚴格檢查：確定 finalPhotoUrls 裡面沒有殘留 File 物件
         if (Array.isArray(finalPhotoUrls)) {
             finalPhotoUrls = finalPhotoUrls.filter(item => typeof item === 'string');
         } else {
             finalPhotoUrls = [];
         }
 
-        const basePath = typeof APP_PATH !== 'undefined' ? APP_PATH : (window.APP_PATH || 'kml_audits');
-        const updatedBy = window.currentUserEmail || 'Unknown';
+        // 2. 獲取使用者帳號
+        const authUser = firebase.auth().currentUser;
+        const updatedBy = authUser ? authUser.email : (window.currentUserEmail || 'Unknown');
         
-        // 3. 組裝要寫入 Firestore 的物件
+        // 3. 組裝紀錄物件
         const recordData = {
             pointKey: data.pointKey,
             status: '新增',
@@ -838,15 +837,28 @@ window.saveNewPointToFirestore = async function(kmlId, data) {
             updatedBy: updatedBy
         };
 
-        // 4. 寫入 Firestore
-        await firebase.firestore()
-            .collection(basePath)
-            .doc(kmlId)
-            .collection('auditrecords')
-            .doc(data.pointKey)
-            .set(recordData, { merge: true });
+        // 4. 動態取得正確的 Doc Reference (匹配 Security Rules 要求的 artifacts 層級)
+        const db = firebase.firestore();
+        let targetDocRef;
 
-        // 5. 更新記憶體快取 (使用 JS Date 物件避免 FieldValue 導致讀取崩潰)
+        if (typeof getKmlCollectionRef === 'function') {
+            targetDocRef = getKmlCollectionRef().doc(kmlId).collection('auditrecords').doc(data.pointKey);
+        } else {
+            const currentAppId = window.appId || (typeof appId !== 'undefined' ? appId : 'kmldata-d22fb');
+            targetDocRef = db.collection('artifacts')
+                             .doc(currentAppId)
+                             .collection('public')
+                             .doc('data')
+                             .collection('kmlLayers')
+                             .doc(kmlId)
+                             .collection('auditrecords')
+                             .doc(data.pointKey);
+        }
+
+        // 5. 寫入 Firestore
+        await targetDocRef.set(recordData, { merge: true });
+
+        // 6. 更新記憶體快取 (改用 Date 物件避免 Sentinel 報錯)
         if (window.auditRecordsMap) {
             if (!window.auditRecordsMap[kmlId]) window.auditRecordsMap[kmlId] = {};
             window.auditRecordsMap[kmlId][data.pointKey] = {
@@ -855,7 +867,7 @@ window.saveNewPointToFirestore = async function(kmlId, data) {
             };
         }
 
-        // 6. 地圖繪製 Marker
+        // 7. Leaflet 地圖繪製 Marker
         const map = window.mapNamespace?.map;
         if (map && typeof L !== 'undefined') {
             const newMarker = L.circleMarker([data.lat, data.lng], {
