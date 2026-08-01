@@ -228,7 +228,7 @@
     });
 
     // ---------------------------------------------------------
-    // 3. CSV 總表生成 (完整修復與強健上傳版)
+    // 3. CSV 總表生成 (完整語法與結構修復版)
     // ---------------------------------------------------------
     async function generateLayerCsvReport(kmlId, kmlLayerName, maxPhotos) {
         console.log(`[CSV] 開始生成總表 - KML ID: ${kmlId}, LayerName: ${kmlLayerName}`);
@@ -338,7 +338,7 @@
                 window.downloadCsvFallback(csvContent, `${kmlLayerName || '清查'}_總表.csv`);
             }
         }
-    } // <-- 修復：補齊函式閉合括號
+    } // <-- 正確關閉 generateLayerCsvReport 函式
 
     // 瀏覽器本地下載備用機制
     window.downloadCsvFallback = function(csvData, filename) {
@@ -351,7 +351,7 @@
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
-    };
+    }; // <-- 修復：補齊 downloadCsvFallback 函式閉合括號
 
     // ---------------------------------------------------------
     // 4. 清查管理對話框 (整合單一頁面設定與 ZIP 打包按鈕)
