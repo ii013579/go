@@ -788,15 +788,15 @@ window.handleAddPhotoPreview = function(input, index) {
 };
 
 // =========================================================
-// 5-4. 新增自訂點位送出邏輯 (已修復 layerFolderName 未定義 Bug)
+// 5-4. 新增自訂點位送出邏輯 (完美對齊 mapNamespace 與 forceMapRefresh)
 // =========================================================
 window.submitNewCustomPoint = async function(formValues) {
     const { kmlId, kmlLayerName, lat, lng, pointKey, status, remark, photos } = formValues;
 
-    // 💡 修正點：確保 layerFolderName 有值，防止 ReferenceError
     const layerFolderName = kmlLayerName || kmlId || 'default_layer';
+    const numLat = parseFloat(lat);
+    const numLng = parseFloat(lng);
 
-    // 1. 顯示處理中彈窗
     Swal.fire({
         title: '正在處理並上傳資料...',
         didOpen: () => Swal.showLoading(),
@@ -804,18 +804,13 @@ window.submitNewCustomPoint = async function(formValues) {
     });
 
     try {
-        // 2. 照片上傳至 Storage
+        // 1. 照片上傳至 Storage
         const uploadPromises = photos.map(async (photoData, i) => {
             if (!photoData) return '';
-
-            if (typeof photoData === 'string' && photoData.startsWith('http')) {
-                return photoData;
-            }
+            if (typeof photoData === 'string' && photoData.startsWith('http')) return photoData;
 
             const photoIndexStr = String(i + 1).padStart(2, '0');
             const rootPath = typeof STORAGE_ROOT !== 'undefined' ? STORAGE_ROOT : 'audit_photos';
-            
-            // 這裡使用的 layerFolderName 現在已有定義
             const customStoragePath = `${rootPath}/${layerFolderName}/${pointKey}_${photoIndexStr}.jpg`;
 
             const photoRef = firebase.storage().ref().child(customStoragePath);
@@ -836,25 +831,63 @@ window.submitNewCustomPoint = async function(formValues) {
 
         const photoUrls = await Promise.all(uploadPromises);
 
-        // 3. 組裝標準資料結構
+        // 2. 組裝清查紀錄資料 (寫入 auditLayersState 記憶體)
         const structuredData = {
             pointName: pointKey,
             status: "已完成",
             deviceStatus: status || "新增",
             note: remark || "",
             photos: photoUrls,
-            lat: parseFloat(lat),
-            lng: parseFloat(lng),
+            lat: numLat,
+            lng: numLng,
             isCustomPoint: true,
             updatedAt: firebase.firestore.FieldValue.serverTimestamp()
         };
 
-        // 4. 更新前端狀態記憶體
         if (!window.auditLayersState) window.auditLayersState = {};
         if (!window.auditLayersState[kmlId]) window.auditLayersState[kmlId] = {};
         window.auditLayersState[kmlId][pointKey] = structuredData;
 
-        // 5. 寫入 Firestore 該圖層的 auditRecords 子集合
+        // 3. ✨【關鍵修正】：組裝標準 GeoJSON Feature 並塞入 ns.allKmlFeatures
+        const ns = window.mapNamespace;
+        const newGeoJsonFeature = {
+            type: "Feature",
+            geometry: {
+                type: "Point",
+                coordinates: [numLng, numLat] // GeoJSON 格式為 [經度, 緯度]
+            },
+            properties: {
+                name: pointKey,
+                title: pointKey,
+                kmlId: kmlId,
+                auditPointKey: pointKey,
+                isCustomPoint: true,
+                isAudited: true,
+                auditStatus: status || "新增",
+                auditNote: remark || "",
+                photos: photoUrls
+            }
+        };
+
+        // 確保 ns.allKmlFeatures 存在，並將新點位 Push 進去
+        if (ns) {
+            if (!Array.isArray(ns.allKmlFeatures)) {
+                ns.allKmlFeatures = [];
+            }
+            // 檢查是否已有同名點位，若有則覆蓋，無則新增
+            const existingIdx = ns.allKmlFeatures.findIndex(f => {
+                const name = f.properties?.name || f.properties?.title || f.properties?.auditPointKey;
+                return name === pointKey;
+            });
+
+            if (existingIdx >= 0) {
+                ns.allKmlFeatures[existingIdx] = newGeoJsonFeature;
+            } else {
+                ns.allKmlFeatures.push(newGeoJsonFeature);
+            }
+        }
+
+        // 4. 寫入 Firestore 該圖層的 auditRecords 子集合
         const appPath = typeof APP_PATH !== 'undefined' ? APP_PATH : 'kmlData';
         await firebase.firestore()
             .collection(appPath)
@@ -863,13 +896,13 @@ window.submitNewCustomPoint = async function(formValues) {
             .doc(pointKey)
             .set(structuredData, { merge: true });
 
-        // 6. 自動重新產生圖層 CSV 報表 (帶入正確的 layerFolderName)
+        // 5. 自動重新產生圖層 CSV 報表
         if (typeof generateLayerCsvReport === 'function') {
             const maxPhotos = 2;
             await generateLayerCsvReport(kmlId, layerFolderName, maxPhotos);
         }
 
-        // 7. 成功提示與地圖刷頁
+        // 6. 成功提示
         Swal.fire({
             icon: 'success',
             title: '新增清查點位成功',
@@ -877,8 +910,14 @@ window.submitNewCustomPoint = async function(formValues) {
             showConfirmButton: false
         });
 
-        if (typeof forceMapRefresh === 'function') forceMapRefresh();
-        if (typeof updateBottomBtnState === 'function') setTimeout(updateBottomBtnState, 300);
+        // 7. ✨【觸發你的重繪機制】：呼叫 forceMapRefresh，它會自動將 ns.allKmlFeatures 上色並畫出！
+        if (typeof forceMapRefresh === 'function') {
+            forceMapRefresh();
+        }
+
+        if (typeof updateBottomBtnState === 'function') {
+            setTimeout(updateBottomBtnState, 300);
+        }
 
     } catch (e) {
         console.error("❌ 新增清查點位失敗:", e);
