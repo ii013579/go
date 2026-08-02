@@ -525,7 +525,7 @@
     };
        
 // =========================================================
-// 5. 處理新增點位項目 (手動新增點位功能 & 底部按鈕 UI 渲染)
+// 4.1 獨立區段：手動新增點位功能 & 底部按鈕 UI 渲染
 // =========================================================
 
 // 安全轉義字串 (防止 XSS)
@@ -544,7 +544,7 @@ const safeEscape = (str) => {
 let activeAddPointCleanup = null;
 
 /**
- * 5-1. 觸發挑選位置模式 (點擊「新增點位」按鈕)
+ * 1. 觸發挑選位置模式 (點擊「新增點位」按鈕)
  */
 window.startAddCustomPoint = function(kmlId) {
     if (typeof checkHasAuditPermission === 'function' && !checkHasAuditPermission()) {
@@ -613,7 +613,7 @@ window.startAddCustomPoint = function(kmlId) {
 };
 
 // =========================================================
-// 5-2. 動態渲染獨立「新增點位」膠囊按鈕（固定於右下角）
+// 4-2. 動態渲染獨立「新增點位」膠囊按鈕（固定於右下角）
 // =========================================================
 (function renderStandaloneAddButton() {
     let btn = document.getElementById('btn-standalone-add-point');
@@ -656,7 +656,7 @@ window.startAddCustomPoint = function(kmlId) {
 })();
 
 // =========================================================
-// 5-3. 彈窗 UI 介面與照片預覽
+// 4-3. 彈窗 UI 介面與照片預覽
 // =========================================================
 window.uploadedPhotos = {}; // 暫存新增點位的上傳照片
 
@@ -779,7 +779,7 @@ window.handleAddPhotoPreview = function(input, index) {
 };
 
 // =========================================================
-// 5-4. 提交與轉接處理函式
+// 4-4. 提交與轉接處理函式
 // =========================================================
 window.submitNewCustomPoint = async function(formValues) {
     const { kmlId, pointKey, lat, lng, remark, photos } = formValues;
@@ -794,7 +794,7 @@ window.submitNewCustomPoint = async function(formValues) {
 };
 
 // =========================================================
-// 5-5. 寫入 Firestore 並繪製 Marker (已補齊 pointName 與 deviceStatus 對齊欄位)
+// 4-5. 寫入 Firestore 並繪製 Marker (修正正確的 Security Rules 與大小寫相容路徑)
 // =========================================================
 window.saveNewPointToFirestore = async function(kmlId, data) {
     Swal.fire({ 
@@ -805,30 +805,21 @@ window.saveNewPointToFirestore = async function(kmlId, data) {
     });
 
     try {
+        // 1. 上傳照片
         let finalPhotoUrls = [];
-
-        // 1. 上傳照片至 Firebase Storage
         if (typeof window.uploadPhotosToStorage === 'function') {
             finalPhotoUrls = await window.uploadPhotosToStorage(data.photos, kmlId, data.pointKey);
-        } else {
-            console.warn("⚠️ 未找到 uploadPhotosToStorage 函式，請確認專案中是否有實現照片上傳邏輯。");
         }
 
-        if (Array.isArray(finalPhotoUrls)) {
-            finalPhotoUrls = finalPhotoUrls.filter(item => typeof item === 'string');
-        } else {
-            finalPhotoUrls = [];
-        }
-
-        // 2. 獲取使用者帳號
+        // 2. 取得 Auth 使用者
         const authUser = firebase.auth().currentUser;
         const updatedBy = authUser ? authUser.email : (window.currentUserEmail || 'Unknown');
         
-        // 3. 組裝紀錄物件 (🔥 已補齊 pointName 與 deviceStatus 對齊舊有資料結構)
+        // 3. 組裝紀錄物件 (🔥 關鍵修正：對齊圖二的 pointName 與 deviceStatus)
         const recordData = {
-            pointName: data.pointKey,          // 對齊舊格式 pointName
-            deviceStatus: '新增',              // 對齊舊格式 deviceStatus
-            status: '已完成',                  // 對齊舊格式 status
+            pointName: data.pointKey,          // 對齊圖二 pointName
+            deviceStatus: '新增',              // 對齊圖二 deviceStatus
+            status: '已完成',                  // 對齊圖二 status
             pointKey: data.pointKey,
             note: data.remark || '',
             photos: finalPhotoUrls,
@@ -839,62 +830,24 @@ window.saveNewPointToFirestore = async function(kmlId, data) {
             updatedBy: updatedBy
         };
 
-        // 4. 動態取得正確的 Doc Reference (匹配集合大小寫 auditRecords)
+        // 4. Firestore Document Reference
         const db = firebase.firestore();
-        let targetDocRef;
+        const currentAppId = window.appId || (typeof appId !== 'undefined' ? appId : 'kmldata-d22fb');
+        const targetDocRef = db.collection('artifacts')
+                               .doc(currentAppId)
+                               .collection('public')
+                               .doc('data')
+                               .collection('kmlLayers')
+                               .doc(kmlId)
+                               .collection('auditRecords')
+                               .doc(data.pointKey);
 
-        if (typeof getKmlCollectionRef === 'function') {
-            targetDocRef = getKmlCollectionRef().doc(kmlId).collection('auditRecords').doc(data.pointKey);
-        } else {
-            const currentAppId = window.appId || (typeof appId !== 'undefined' ? appId : 'kmldata-d22fb');
-            targetDocRef = db.collection('artifacts')
-                             .doc(currentAppId)
-                             .collection('public')
-                             .doc('data')
-                             .collection('kmlLayers')
-                             .doc(kmlId)
-                             .collection('auditRecords')
-                             .doc(data.pointKey);
-        }
-
-        // 5. 寫入 Firestore
+        // 5. 寫入資料
         await targetDocRef.set(recordData, { merge: true });
 
-        // 6. 更新記憶體快取 (改用 Date 物件避免 Sentinel 報錯)
-        if (window.auditRecordsMap) {
-            if (!window.auditRecordsMap[kmlId]) window.auditRecordsMap[kmlId] = {};
-            window.auditRecordsMap[kmlId][data.pointKey] = {
-                ...recordData,
-                updatedAt: new Date()
-            };
-        }
-
-        // 7. Leaflet 地圖繪製 Marker
-        const map = window.mapNamespace?.map;
-        if (map && typeof L !== 'undefined') {
-            const newMarker = L.circleMarker([data.lat, data.lng], {
-                radius: 8,
-                fillColor: '#2ecc71',
-                color: '#27ae60',
-                weight: 2,
-                fillOpacity: 0.9,
-                renderer: map.options.renderer
-            }).addTo(map);
-
-            newMarker.bindPopup(`
-                <div style="font-size:13px; line-height:1.6;">
-                    <b style="color:#27ae60; font-size:14px;">[新增點位] ${safeEscape(data.pointKey)}</b><br>
-                    <b>設備狀態：</b>新增<br>
-                    <b>審核狀態：</b>已完成<br>
-                    <b>備註：</b>${safeEscape(data.remark || '無')}<br>
-                    <small style="color:#888;">座標: ${data.lat.toFixed(5)}, ${data.lng.toFixed(5)}</small>
-                </div>
-            `);
-
-            if (window.auditMarkersMap) {
-                if (!window.auditMarkersMap[kmlId]) window.auditMarkersMap[kmlId] = {};
-                window.auditMarkersMap[kmlId][data.pointKey] = newMarker;
-            }
+        // 6. 立即在當前地圖上展點 (當下不需重新整理)
+        if (window.renderCustomAuditMarker) {
+            window.renderCustomAuditMarker(kmlId, recordData);
         }
 
         Swal.fire({ icon: 'success', title: '點位新增成功！', timer: 1200, showConfirmButton: false });
@@ -906,7 +859,7 @@ window.saveNewPointToFirestore = async function(kmlId, data) {
 };
 
 // =========================================================
-// 5-6. Firebase Storage 照片上傳處理 (上傳至 audit_photos 目錄)
+// 4-6. Firebase Storage 照片上傳處理 (上傳至 audit_photos 目錄)
 // =========================================================
 
 /**
@@ -921,6 +874,7 @@ window.uploadPhotosToStorage = async function(photos, kmlId, pointKey) {
         return [];
     }
 
+    // 檢查 Firebase Storage SDK 是否正常初始化
     if (typeof firebase === 'undefined' || typeof firebase.storage !== 'function') {
         console.error("❌ Firebase Storage SDK 未載入！");
         throw new Error("Firebase Storage SDK 未載入，請確認網頁已引用 firebase-storage.js");
@@ -928,18 +882,23 @@ window.uploadPhotosToStorage = async function(photos, kmlId, pointKey) {
 
     const storageRef = firebase.storage().ref();
     const uploadPromises = photos.map(async (photo, index) => {
+        // 1. 若已經是 URL 字串（非 File），直接回傳免上傳
         if (!photo || typeof photo === 'string') {
             return photo;
         }
 
+        // 2. 建立檔名與儲存路徑：audit_photos/{kmlId}/{pointKey}_{timestamp}_{index}.jpg
         const fileExt = photo.name ? photo.name.split('.').pop() : 'jpg';
+        // 清除檔名中可能影響 Storage 路徑的特殊字元
         const safePointKey = String(pointKey).replace(/[/\\?%*:|"<>]/g, '_');
         const fileName = `${safePointKey}_${Date.now()}_${index + 1}.${fileExt}`;
         
         const photoRef = storageRef.child(`audit_photos/${kmlId}/${fileName}`);
 
         try {
+            // 3. 上傳檔案
             const snapshot = await photoRef.put(photo);
+            // 4. 取得公開下載 URL
             const downloadUrl = await snapshot.ref.getDownloadURL();
             return downloadUrl;
         } catch (uploadError) {
@@ -954,94 +913,94 @@ window.uploadPhotosToStorage = async function(photos, kmlId, pointKey) {
         return urls;
     } catch (error) {
         console.error("❌ 照片批次上傳失敗:", error);
-        throw error;
-    }
-};
-
-// =========================================================
-// 5-7. 通用按鈕輔助函式：產生統一膠囊風格按鈕
-// =========================================================
-window.createUnifiedAuditButton = function(text, bgColor, onClickHandler) {
-    const btn = document.createElement('button');
-    btn.innerHTML = text;
-    btn.style.cssText = `
-        pointer-events: auto;
-        background: ${bgColor};
-        color: #ffffff;
-        border: none;
-        padding: 10px 22px;
-        border-radius: 25px;
-        font-weight: bold;
-        font-size: 15px;
-        box-shadow: 0 3px 10px rgba(0,0,0,0.25);
-        cursor: pointer;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        gap: 6px;
-        transition: transform 0.1s ease, box-shadow 0.1s ease;
-        outline: none;
-    `;
-    btn.onclick = onClickHandler;
-    return btn;
-};
-
-// =========================================================
-// 5-8. 動態渲染底部選單 UI（包含：新增點位、清查點位、查看、修改）
-// =========================================================
-window.updateAuditBottomMenuUI = function(mode, extraData) {
-    if (!bottomControl || !bottomControl._container) return;
-
-    const container = bottomControl._container;
-    container.innerHTML = ''; // 清空內容
-
-    const currentKmlId = window.currentActiveKmlId;
-    if (!currentKmlId) {
-        container.style.display = 'none';
-        return;
-    }
-
-    container.style.display = 'flex';
-    container.style.alignItems = 'center';
-
-    // 根據模式產生相應的膠囊按鈕
-    if (mode === 'VIEW_EDIT') {
-        // 「查看」按鈕
-        const viewBtn = window.createUnifiedAuditButton('查看', '#e91e63', () => {
-            if (typeof window.openAuditDetailModal === 'function') {
-                window.openAuditDetailModal(extraData);
-            }
-        });
-        // 「修改」按鈕
-        const editBtn = window.createUnifiedAuditButton('修改', '#f39c12', () => {
-            if (typeof window.openAuditFormModal === 'function') {
-                window.openAuditFormModal(extraData);
-            }
-        });
-
-        container.appendChild(viewBtn);
-        container.appendChild(editBtn);
-
-    } else if (mode === 'AUDIT_MAIN') {
-        // 「清查點位」按鈕
-        const auditBtn = window.createUnifiedAuditButton('清查點位', '#2ecc71', () => {
-            if (typeof window.openAuditFormModal === 'function') {
-                window.openAuditFormModal(extraData);
-            }
-        });
-        container.appendChild(auditBtn);
-
-    } else {
-        // 預設/圖層開啟時：顯示「➕ 新增點位」
-        const addBtn = window.createUnifiedAuditButton('➕ 新增點位', '#2ecc71', () => {
-            window.startAddCustomPoint(currentKmlId);
-        });
-        container.appendChild(addBtn);
+        throw error; // 拋出給 saveNewPointToFirestore 捕捉並彈出 error Swal
     }
 };
     
+    /**
+     * 5. 通用按鈕輔助函式：產生統一膠囊風格按鈕
+     */
+    window.createUnifiedAuditButton = function(text, bgColor, onClickHandler) {
+        const btn = document.createElement('button');
+        btn.innerHTML = text;
+        btn.style.cssText = `
+            pointer-events: auto;
+            background: ${bgColor};
+            color: #ffffff;
+            border: none;
+            padding: 10px 22px;
+            border-radius: 25px;
+            font-weight: bold;
+            font-size: 15px;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.25);
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            transition: transform 0.1s ease, box-shadow 0.1s ease;
+            outline: none;
+        `;
+        btn.onclick = onClickHandler;
+        return btn;
+    };
+    
+    /**
+     * 6. 動態渲染底部選單 UI（包含：新增點位、清查點位、查看、修改）
+     */
+    window.updateAuditBottomMenuUI = function(mode, extraData) {
+        if (!bottomControl || !bottomControl._container) return;
+    
+        const container = bottomControl._container;
+        container.innerHTML = ''; // 清空內容
+    
+        const currentKmlId = window.currentActiveKmlId;
+        if (!currentKmlId) {
+            container.style.display = 'none';
+            return;
+        }
+    
+        container.style.display = 'flex';
+        container.style.alignItems = 'center';
+    
+        // 根據模式產生相應的膠囊按鈕（保留原有前景顏色）
+        if (mode === 'VIEW_EDIT') {
+            // 「查看」按鈕 (桃紅色背景: #e91e63)
+            const viewBtn = window.createUnifiedAuditButton('查看', '#e91e63', () => {
+                if (typeof window.openAuditDetailModal === 'function') {
+                    window.openAuditDetailModal(extraData);
+                }
+            });
+            // 「修改」按鈕 (橘黃色背景: #f39c12)
+            const editBtn = window.createUnifiedAuditButton('修改', '#f39c12', () => {
+                if (typeof window.openAuditFormModal === 'function') {
+                    window.openAuditFormModal(extraData);
+                }
+            });
+    
+            container.appendChild(viewBtn);
+            container.appendChild(editBtn);
+    
+        } else if (mode === 'AUDIT_MAIN') {
+            // 「清查點位」按鈕 (綠色背景: #2ecc71)
+            const auditBtn = window.createUnifiedAuditButton('清查點位', '#2ecc71', () => {
+                if (typeof window.openAuditFormModal === 'function') {
+                    window.openAuditFormModal(extraData);
+                }
+            });
+            container.appendChild(auditBtn);
+    
+        } else {
+            // 預設/圖層開啟時：顯示「➕ 新增點位」與「清查點位」
+            const addBtn = window.createUnifiedAuditButton('➕ 新增點位', '#2ecc71', () => {
+                window.startAddCustomPoint(currentKmlId);
+            });
+            container.appendChild(addBtn);
+        }
+    };
+    
     // ---------------------------------------------------------
-    // 6. 清查資料編輯與上傳邏輯 (語法修復與 4 格狀態版)
+    // 5. 清查資料編輯與上傳邏輯 (語法修復與 4 格狀態版)
     // ---------------------------------------------------------
     window.openAuditEditor = async function(isModifyMode = false) {
         if (!checkHasAuditPermission()) return;
@@ -1216,7 +1175,7 @@ window.updateAuditBottomMenuUI = function(mode, extraData) {
     };
 
     // ---------------------------------------------------------
-    // 7. 查看詳細紀錄彈窗
+    // 6. 查看詳細紀錄彈窗
     // ---------------------------------------------------------
     window.viewAuditDetailOnly = function(pointKey) {
         const kmlId = window.mapNamespace?.currentKmlLayerId;
@@ -1247,7 +1206,7 @@ window.updateAuditBottomMenuUI = function(mode, extraData) {
 
 
     // ---------------------------------------------------------
-    // 8.打包 Firebase Storage 照片 (直連原生 CORS 下載)
+    // 7.打包 Firebase Storage 照片 (直連原生 CORS 下載)
     // ---------------------------------------------------------
     window.downloadAuditPhotosZip = async function(kmlId, appId = 'default') {
         if (typeof JSZip === 'undefined' || typeof saveAs === 'undefined') {
@@ -1374,7 +1333,7 @@ window.updateAuditBottomMenuUI = function(mode, extraData) {
     };
         
     // ---------------------------------------------------------
-    // 9. 資料動態監聽與安全退場機制
+    // 8. 資料動態監聽與安全退場機制
     // ---------------------------------------------------------
     const initGlobalConfigListener = () => {
         if (typeof firebase === 'undefined' || !firebase.apps.length) {
@@ -1431,7 +1390,7 @@ window.updateAuditBottomMenuUI = function(mode, extraData) {
     }
 
     // ---------------------------------------------------------
-    // 10. Leaflet 地圖初始化掛載 (輪詢檢查)
+    // 9. Leaflet 地圖初始化掛載 (輪詢檢查)
     // ---------------------------------------------------------
     let checkAttempts = 0;
     const maxAttempts = 30; 
