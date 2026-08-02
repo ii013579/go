@@ -794,7 +794,7 @@ window.submitNewCustomPoint = async function(formValues) {
 };
 
 // =========================================================
-// 4-5. 寫入 Firestore 並繪製 Marker (修正正確的 Security Rules 相容路徑)
+// 4-5. 寫入 Firestore 並繪製 Marker (修正正確的 Security Rules 與大小寫相容路徑)
 // =========================================================
 window.saveNewPointToFirestore = async function(kmlId, data) {
     Swal.fire({ 
@@ -837,21 +837,23 @@ window.saveNewPointToFirestore = async function(kmlId, data) {
             updatedBy: updatedBy
         };
 
-        // 4. 動態取得正確的 Doc Reference (匹配 Security Rules 要求的 artifacts 層級)
+        // 4. 動態取得正確的 Doc Reference (🔥 修正：正確匹配集合大小寫 auditRecords)
         const db = firebase.firestore();
         let targetDocRef;
 
         if (typeof getKmlCollectionRef === 'function') {
-            targetDocRef = getKmlCollectionRef().doc(kmlId).collection('auditrecords').doc(data.pointKey);
+            // 🔥 修正 'auditrecords' -> 'auditRecords'
+            targetDocRef = getKmlCollectionRef().doc(kmlId).collection('auditRecords').doc(data.pointKey);
         } else {
             const currentAppId = window.appId || (typeof appId !== 'undefined' ? appId : 'kmldata-d22fb');
+            // 🔥 修正 'auditrecords' -> 'auditRecords'
             targetDocRef = db.collection('artifacts')
                              .doc(currentAppId)
                              .collection('public')
                              .doc('data')
                              .collection('kmlLayers')
                              .doc(kmlId)
-                             .collection('auditrecords')
+                             .collection('auditRecords')
                              .doc(data.pointKey);
         }
 
