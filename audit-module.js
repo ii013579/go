@@ -788,10 +788,13 @@ window.handleAddPhotoPreview = function(input, index) {
 };
 
 // =========================================================
-// 5-4. 新增自訂點位送出邏輯 (與一般點位上傳與報表機制 100% 對齊)
+// 5-4. 新增自訂點位送出邏輯 (已修復 layerFolderName 未定義 Bug)
 // =========================================================
 window.submitNewCustomPoint = async function(formValues) {
     const { kmlId, kmlLayerName, lat, lng, pointKey, status, remark, photos } = formValues;
+
+    // 💡 修正點：確保 layerFolderName 有值，防止 ReferenceError
+    const layerFolderName = kmlLayerName || kmlId || 'default_layer';
 
     // 1. 顯示處理中彈窗
     Swal.fire({
@@ -811,7 +814,8 @@ window.submitNewCustomPoint = async function(formValues) {
 
             const photoIndexStr = String(i + 1).padStart(2, '0');
             const rootPath = typeof STORAGE_ROOT !== 'undefined' ? STORAGE_ROOT : 'audit_photos';
-            const layerFolderName = kmlLayerName || kmlId;
+            
+            // 這裡使用的 layerFolderName 現在已有定義
             const customStoragePath = `${rootPath}/${layerFolderName}/${pointKey}_${photoIndexStr}.jpg`;
 
             const photoRef = firebase.storage().ref().child(customStoragePath);
@@ -859,7 +863,7 @@ window.submitNewCustomPoint = async function(formValues) {
             .doc(pointKey)
             .set(structuredData, { merge: true });
 
-        // 6. 自動重新產生圖層 CSV 報表
+        // 6. 自動重新產生圖層 CSV 報表 (帶入正確的 layerFolderName)
         if (typeof generateLayerCsvReport === 'function') {
             const maxPhotos = 2;
             await generateLayerCsvReport(kmlId, layerFolderName, maxPhotos);
