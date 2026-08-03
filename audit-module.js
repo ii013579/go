@@ -968,13 +968,13 @@ window.submitNewCustomPoint = async function(formValues) {
 };
 
 // =========================================================
-// 5-5. Firebase Storage 照片上傳處理、通用按鈕與選單渲染模組
+// 5-5. Firebase Storage 照片上傳處理 (通用工具函式 & UI 選單)
 // =========================================================
 
 /**
- * 1. Firebase Storage 照片上傳處理 (通用工具函式)
+ * 1. Firebase Storage 照片上傳處理 (對齊 5-6 標準規格)
  */
-window.uploadPhotosToStorage = async function(photos, kmlId, pointKey) {
+window.uploadPhotosToStorage = async function(photos, kmlId, pointKey, kmlLayerName) {
     if (!photos || !Array.isArray(photos) || photos.length === 0) {
         return [];
     }
@@ -984,21 +984,44 @@ window.uploadPhotosToStorage = async function(photos, kmlId, pointKey) {
         throw new Error("Firebase Storage SDK 未載入，請確認網頁已引用 firebase-storage.js");
     }
 
+    // (A) 取得根目錄名稱與圖層目錄名稱 (與 5-6 相同)
+    const rootPath = typeof STORAGE_ROOT !== 'undefined' ? STORAGE_ROOT : 'audit_photos';
+    
+    // 若未傳入 kmlLayerName，嘗試從下拉選單取得
+    let targetLayerName = kmlLayerName;
+    if (!targetLayerName) {
+        const selectEl = document.getElementById('kmlLayerSelect');
+        const rawLayerName = selectEl?.options[selectEl.selectedIndex]?.getAttribute('data-basename') || window.currentActiveKmlName || '預設區域';
+        targetLayerName = rawLayerName.replace(/\.kml$/i, '').trim();
+    }
+
     const storageRef = firebase.storage().ref();
-    const uploadPromises = photos.map(async (photo, index) => {
-        if (!photo || typeof photo === 'string') {
-            return photo;
+    const safePointKey = String(pointKey).replace(/[/\\?%*:|"<>]/g, '_');
+
+    const uploadPromises = photos.map(async (photoData, index) => {
+        if (!photoData) return '';
+        // 若已經是 HTTP/HTTPS 上傳好的網址，直接傳回
+        if (typeof photoData === 'string' && !photoData.startsWith('data:image')) {
+            return photoData;
         }
 
-        const fileExt = photo.name ? photo.name.split('.').pop() : 'jpg';
-        const safePointKey = String(pointKey).replace(/[/\\?%*:|"<>]/g, '_');
-        const fileName = `${safePointKey}_${Date.now()}_${index + 1}.${fileExt}`;
-        
-        const photoRef = storageRef.child(`audit_photos/${kmlId}/${fileName}`);
+        // 檔名流水號對齊 5-6 格式：pointKey_01.jpg
+        const photoIndexStr = String(index + 1).padStart(2, '0');
+        const customStoragePath = `${rootPath}/${targetLayerName}/${safePointKey}_${photoIndexStr}.jpg`;
+        const ref = storageRef.child(customStoragePath);
 
         try {
-            const snapshot = await photoRef.put(photo);
-            return await snapshot.ref.getDownloadURL();
+            let blob;
+            if (photoData instanceof File || photoData instanceof Blob) {
+                blob = photoData;
+            } else if (typeof photoData === 'string' && photoData.startsWith('data:image')) {
+                blob = await (await fetch(photoData)).blob();
+            } else {
+                return photoData;
+            }
+
+            await ref.put(blob);
+            return await ref.getDownloadURL();
         } catch (uploadError) {
             console.error(`❌ 照片 ${index + 1} 上傳失敗:`, uploadError);
             throw new Error(`照片 ${index + 1} 上傳失敗: ${uploadError.message}`);
@@ -1044,7 +1067,7 @@ window.createUnifiedAuditButton = function(text, bgColor, onClickHandler) {
 };
 
 /**
- * 3. 刪除自訂點位 (同步刪除 Firestore 紀錄與 Storage 相片)
+ * 3. 刪除自訂點位 (同步刪除符合 5-6 規格的 Storage 照片與 Firestore 紀錄)
  */
 window.deleteCustomPoint = async function(kmlId, pointKey, kmlLayerName) {
     if (!kmlId || !pointKey) {
@@ -1072,13 +1095,21 @@ window.deleteCustomPoint = async function(kmlId, pointKey, kmlLayerName) {
     });
 
     try {
-        const layerFolderName = kmlLayerName || kmlId || 'default_layer';
+        const rootPath = typeof STORAGE_ROOT !== 'undefined' ? STORAGE_ROOT : 'audit_photos';
+        let targetLayerName = kmlLayerName;
+        if (!targetLayerName) {
+            const selectEl = document.getElementById('kmlLayerSelect');
+            const rawLayerName = selectEl?.options[selectEl.selectedIndex]?.getAttribute('data-basename') || window.currentActiveKmlName || '預設區域';
+            targetLayerName = rawLayerName.replace(/\.kml$/i, '').trim();
+        }
+
         const safePointKey = String(pointKey).replace(/[/\\?%*:|"<>]/g, '_');
-        
-        // 嘗試刪除 Storage 照片
         const storageRef = firebase.storage().ref();
+
+        // 嘗試刪除 01, 02... 格式照片
         const deletePhotoPromises = [1, 2, 3].map(async (i) => {
-            const customStoragePath = `audit_photos/${kmlId}/${safePointKey}_${i}.jpg`;
+            const photoIndexStr = String(i).padStart(2, '0');
+            const customStoragePath = `${rootPath}/${targetLayerName}/${safePointKey}_${photoIndexStr}.jpg`;
             try {
                 await storageRef.child(customStoragePath).delete();
             } catch (err) {
@@ -1109,10 +1140,10 @@ window.deleteCustomPoint = async function(kmlId, pointKey, kmlLayerName) {
             });
         }
 
-        // 清除地圖選取狀態並重新產生 CSV
+        // 清除點位選取狀態並重新產出 CSV
         window.currentSelectedPoint = null;
         if (typeof generateLayerCsvReport === 'function') {
-            await generateLayerCsvReport(kmlId, layerFolderName, 2);
+            await generateLayerCsvReport(kmlId, targetLayerName, 2);
         }
 
         Swal.fire({
@@ -1188,8 +1219,10 @@ window.updateAuditBottomMenuUI = function(mode, extraData) {
             const delBtn = window.createUnifiedAuditButton('🗑️ 刪除', '#e74c3c', () => {
                 const props = extraData.feature?.properties || extraData;
                 const pointKey = props.auditPointKey || props.name;
-                const layerFolderName = window.currentActiveKmlName || currentKmlId;
-                
+                const selectEl = document.getElementById('kmlLayerSelect');
+                const rawLayerName = selectEl?.options[selectEl.selectedIndex]?.getAttribute('data-basename') || window.currentActiveKmlName || '預設區域';
+                const layerFolderName = rawLayerName.replace(/\.kml$/i, '').trim();
+
                 if (typeof window.deleteCustomPoint === 'function') {
                     window.deleteCustomPoint(currentKmlId, pointKey, layerFolderName);
                 }
@@ -1212,175 +1245,6 @@ window.updateAuditBottomMenuUI = function(mode, extraData) {
             }
         });
         container.appendChild(addBtn);
-    }
-};
-
-// =========================================================
-// 5-6. 清查資料編輯與上傳邏輯
-// =========================================================
-window.openAuditEditor = async function(isModifyMode = false) {
-    if (typeof checkHasAuditPermission === 'function' && !checkHasAuditPermission()) return;
-    const activePoint = window.currentSelectedPoint;
-    if (!activePoint) return;
-
-    const layerProps = activePoint.feature?.properties || activePoint.properties || {};
-    const pointKey = layerProps.name || layerProps.title || layerProps.id || "未知點位"; 
-    const kmlId = layerProps.kmlId || window.mapNamespace?.currentKmlLayerId;
-    const config = (window.globalAuditConfigs && window.globalAuditConfigs[kmlId]) || { targetPhotos: 2 };
-    const maxPhotos = config.targetPhotos || 2;
-
-    const selectEl = document.getElementById('kmlLayerSelect');
-    const rawLayerName = selectEl?.options[selectEl.selectedIndex]?.getAttribute('data-basename') || '預設區域';
-    const kmlLayerName = rawLayerName.replace(/\.kml$/i, '').trim(); 
-
-    const historyRecord = isModifyMode ? (window.auditLayersState?.[kmlId]?.[pointKey] || {}) : {};
-    const currentPhotos = Array.isArray(historyRecord.photos) ? [...historyRecord.photos] : new Array(maxPhotos).fill('');
-    const currentStatus = historyRecord.deviceStatus || '';
-    const currentNote = historyRecord.note || '';
-
-    window._tempPreview = function(input, index) {
-        if (input.files && input.files[0]) {
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                const img = new Image();
-                img.onload = () => {
-                    const canvas = document.createElement('canvas');
-                    let width = img.width, height = img.height;
-                    const max_size = 1920;
-                    if (width > height) { if (width > max_size) { height *= max_size / width; width = max_size; } } 
-                    else { if (height > max_size) { width *= max_size / height; height = max_size; } }
-                    canvas.width = width; canvas.height = height;
-                    canvas.getContext('2d').drawImage(img, 0, 0, width, height);
-                    const base64 = canvas.toDataURL('image/jpeg', 0.82);
-                    
-                    const prevEl = document.getElementById('audit-prev-' + index);
-                    const iconEl = document.getElementById('audit-icon-' + index);
-                    if (prevEl) { prevEl.src = base64; prevEl.style.display = 'block'; }
-                    if (iconEl) { iconEl.style.display = 'none'; }
-                    currentPhotos[index] = base64;
-                };
-                img.src = e.target.result;
-            };
-            reader.readAsDataURL(input.files[0]);
-        }
-    };
-
-    let photoHtml = '';
-    for (let i = 0; i < maxPhotos; i++) {
-        const photoData = currentPhotos[i] || '';
-        
-        photoHtml += `
-            <div style="position:relative; margin-bottom:20px;">
-                <div style="border:2px dashed #ccc; height:85px; position:relative; display:flex; align-items:center; justify-content:center; background:#fafafa; border-radius:8px; overflow:hidden; cursor:pointer;">
-                    <img id="audit-prev-${i}" src="${photoData}" style="width:100%; height:100%; object-fit:cover; display:${photoData ? 'block' : 'none'}; position:absolute; top:0; left:0; z-index:1;">
-                    <span id="audit-icon-${i}" style="font-size:24px; color:#bbb; display:${photoData ? 'none' : 'block'}; z-index:1;">📷</span>
-                    <input type="file" accept="image/*" capture="environment" onchange="window._tempPreview(this, ${i})" style="position:absolute; width:100%; height:100%; opacity:0; z-index:2; cursor:pointer;" title="現場拍照">
-                </div>
-                <div style="position:absolute; left:50%; transform:translateX(-50%); bottom:-12px; z-index:3; background:#555; color:#fff; font-size:11px; padding:3px 10px; border-radius:12px; display:flex; align-items:center; gap:4px; box-shadow:0 2px 4px rgba(0,0,0,0.2); white-space:nowrap; border:1px solid #777;">
-                    <span>🖼️</span> 舊檔
-                </div>
-            </div>`;
-    }
-
-    const layerConfig = window.globalAuditConfigs?.[kmlId] || {};
-    const statusOptions = layerConfig.statusOptions || 
-                          (localStorage.getItem('audit_status_options') ? JSON.parse(localStorage.getItem('audit_status_options')) : ['正常','損壞','遺失']);
-
-    const statusOptionsHtml = statusOptions.map(opt => 
-        `<option value="${opt}" ${currentStatus === opt ? 'selected' : ''}>${opt}</option>`
-    ).join('');
-
-    const { value: res } = await Swal.fire({
-        title: `<div style="font-size:18px;">${isModifyMode ? '修改' : '填寫'}清查紀錄：${window.escapeHtml(pointKey)}</div>`,
-        html: `<div style="text-align:left;">
-            <label style="font-size:14px; font-weight:bold;">設備狀態 <span style="color:red;">*必選</span></label>
-            <select id="swal-status" class="swal2-input" style="width:100%; margin:6px 0 16px 0;">
-                <option value="" ${!currentStatus ? 'selected' : ''}>--- 請選擇設備狀態 ---</option>
-                ${statusOptionsHtml}
-            </select>
-
-            <label style="font-size:14px; font-weight:bold;">現場照片 (需拍 ${maxPhotos} 張) <span style="color:red;">*必填</span></label>
-            <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(90px, 1fr)); gap:10px; margin:8px 0 16px 0;">
-                ${photoHtml}
-            </div>
-
-            <label style="font-size:14px; font-weight:bold;">備註事項 <span style="color:#888; font-weight:normal;">(選填)</span></label>
-            <textarea id="swal-note" class="swal2-textarea" style="width:100%; height:70px; margin:6px 0 0 0; resize:vertical;" placeholder="輸入備註事項...">${window.escapeHtml(currentNote)}</textarea>
-        </div>`,
-        showCancelButton: true,
-        confirmButtonText: isModifyMode ? '覆蓋更新' : '確認並上傳',
-        cancelButtonText: '取消',
-        preConfirm: () => {
-            const statusValue = document.getElementById('swal-status').value;
-            if (!statusValue) { 
-                Swal.showValidationMessage('請選擇設備狀態'); 
-                return false; 
-            }
-            if (currentPhotos.filter(Boolean).length < maxPhotos) { 
-                Swal.showValidationMessage(`請拍滿 ${maxPhotos} 張照片`); 
-                return false; 
-            }
-            return { 
-                status: statusValue, 
-                note: document.getElementById('swal-note').value, 
-                photos: currentPhotos 
-            };
-        }
-    });
-
-    delete window._tempPreview;
-    
-    if (res) {
-        Swal.fire({ title: '正在處理並上傳資料...', didOpen: () => Swal.showLoading(), allowOutsideClick: false });
-        try {
-            const rootPath = typeof STORAGE_ROOT !== 'undefined' ? STORAGE_ROOT : 'audit_photos';
-            const uploadPromises = res.photos.map(async (data, i) => {
-                if (data && data.startsWith('data:image')) {
-                    const photoIndexStr = String(i + 1).padStart(2, '0');
-                    const customStoragePath = `${rootPath}/${kmlLayerName}/${pointKey}_${photoIndexStr}.jpg`;
-                    const ref = firebase.storage().ref().child(customStoragePath);
-                    const blob = await (await fetch(data)).blob();
-                    await ref.put(blob);
-                    return await ref.getDownloadURL();
-                }
-                return data || '';
-            });
-
-            const photoUrls = await Promise.all(uploadPromises);
-            
-            const structuredData = {
-                pointName: pointKey,
-                status: "已完成",
-                deviceStatus: res.status,
-                note: res.note, 
-                photos: photoUrls, 
-                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-            };
-
-            if (!window.auditLayersState) window.auditLayersState = {};
-            if (!window.auditLayersState[kmlId]) window.auditLayersState[kmlId] = {};
-            window.auditLayersState[kmlId][pointKey] = structuredData;
-
-            const appPath = typeof APP_PATH !== 'undefined' ? APP_PATH : 'kmlData';
-            await firebase.firestore()
-                .collection(appPath)
-                .doc(kmlId)
-                .collection('auditRecords')
-                .doc(pointKey) 
-                .set(structuredData, { merge: true });
-            
-            if (typeof generateLayerCsvReport === 'function') {
-                await generateLayerCsvReport(kmlId, kmlLayerName, maxPhotos);
-            }
-
-            Swal.fire({ icon: 'success', title: '儲存成功', timer: 1000, showConfirmButton: false });
-            
-            if (typeof forceMapRefresh === 'function') forceMapRefresh();
-            if (typeof updateBottomBtnState === 'function') setTimeout(updateBottomBtnState, 300);
-        } catch (e) { 
-            console.error("儲存清查資料失敗:", e);
-            Swal.fire('錯誤', e.message || '儲存失敗', 'error'); 
-        }
     }
 };
 
