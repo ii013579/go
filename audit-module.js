@@ -795,7 +795,7 @@ window.handleAddPhotoPreview = function(input, index) {
 };
 
 // =========================================================
-// 5-4. 新增/修改自訂點位送出邏輯 (完整修復版：括號精確閉合、防重保留畫面、呼叫原生上傳)
+// 5-4. 新增/修改自訂點位送出邏輯 (對齊 5-6 規格版)
 // =========================================================
 window.submitNewCustomPoint = async function(formValues) {
     const { kmlId, kmlLayerName, lat, lng, pointKey, status, remark, photos, isEditMode, oldPointKey } = formValues;
@@ -822,7 +822,6 @@ window.submitNewCustomPoint = async function(formValues) {
 
     // =========================================================
     // ✨【名稱防重檢核】：重複時警告並停留畫面，照片與輸入內容完好保留
-    // (僅在非編輯模式，或編輯模式下修改了點名時檢查)
     // =========================================================
     if (!isEditMode || (isEditMode && oldPointKey !== trimmedPointKey)) {
         let isDuplicateInKml = false;
@@ -841,7 +840,7 @@ window.submitNewCustomPoint = async function(formValues) {
                 text: `點名「${trimmedPointKey}」已存在！請直接修改點位名稱後重新送出（剛拍的照片會保留）。`,
                 confirmButtonText: '返回修改點名'
             });
-            return; // ⛔ 立即中斷！不上傳照片、不安裝視窗， Modal 與拍照內容完整保留
+            return; // ⛔ 立即中斷 Modal 與拍照內容完整保留
         }
     }
 
@@ -855,10 +854,10 @@ window.submitNewCustomPoint = async function(formValues) {
     });
 
     try {
-        // (A) ✨呼叫 5-5 原生的 uploadPhotosToStorage 工具函式上傳照片
+        // (A) ✨傳入 kmlLayerName，完全對齊 5-6 的 Storage 命名邏輯 (_01.jpg)
         let photoUrls = [];
         if (typeof window.uploadPhotosToStorage === 'function') {
-            photoUrls = await window.uploadPhotosToStorage(photos, kmlId, trimmedPointKey);
+            photoUrls = await window.uploadPhotosToStorage(photos, kmlId, trimmedPointKey, kmlLayerName);
         } else {
             console.warn("⚠️ 找不到 uploadPhotosToStorage，使用原始照片連結");
             photoUrls = Array.isArray(photos) ? photos.filter(p => typeof p === 'string') : [];
