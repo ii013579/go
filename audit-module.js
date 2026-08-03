@@ -1262,7 +1262,7 @@ window.updateAuditBottomMenuUI = function(mode, extraData) {
 };
 
 // =========================================================
-// 5-6. 清查資料編輯、修改與刪除紀錄邏輯 (修復新增點位鎖定狀態與刪除按鈕)
+// 5-6. 清查資料編輯、修改與刪除紀錄邏輯 (含 Storage 照片與 CSV 清理)
 // =========================================================
 window.openAuditEditor = async function(isModifyMode = false) {
     if (typeof checkHasAuditPermission === 'function' && !checkHasAuditPermission()) return;
@@ -1282,8 +1282,7 @@ window.openAuditEditor = async function(isModifyMode = false) {
     // 取得歷史紀錄 (修改模式時帶入)
     const historyRecord = isModifyMode ? (window.auditLayersState?.[kmlId]?.[pointKey] || {}) : {};
 
-    // 💡 關鍵 1：寬鬆且精準判斷是否為「新增點位」
-    // (檢查常見的 custom / isNew / isCustom 標籤，或歷史設備狀態本身就是 "新增")
+    // 💡 判斷是否為「新增點位」
     const isUserCreatedPoint = !!(
         layerProps.isCustom || 
         layerProps.isNew || 
@@ -1306,7 +1305,7 @@ window.openAuditEditor = async function(isModifyMode = false) {
     const currentStatus = isUserCreatedPoint ? '新增' : (historyRecord.deviceStatus || '');
     const currentNote = historyRecord.note || '';
 
-    // 💡 關鍵 2：動態渲染選單，若為新增點位則給予 disabled 與 灰底樣式
+    // 💡 選單樣式：新增點位鎖定為 "新增" (灰底 + disabled)
     const layerConfig = window.globalAuditConfigs?.[kmlId] || {};
     let statusOptions = layerConfig.statusOptions || 
                           (localStorage.getItem('audit_status_options') ? JSON.parse(localStorage.getItem('audit_status_options')) : ['正常','損壞','遺失']);
@@ -1317,13 +1316,11 @@ window.openAuditEditor = async function(isModifyMode = false) {
 
     let statusSelectHtml = '';
     if (isUserCreatedPoint) {
-        // 新增點位：固定為「新增」、鎖定禁用(disabled)、套用灰底樣式
         statusSelectHtml = `
             <select id="swal-status" class="swal2-input" disabled style="width:100%; margin:6px 0 16px 0; background-color:#e9ecef; color:#495057; cursor:not-allowed;">
                 <option value="新增" selected>新增</option>
             </select>`;
     } else {
-        // 一般點位：正常選擇
         const statusOptionsHtml = statusOptions.map(opt => 
             `<option value="${opt}" ${currentStatus === opt ? 'selected' : ''}>${opt}</option>`
         ).join('');
@@ -1401,15 +1398,11 @@ window.openAuditEditor = async function(isModifyMode = false) {
             <textarea id="swal-note" class="swal2-textarea" style="width:100%; height:70px; margin:6px 0 0 0; resize:vertical;" placeholder="輸入備註事項...">${window.escapeHtml(currentNote)}</textarea>
         </div>`,
         showCancelButton: true,
-        // 💡 關鍵 3：只要判斷為新增點位，就開啟 Deny 按鈕並渲染紅底刪除按鈕
         showDenyButton: isUserCreatedPoint,
         denyButtonText: '🗑️ 刪除點位',
         denyButtonColor: '#e74c3c',
         confirmButtonText: isModifyMode ? '覆蓋更新' : '確認並上傳',
         cancelButtonText: '取消',
-        customClass: {
-            actions: 'my-swal-actions' // 確保按鈕排版正常
-        },
         preConfirm: () => {
             const statusValue = document.getElementById('swal-status').value;
             if (!statusValue) { 
@@ -1431,11 +1424,11 @@ window.openAuditEditor = async function(isModifyMode = false) {
 
     delete window._tempPreview;
 
-    // 🗑️ 邏輯 A：點擊「刪除點位」按鈕
+    // 🗑️ 邏輯 A：徹底刪除新增點位 (刪除 Storage 照片 + Firestore + 更新 CSV)
     if (isDenied) {
         const confirmDelete = await Swal.fire({
             title: '確定要刪除此新增點位？',
-            text: `點位 [ ${pointKey} ] 及其所有清查紀錄將會被永久移除。`,
+            text: `點位 [ ${pointKey} ] 的 Storage 照片、清查紀錄與 CSV 報表資料將會被永久移除。`,
             icon: 'warning',
             showCancelButton: true,
             confirmButtonColor: '#d33',
@@ -1445,11 +1438,26 @@ window.openAuditEditor = async function(isModifyMode = false) {
         });
 
         if (confirmDelete.isConfirmed) {
-            Swal.fire({ title: '正在刪除點位與紀錄...', didOpen: () => Swal.showLoading(), allowOutsideClick: false });
+            Swal.fire({ title: '正在清理 Storage 照片與紀錄...', didOpen: () => Swal.showLoading(), allowOutsideClick: false });
             try {
                 const appPath = typeof APP_PATH !== 'undefined' ? APP_PATH : 'kmlData';
-                
-                // 1. 刪除 Firestore 上的清查紀錄
+
+                // 1. 💡 刪除 Firebase Storage 照片
+                if (Array.isArray(historyRecord.photos) && historyRecord.photos.length > 0) {
+                    const deletePhotoPromises = historyRecord.photos.map(async (photoUrl) => {
+                        if (photoUrl && photoUrl.startsWith('http')) {
+                            try {
+                                const photoRef = firebase.storage().refFromURL(photoUrl);
+                                await photoRef.delete();
+                            } catch (err) {
+                                console.warn(`Storage 照片刪除失敗或已不存在 (${photoUrl}):`, err);
+                            }
+                        }
+                    });
+                    await Promise.all(deletePhotoPromises);
+                }
+
+                // 2. 刪除 Firestore 上的清查紀錄
                 await firebase.firestore()
                     .collection(appPath)
                     .doc(kmlId)
@@ -1457,34 +1465,35 @@ window.openAuditEditor = async function(isModifyMode = false) {
                     .doc(pointKey)
                     .delete();
 
-                // 2. 若有自訂點位 Firestore 集合則刪除
+                // 3. 刪除自訂點位本體 (若有存放在獨立集合)
                 if (typeof deleteCustomPointFromFirestore === 'function') {
                     await deleteCustomPointFromFirestore(kmlId, pointKey);
                 }
 
-                // 3. 從地圖圖層移除
+                // 4. 清除本地記憶體/快取 (讓 CSV 重新產生時不會讀取到已刪除的點位)
+                if (window.auditLayersState?.[kmlId]?.[pointKey]) {
+                    delete window.auditLayersState[kmlId][pointKey];
+                }
+
+                // 5. 💡 重新產生並覆蓋 CSV 報表 (點位已從 state 移除，CSV 內自然不會存在該點位)
+                if (typeof generateLayerCsvReport === 'function') {
+                    await generateLayerCsvReport(kmlId, kmlLayerName, maxPhotos);
+                }
+
+                // 6. 從地圖上完全移除該 Marker / Layer
                 if (activePoint && typeof activePoint.remove === 'function') {
                     activePoint.remove();
                 } else if (window.mapNamespace?.map && activePoint) {
                     window.mapNamespace.map.removeLayer(activePoint);
                 }
 
-                // 4. 清除本地狀態
-                if (window.auditLayersState?.[kmlId]?.[pointKey]) {
-                    delete window.auditLayersState[kmlId][pointKey];
-                }
-
-                if (typeof generateLayerCsvReport === 'function') {
-                    await generateLayerCsvReport(kmlId, kmlLayerName, maxPhotos);
-                }
-
-                Swal.fire({ icon: 'success', title: '已成功刪除點位', timer: 1200, showConfirmButton: false });
+                Swal.fire({ icon: 'success', title: '點位與照片已成功徹底刪除', timer: 1200, showConfirmButton: false });
 
                 if (typeof forceMapRefresh === 'function') forceMapRefresh();
                 if (typeof updateBottomBtnState === 'function') setTimeout(updateBottomBtnState, 300);
 
             } catch (e) {
-                console.error("刪除點位失敗:", e);
+                console.error("徹底刪除點位失敗:", e);
                 Swal.fire('錯誤', e.message || '刪除失敗', 'error');
             }
         }
@@ -1514,7 +1523,7 @@ window.openAuditEditor = async function(isModifyMode = false) {
             const structuredData = {
                 pointName: pointKey,
                 status: "已完成",
-                deviceStatus: res.status, // "新增"
+                deviceStatus: res.status, 
                 note: res.note, 
                 photos: photoUrls, 
                 updatedAt: firebase.firestore.FieldValue.serverTimestamp()
