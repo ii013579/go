@@ -364,7 +364,7 @@
         });
     });
 
-    // ---------- 公開方法：添加 GeoJSON 圖層（v2.05 完整修正版：含自訂點位自動補全） ----------
+    // ---------- 公開方法：添加 GeoJSON 圖層（v2.06 已清查顏色修復版） ----------
     window.addGeoJsonLayers = function (geojsonFeatures = []) {
         if (!ns.map) return;
     
@@ -378,7 +378,7 @@
         const records = (kmlId && window.auditLayersState) ? (window.auditLayersState[kmlId] || {}) : {};
     
         // =========================================================
-        // ✨【修復核心】：自動將 Firestore 中的自訂新增點位併入 geojsonFeatures
+        // ✨【修復重點】：補全自訂點位，並設定為「已清查」樣式與屬性
         // =========================================================
         Object.keys(records).forEach(pointKey => {
             const rec = records[pointKey];
@@ -392,7 +392,7 @@
                     return name === pointKey;
                 });
     
-                // 若不在原始 KML 內，自動補一個 Feature 進去！
+                // 若不在原始 KML 內，自動補一個「已清查」樣式的 Feature 進去
                 if (!exists) {
                     geojsonFeatures.push({
                         type: "Feature",
@@ -406,9 +406,16 @@
                             kmlId: kmlId,
                             auditPointKey: pointKey,
                             isCustomPoint: true,
+                            
+                            // 💡【關鍵屬性設定】：標記為已清查，並帶入已清查色彩 (粉色/黃色)
+                            isAudited: true,
                             auditStatus: rec.deviceStatus || "新增",
                             auditNote: rec.note || "",
-                            photos: rec.photos || []
+                            photos: rec.photos || [],
+                            fillColor: "#FCD770", // 已清查色塊顏色 (對齊攔截器樣式)
+                            color: "#ffffff",
+                            radius: 8,
+                            fillOpacity: 0.85
                         }
                     });
                 }
@@ -439,29 +446,28 @@
                 const name = feature.properties?.name || '未命名';
                 const labelId = `label-${String(coords[1])}-${String(coords[0])}`.replace(/\./g, '_');
     
-                // --- 修正重點 1：合併樣式，優先使用 properties 內的設定 (藍/粉點關鍵) ---
+                // --- 合併樣式，優先使用 properties 內的顏色 (已清查粉點/未清查藍點) ---
                 const featureStyle = {
                     ...defaultStyle,
                     radius: feature.properties?.radius || defaultStyle.radius,
                     fillColor: feature.properties?.fillColor || defaultStyle.fillColor,
-                    fillOpacity: feature.properties?.fillOpacity || defaultStyle.fillOpacity
+                    fillOpacity: feature.properties?.fillOpacity || defaultStyle.fillOpacity,
+                    color: feature.properties?.color || defaultStyle.color
                 };
     
                 const dot = L.circleMarker(latlng, {
                     renderer: canvasRenderer,
-                    ...featureStyle // 使用合併後的樣式
+                    ...featureStyle
                 });
     
-                // 將 feature 綁定到 dot 上，方便點擊時獲取資訊
                 dot.feature = feature;
     
                 dot.on('click', (e) => {
                     L.DomEvent.stopPropagation(e);
                     
-                    // --- 修正重點 2：將選中的點存入全域，供 audit-module.js 顯示「清樁」按鈕 ---
                     window.currentSelectedPoint = feature; 
     
-                    // 重置所有點
+                    // 重置所有點的顏色
                     ns.markers.eachLayer(layer => {
                         if (layer instanceof L.CircleMarker && layer.feature) {
                             const style = {
@@ -472,8 +478,8 @@
                         }
                     });
     
-                    // 高亮當前點
-                    dot.setStyle({ weight: 4, color: '#ffff00' }); // 選中的點加粗黃框
+                    // 高亮當前點 (加黃框)
+                    dot.setStyle({ weight: 4, color: '#ffff00' });
     
                     document.querySelectorAll('.marker-label span').forEach(s => s.classList.remove('label-active'));
                     const targetSpan = document.getElementById(labelId);
