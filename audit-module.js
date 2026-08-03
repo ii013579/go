@@ -795,20 +795,14 @@ window.handleAddPhotoPreview = function(input, index) {
 };
 
 // =========================================================
-// 5-4. 新增自訂點位送出邏輯 (完整修復版：含名稱防重、快取同步與已清查展點)
-// =========================================================
-window.submitNewCustomPoint = async function(formValues) {
-    const { kmlId, kmlLayerName, lat, lng, pointKey, status, remark, photos } = formValues;
-
-    //// =========================================================
-// 5-4. 新增/修改自訂點位送出邏輯 (防重不清表單、支援修改)
+// 5-4. 新增/修改自訂點位送出邏輯 (完整修復版：括號精確閉合、防重保留畫面、呼叫原生上傳)
 // =========================================================
 window.submitNewCustomPoint = async function(formValues) {
     const { kmlId, kmlLayerName, lat, lng, pointKey, status, remark, photos, isEditMode, oldPointKey } = formValues;
 
+    // 1. 點位名稱去除前後空白
     const trimmedPointKey = (pointKey || '').trim();
 
-    // 1. 基礎驗證
     if (!trimmedPointKey) {
         Swal.fire('提示', '請輸入點位名稱', 'warning');
         return;
@@ -827,8 +821,8 @@ window.submitNewCustomPoint = async function(formValues) {
         : {};
 
     // =========================================================
-    // ✨【名稱防重檢核】：若重複，提示後「直接結束」，不關閉/不清空 Modal
-    // (非編輯模式，或是編輯模式下改了新名字才檢查)
+    // ✨【名稱防重檢核】：重複時警告並停留畫面，照片與輸入內容完好保留
+    // (僅在非編輯模式，或編輯模式下修改了點名時檢查)
     // =========================================================
     if (!isEditMode || (isEditMode && oldPointKey !== trimmedPointKey)) {
         let isDuplicateInKml = false;
@@ -841,22 +835,19 @@ window.submitNewCustomPoint = async function(formValues) {
         const isDuplicateInState = !!currentRecords[trimmedPointKey];
 
         if (isDuplicateInKml || isDuplicateInState) {
-            // 跳出警告，不進行 Swal 關閉，讓使用者保留照片與輸入內容直接改點名！
             Swal.fire({
                 icon: 'warning',
                 title: '點位名稱重複',
                 text: `點名「${trimmedPointKey}」已存在！請直接修改點位名稱後重新送出（剛拍的照片會保留）。`,
                 confirmButtonText: '返回修改點名'
             });
-            return; // ⛔ 中斷，完全不傳 Storage 與 Firestore，照片與畫面完好留存
+            return; // ⛔ 立即中斷！不上傳照片、不安裝視窗， Modal 與拍照內容完整保留
         }
     }
 
     // =========================================================
-    // 2. 檢核通過，開始處理照片上傳與資料儲存
+    // 2. 檢核通過，開始上傳照片與儲存資料
     // =========================================================
-    const layerFolderName = kmlLayerName || kmlId || 'default_layer';
-
     Swal.fire({
         title: '正在處理並儲存資料...',
         didOpen: () => Swal.showLoading(),
@@ -864,36 +855,20 @@ window.submitNewCustomPoint = async function(formValues) {
     });
 
     try {
-        // (A) 照片上傳至 Storage
-        const uploadPromises = photos.map(async (photoData, i) => {
-            if (!photoData) return '';
-            if (typeof photoData === 'string' && photoData.startsWith('http')) return photoData;
+        // (A) ✨呼叫 5-5 原生的 uploadPhotosToStorage 工具函式上傳照片
+        let photoUrls = [];
+        if (typeof window.uploadPhotosToStorage === 'function') {
+            photoUrls = await window.uploadPhotosToStorage(photos, kmlId, trimmedPointKey);
+        } else {
+            console.warn("⚠️ 找不到 uploadPhotosToStorage，使用原始照片連結");
+            photoUrls = Array.isArray(photos) ? photos.filter(p => typeof p === 'string') : [];
+        }
 
-            const photoIndexStr = String(i + 1).padStart(2, '0');
-            const rootPath = typeof STORAGE_ROOT !== 'undefined' ? STORAGE_ROOT : 'audit_photos';
-            const customStoragePath = `${rootPath}/${layerFolderName}/${trimmedPointKey}_${photoIndexStr}.jpg`;
-
-            const photoRef = firebase.storage().ref().child(customStoragePath);
-            let blobToUpload;
-
-            if (typeof photoData === 'string' && photoData.startsWith('data:image')) {
-                blobToUpload = await (await fetch(photoData)).blob();
-            } else if (photoData instanceof Blob || photoData instanceof File) {
-                blobToUpload = photoData;
-            } else {
-                return '';
-            }
-
-            const metadata = { contentType: blobToUpload.type || 'image/jpeg' };
-            await photoRef.put(blobToUpload, metadata);
-            return await photoRef.getDownloadURL();
-        });
-
-        const photoUrls = await Promise.all(uploadPromises);
-
-        // (B) 若為編輯模式且改了點名，需將舊點位的紀錄與 KML 特徵移除
+        // (B) 若為編輯模式且變更了點名，刪除舊點位的紀錄
         if (isEditMode && oldPointKey && oldPointKey !== trimmedPointKey) {
-            delete window.auditLayersState[kmlId][oldPointKey];
+            if (window.auditLayersState && window.auditLayersState[kmlId]) {
+                delete window.auditLayersState[kmlId][oldPointKey];
+            }
             if (ns && Array.isArray(ns.allKmlFeatures)) {
                 ns.allKmlFeatures = ns.allKmlFeatures.filter(f => {
                     const name = f.properties?.name || f.properties?.title || f.properties?.auditPointKey;
@@ -905,7 +880,7 @@ window.submitNewCustomPoint = async function(formValues) {
             await firebase.firestore().collection(appPath).doc(kmlId).collection('auditRecords').doc(oldPointKey).delete();
         }
 
-        // (C) 組裝標準清查資料結構
+        // (C) 組裝標準清查資料結構 (寫入快取記憶體)
         const structuredData = {
             pointName: trimmedPointKey,
             status: "已完成",
@@ -922,7 +897,7 @@ window.submitNewCustomPoint = async function(formValues) {
         if (!window.auditLayersState[kmlId]) window.auditLayersState[kmlId] = {};
         window.auditLayersState[kmlId][trimmedPointKey] = structuredData;
 
-        // (D) 更新全域 Feature 快取
+        // (D) 更新 GeoJSON Feature 全域快取 (標記為已清查顏色)
         const newGeoJsonFeature = {
             type: "Feature",
             geometry: {
@@ -939,7 +914,7 @@ window.submitNewCustomPoint = async function(formValues) {
                 auditStatus: status || "新增",
                 auditNote: remark || "",
                 photos: photoUrls,
-                fillColor: "#FCD770",
+                fillColor: "#FCD770", // 已清查粉/黃顏色
                 color: "#ffffff",
                 radius: 8,
                 fillOpacity: 0.85
@@ -959,7 +934,7 @@ window.submitNewCustomPoint = async function(formValues) {
             }
         }
 
-        // (E) 寫入 Firestore
+        // (E) 寫入 Firestore 該圖層的 auditRecords 子集合
         const appPath = typeof APP_PATH !== 'undefined' ? APP_PATH : 'kmlData';
         await firebase.firestore()
             .collection(appPath)
@@ -968,11 +943,13 @@ window.submitNewCustomPoint = async function(formValues) {
             .doc(trimmedPointKey)
             .set(structuredData, { merge: true });
 
-        // (F) 重新產生 CSV 報表與提示
+        // (F) 重新產生圖層 CSV 報表
+        const layerFolderName = kmlLayerName || kmlId || 'default_layer';
         if (typeof generateLayerCsvReport === 'function') {
             await generateLayerCsvReport(kmlId, layerFolderName, 2);
         }
 
+        // (G) 顯示成功提示
         Swal.fire({
             icon: 'success',
             title: isEditMode ? '修改點位成功' : '新增清查點位成功',
@@ -980,7 +957,7 @@ window.submitNewCustomPoint = async function(formValues) {
             showConfirmButton: false
         });
 
-        // (G) 重繪地圖
+        // (H) 觸發地圖全域重繪與按鈕狀態刷新
         if (typeof forceMapRefresh === 'function') forceMapRefresh();
         if (typeof updateBottomBtnState === 'function') setTimeout(updateBottomBtnState, 300);
 
@@ -991,7 +968,7 @@ window.submitNewCustomPoint = async function(formValues) {
 };
 
 // =========================================================
-// 5-5. Firebase Storage 照片上傳、通用按鈕與選單渲染模組
+// 5-5. Firebase Storage 照片上傳處理、通用按鈕與選單渲染模組
 // =========================================================
 
 /**
@@ -1098,7 +1075,7 @@ window.deleteCustomPoint = async function(kmlId, pointKey, kmlLayerName) {
         const layerFolderName = kmlLayerName || kmlId || 'default_layer';
         const safePointKey = String(pointKey).replace(/[/\\?%*:|"<>]/g, '_');
         
-        // (A) 嘗試刪除 Storage 照片
+        // 嘗試刪除 Storage 照片
         const storageRef = firebase.storage().ref();
         const deletePhotoPromises = [1, 2, 3].map(async (i) => {
             const customStoragePath = `audit_photos/${kmlId}/${safePointKey}_${i}.jpg`;
@@ -1110,7 +1087,7 @@ window.deleteCustomPoint = async function(kmlId, pointKey, kmlLayerName) {
         });
         await Promise.all(deletePhotoPromises);
 
-        // (B) 刪除 Firestore auditRecords 文件
+        // 刪除 Firestore auditRecords 文件
         const appPath = typeof APP_PATH !== 'undefined' ? APP_PATH : 'kmlData';
         await firebase.firestore()
             .collection(appPath)
@@ -1119,7 +1096,7 @@ window.deleteCustomPoint = async function(kmlId, pointKey, kmlLayerName) {
             .doc(pointKey)
             .delete();
 
-        // (C) 清除全域記憶體與 GeoJSON Features 快取
+        // 清除全域記憶體與 GeoJSON Features 快取
         if (window.auditLayersState && window.auditLayersState[kmlId]) {
             delete window.auditLayersState[kmlId][pointKey];
         }
@@ -1132,7 +1109,7 @@ window.deleteCustomPoint = async function(kmlId, pointKey, kmlLayerName) {
             });
         }
 
-        // (D) 清除地圖選取狀態並重新產生 CSV
+        // 清除地圖選取狀態並重新產生 CSV
         window.currentSelectedPoint = null;
         if (typeof generateLayerCsvReport === 'function') {
             await generateLayerCsvReport(kmlId, layerFolderName, 2);
@@ -1145,7 +1122,7 @@ window.deleteCustomPoint = async function(kmlId, pointKey, kmlLayerName) {
             showConfirmButton: false
         });
 
-        // (E) 刷新地圖與 UI
+        // 刷新地圖與 UI
         if (typeof forceMapRefresh === 'function') forceMapRefresh();
         if (typeof updateBottomBtnState === 'function') setTimeout(updateBottomBtnState, 300);
 
@@ -1172,13 +1149,11 @@ window.updateAuditBottomMenuUI = function(mode, extraData) {
 
     container.style.display = 'flex';
     container.style.alignItems = 'center';
-    container.style.gap = '8px'; // 按鈕彈性間距
+    container.style.gap = '8px';
 
-    // 判斷是否為「使用者自訂點位」
     const isCustom = extraData?.isCustomPoint || extraData?.feature?.properties?.isCustomPoint;
 
     if (mode === 'VIEW_EDIT') {
-        // 1. 查看按鈕
         const viewBtn = window.createUnifiedAuditButton('查看', '#e91e63', () => {
             if (typeof window.openAuditDetailModal === 'function') {
                 window.openAuditDetailModal(extraData);
@@ -1186,10 +1161,8 @@ window.updateAuditBottomMenuUI = function(mode, extraData) {
         });
         container.appendChild(viewBtn);
 
-        // 2. 修改按鈕
         const editBtn = window.createUnifiedAuditButton('修改', '#f39c12', () => {
             if (isCustom) {
-                // 自訂點位修改
                 if (typeof window.openCustomPointModal === 'function') {
                     const props = extraData.feature?.properties || extraData;
                     window.openCustomPointModal({
@@ -1204,7 +1177,6 @@ window.updateAuditBottomMenuUI = function(mode, extraData) {
                     });
                 }
             } else {
-                // 普通預設點位清查修改
                 if (typeof window.openAuditFormModal === 'function') {
                     window.openAuditFormModal(extraData);
                 }
@@ -1212,7 +1184,6 @@ window.updateAuditBottomMenuUI = function(mode, extraData) {
         });
         container.appendChild(editBtn);
 
-        // 3. 自訂點位專屬的「🗑️ 刪除按鈕」
         if (isCustom) {
             const delBtn = window.createUnifiedAuditButton('🗑️ 刪除', '#e74c3c', () => {
                 const props = extraData.feature?.properties || extraData;
@@ -1243,6 +1214,7 @@ window.updateAuditBottomMenuUI = function(mode, extraData) {
         container.appendChild(addBtn);
     }
 };
+
 // =========================================================
 // 5-6. 清查資料編輯與上傳邏輯
 // =========================================================
