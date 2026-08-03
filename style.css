@@ -763,88 +763,80 @@ canvas {
     -webkit-tap-highlight-color: transparent;
 }
 
-/* ---------- 清查按鈕 ---------- */
-/* 預設顏色 (灰或深橘) */
-.audit-btn {
-    background-color: #666; 
-    color: white;
-    transition: background-color 0.3s;
+/* ==========================================================================
+   清查模組 (Audit Module) 專用樣式
+   ========================================================================== */
+
+/* ---------- 1. 地圖控制面板與按鈕樣式 ---------- */
+
+/* Leaflet 自定義置中容器 (穿透點擊，避免擋到地圖操作) */
+.leaflet-bottomcenter {
+    position: absolute;
+    bottom: 20px; /* 稍微抬高，避開手機系統導航列 */
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 1000 !important;
+    pointer-events: none;
+    display: flex;
+    justify-content: center;
+    width: 100%; /* 寬度撐滿才能精確置中 */
 }
 
-/* 啟動中的顏色 (亮橘) */
+/* 讓按鈕容器與選單恢復點擊功能 */
+.leaflet-bottomcenter .audit-bottom-menu-container,
+.audit-bottom-menu {
+    pointer-events: auto !important;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: auto;
+}
+
+/* 針對手機按鈕點擊與外觀優化 */
+.audit-bottom-menu-container button,
+.audit-btn {
+    -webkit-appearance: none; /* 移除 iOS 預設按鈕外觀 */
+    touch-action: manipulation; /* 優化觸控反應 */
+    cursor: pointer;
+    border: none;
+    outline: none;
+    border-radius: 20px;
+    padding: 8px 16px;
+    font-weight: bold;
+    font-size: 14px;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+    transition: background-color 0.3s, box-shadow 0.3s;
+}
+
+/* 清查按鈕 - 預設狀態 (深灰) */
+.audit-btn {
+    background-color: #666;
+    color: #ffffff;
+}
+
+/* 清查按鈕 - 啟用狀態 (亮橘) */
 .audit-btn.active {
     background-color: #ff8533 !important;
-    box-shadow: 0 0 10px rgba(255, 133, 51, 0.5);
+    box-shadow: 0 0 10px rgba(255, 133, 51, 0.5) !important;
 }
 
-/* 下載按鈕 - 綠色 (預設隱藏) */
+/* 下載與導出按鈕 (漸層綠) */
 .download-btn {
     background: linear-gradient(135deg, #28a745, #218838);
-    color: white;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    display: none
+    color: #ffffff;
 }
+
 .download-btn:hover {
     filter: brightness(1.1);
 }
 
-.audit-bottom-menu {
-    position: fixed;
-    bottom: 20px;
-    left: 50%;
-    transform: translateX(-50%);
-    z-index: 1000;
-}
+/* ---------- 2. 照片上傳與預覽方塊 (4欄網格) ---------- */
 
-/* 確保自定義的置中容器不阻擋地圖操作 */
-.leaflet-bottomcenter {
-    position: absolute;
-    bottom: 20px; /* 稍微抬高，避免擋到手機系統導航列 */
-    left: 50%;
-    transform: translateX(-50%);
-    z-index: 1000 !important;
-    pointer-events: none; 
-    display: flex;
-    justify-content: center;
-    width: 100%; /* 寬度撐滿才能真正 translateX 置中 */
-}
-
-/* 讓按鈕區塊恢復點擊功能 */
-.leaflet-bottomcenter .audit-bottom-menu-container {
-    pointer-events: auto !important;
-    display: inline-block;
-}
-
-/* 針對手機按鈕樣式優化 */
-.audit-bottom-menu-container button {
-    -webkit-appearance: none; /* 移除 iOS 預設樣式 */
-    touch-action: manipulation; /* 優化觸控反應 */
-    cursor: pointer;
-}
-
-/* 修改底部控制項容器，確保按鈕置中且可點擊 */
-.audit-bottom-menu-container {
-    pointer-events: auto !important;
-    display: flex;
-    justify-content: center;
-    width: auto;
-}
-
-/* 讓 sweetalert 內的清單更美觀 */
-.swal2-html-container select.swal2-input {
-    margin: 10px auto;
-    font-size: 16px;
-}
-
-
-/* ---------- 照片 容器 ---------- */
-/* 1. 父容器：強制佔滿 100% 寬度，絕不縮小 */
+/* 照片父容器：強制佔滿 100% 寬度 */
 .audit-photo-grid {
     display: grid !important;
     grid-template-columns: repeat(4, 1fr) !important;
-    gap: 10px !important;
+    gap: 8px !important;
     width: 100% !important;
     min-width: 100% !important;
     box-sizing: border-box !important;
@@ -852,10 +844,10 @@ canvas {
     margin-bottom: 20px !important;
 }
 
-/* 2. 個別照片方塊：直接給定固定高度 min-height: 85px */
+/* 個別照片方塊：強制保底高度，絕不被彈窗擠壓 */
 .audit-photo-box {
     width: 100% !important;
-    min-height: 85px !important; /* 💡 核心保命設定：強制保底高度，絕不被彈窗擠壓 */
+    min-height: 85px !important; /* 核心保命設定 */
     aspect-ratio: 1 / 1 !important;
     border: 1.5px dashed #a0a0a0 !important;
     background-color: #fafafa !important;
@@ -869,7 +861,7 @@ canvas {
     overflow: hidden !important;
 }
 
-/* 3. 圖示與文字容器 */
+/* 圖示與提示文字容器 */
 .audit-photo-placeholder {
     display: flex !important;
     flex-direction: column !important;
@@ -892,7 +884,7 @@ canvas {
     white-space: nowrap !important;
 }
 
-/* 4. 預覽圖 (全滿覆蓋) */
+/* 預覽圖 (全滿覆蓋) */
 .audit-photo-img {
     position: absolute !important;
     top: 0 !important;
@@ -903,7 +895,7 @@ canvas {
     z-index: 1 !important;
 }
 
-/* 5. 點擊上傳層 */
+/* 主上傳/拍照點擊層 */
 .audit-photo-input-main {
     position: absolute !important;
     top: 0 !important;
@@ -915,7 +907,7 @@ canvas {
     cursor: pointer !important;
 }
 
-/* 6. 右下角：開啟舊檔按鈕 (收在方塊內側) */
+/* 右下角：開啟舊檔/圖庫按鈕 (收在方塊內側) */
 .audit-photo-btn-sub {
     position: absolute !important;
     bottom: 2px !important;
@@ -934,5 +926,18 @@ canvas {
     padding: 2px 4px !important;
     border: 1px solid #888 !important;
     border-radius: 3px !important;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.2) !important;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2) !important;
+}
+
+/* ---------- 3. SweetAlert2 彈窗選單修飾 ---------- */
+
+.swal2-html-container select.swal2-input {
+    margin: 10px auto !important;
+    font-size: 16px !important;
+}
+
+@media (max-width: 480px) {
+    .audit-photo-grid {
+        gap: 4px !important;
+    }
 }
