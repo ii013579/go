@@ -1262,7 +1262,7 @@ window.updateAuditBottomMenuUI = function(mode, extraData) {
 };
 
 // =========================================================
-// 5-6. 清查資料編輯、修改與刪除紀錄邏輯 (支援新增點位設備狀態"新增"屬性)
+// 5-6. 清查資料編輯、修改與刪除紀錄邏輯 (修復新增點位鎖定狀態與刪除按鈕)
 // =========================================================
 window.openAuditEditor = async function(isModifyMode = false) {
     if (typeof checkHasAuditPermission === 'function' && !checkHasAuditPermission()) return;
@@ -1275,16 +1275,25 @@ window.openAuditEditor = async function(isModifyMode = false) {
     const config = (window.globalAuditConfigs && window.globalAuditConfigs[kmlId]) || { targetPhotos: 2 };
     const maxPhotos = config.targetPhotos || 2;
 
-    // 💡 判斷是否為使用者「手動新增的點位」
-    const isUserCreatedPoint = !!(layerProps.isCustom || layerProps.isNew || layerProps.isUserAdded || layerProps.createdByUser || kmlId === 'custom_points');
-
     const selectEl = document.getElementById('kmlLayerSelect');
     const rawLayerName = selectEl?.options[selectEl.selectedIndex]?.getAttribute('data-basename') || '預設區域';
     const kmlLayerName = rawLayerName.replace(/\.kml$/i, '').trim(); 
 
     // 取得歷史紀錄 (修改模式時帶入)
     const historyRecord = isModifyMode ? (window.auditLayersState?.[kmlId]?.[pointKey] || {}) : {};
-    
+
+    // 💡 關鍵 1：寬鬆且精準判斷是否為「新增點位」
+    // (檢查常見的 custom / isNew / isCustom 標籤，或歷史設備狀態本身就是 "新增")
+    const isUserCreatedPoint = !!(
+        layerProps.isCustom || 
+        layerProps.isNew || 
+        layerProps.isUserAdded || 
+        layerProps.createdByUser || 
+        kmlId === 'custom_points' ||
+        historyRecord.deviceStatus === '新增' ||
+        layerProps.deviceStatus === '新增'
+    );
+
     // 初始化照片陣列
     const currentPhotos = new Array(maxPhotos).fill('');
     if (isModifyMode && Array.isArray(historyRecord.photos)) {
@@ -1293,23 +1302,38 @@ window.openAuditEditor = async function(isModifyMode = false) {
         });
     }
 
-    // 💡 設備狀態預設值：如果是歷史紀錄已有就用紀錄，否則如果是新增點位就預設帶入 "新增"
-    const currentStatus = historyRecord.deviceStatus || (isUserCreatedPoint ? '新增' : '');
+    // 設備狀態設定
+    const currentStatus = isUserCreatedPoint ? '新增' : (historyRecord.deviceStatus || '');
     const currentNote = historyRecord.note || '';
 
-    // 💡 處理設備狀態選單選項 (確保 "新增" 一定包含在選項清單中)
+    // 💡 關鍵 2：動態渲染選單，若為新增點位則給予 disabled 與 灰底樣式
     const layerConfig = window.globalAuditConfigs?.[kmlId] || {};
     let statusOptions = layerConfig.statusOptions || 
                           (localStorage.getItem('audit_status_options') ? JSON.parse(localStorage.getItem('audit_status_options')) : ['正常','損壞','遺失']);
 
-    // 如果選項中沒有 "新增"，且目前是新增點位（或狀態本身就是"新增"），自動將 "新增" 補充進選項清單中
-    if (!statusOptions.includes('新增') && (isUserCreatedPoint || currentStatus === '新增')) {
+    if (!statusOptions.includes('新增')) {
         statusOptions = ['新增', ...statusOptions];
     }
 
-    const statusOptionsHtml = statusOptions.map(opt => 
-        `<option value="${opt}" ${currentStatus === opt ? 'selected' : ''}>${opt}</option>`
-    ).join('');
+    let statusSelectHtml = '';
+    if (isUserCreatedPoint) {
+        // 新增點位：固定為「新增」、鎖定禁用(disabled)、套用灰底樣式
+        statusSelectHtml = `
+            <select id="swal-status" class="swal2-input" disabled style="width:100%; margin:6px 0 16px 0; background-color:#e9ecef; color:#495057; cursor:not-allowed;">
+                <option value="新增" selected>新增</option>
+            </select>`;
+    } else {
+        // 一般點位：正常選擇
+        const statusOptionsHtml = statusOptions.map(opt => 
+            `<option value="${opt}" ${currentStatus === opt ? 'selected' : ''}>${opt}</option>`
+        ).join('');
+        
+        statusSelectHtml = `
+            <select id="swal-status" class="swal2-input" style="width:100%; margin:6px 0 16px 0;">
+                <option value="" ${!currentStatus ? 'selected' : ''}>--- 請選擇設備狀態 ---</option>
+                ${statusOptionsHtml}
+            </select>`;
+    }
 
     // 💡 預覽與壓縮處理輔助函式
     window._tempPreview = function(input, index) {
@@ -1366,10 +1390,7 @@ window.openAuditEditor = async function(isModifyMode = false) {
         title: `<div style="font-size:18px;">${isModifyMode ? '修改' : '填寫'}清查紀錄：${window.escapeHtml(pointKey)}</div>`,
         html: `<div style="text-align:left;">
             <label style="font-size:14px; font-weight:bold;">設備狀態 <span style="color:red;">*必選</span></label>
-            <select id="swal-status" class="swal2-input" style="width:100%; margin:6px 0 16px 0;">
-                <option value="" ${!currentStatus ? 'selected' : ''}>--- 請選擇設備狀態 ---</option>
-                ${statusOptionsHtml}
-            </select>
+            ${statusSelectHtml}
 
             <label style="font-size:14px; font-weight:bold;">現場照片 (需滿 ${maxPhotos} 張) <span style="color:red;">*必填</span></label>
             <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(95px, 1fr)); gap:10px; margin:8px 0 16px 0;">
@@ -1380,12 +1401,15 @@ window.openAuditEditor = async function(isModifyMode = false) {
             <textarea id="swal-note" class="swal2-textarea" style="width:100%; height:70px; margin:6px 0 0 0; resize:vertical;" placeholder="輸入備註事項...">${window.escapeHtml(currentNote)}</textarea>
         </div>`,
         showCancelButton: true,
-        // 💡 僅新增的點位顯示刪除點位按鈕
+        // 💡 關鍵 3：只要判斷為新增點位，就開啟 Deny 按鈕並渲染紅底刪除按鈕
         showDenyButton: isUserCreatedPoint,
         denyButtonText: '🗑️ 刪除點位',
-        denyButtonColor: '#d33',
+        denyButtonColor: '#e74c3c',
         confirmButtonText: isModifyMode ? '覆蓋更新' : '確認並上傳',
         cancelButtonText: '取消',
+        customClass: {
+            actions: 'my-swal-actions' // 確保按鈕排版正常
+        },
         preConfirm: () => {
             const statusValue = document.getElementById('swal-status').value;
             if (!statusValue) { 
@@ -1405,10 +1429,9 @@ window.openAuditEditor = async function(isModifyMode = false) {
         }
     });
 
-    // 清除全域暫存函式
     delete window._tempPreview;
 
-    // 🗑️ 邏輯 A：刪除點位 (僅新增點位可用)
+    // 🗑️ 邏輯 A：點擊「刪除點位」按鈕
     if (isDenied) {
         const confirmDelete = await Swal.fire({
             title: '確定要刪除此新增點位？',
@@ -1434,24 +1457,23 @@ window.openAuditEditor = async function(isModifyMode = false) {
                     .doc(pointKey)
                     .delete();
 
-                // 2. 如果新增點位有獨立存放在 GeoJSON 集合，進行點位移除
+                // 2. 若有自訂點位 Firestore 集合則刪除
                 if (typeof deleteCustomPointFromFirestore === 'function') {
                     await deleteCustomPointFromFirestore(kmlId, pointKey);
                 }
 
-                // 3. 從地圖移除 Marker
+                // 3. 從地圖圖層移除
                 if (activePoint && typeof activePoint.remove === 'function') {
                     activePoint.remove();
                 } else if (window.mapNamespace?.map && activePoint) {
                     window.mapNamespace.map.removeLayer(activePoint);
                 }
 
-                // 4. 清除本地快取
+                // 4. 清除本地狀態
                 if (window.auditLayersState?.[kmlId]?.[pointKey]) {
                     delete window.auditLayersState[kmlId][pointKey];
                 }
 
-                // 5. 刷新報表與 UI
                 if (typeof generateLayerCsvReport === 'function') {
                     await generateLayerCsvReport(kmlId, kmlLayerName, maxPhotos);
                 }
@@ -1492,7 +1514,7 @@ window.openAuditEditor = async function(isModifyMode = false) {
             const structuredData = {
                 pointName: pointKey,
                 status: "已完成",
-                deviceStatus: res.status, // 這裡會正確儲存為 "新增" 或選取的狀態
+                deviceStatus: res.status, // "新增"
                 note: res.note, 
                 photos: photoUrls, 
                 updatedAt: firebase.firestore.FieldValue.serverTimestamp()
