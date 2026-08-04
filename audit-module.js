@@ -559,14 +559,23 @@ let activeAddPointCleanup = null;
  * 1. 觸發挑選位置模式 (點擊「新增點位」按鈕)
  */
 window.startAddCustomPoint = function(kmlId) {
+    // 🔒 1. 帳號權限檢查
     if (typeof checkHasAuditPermission === 'function' && !checkHasAuditPermission()) {
         Swal.fire('權限不足', '您的帳號角色不允許新增點位！', 'warning');
         return;
     }
 
+    // 🔒 2. 圖層選擇檢查
     const targetKmlId = kmlId || window.currentActiveKmlId || window.mapNamespace?.currentKmlLayerId;
     if (!targetKmlId) {
         Swal.fire('提示', '請先從選單開啟或選擇一個目標圖層再進行新增！', 'info');
+        return;
+    }
+
+    // 🔒 3. 圖層清查狀態檢查 (未開啟清查時攔截)
+    const isAuditingEnabled = !!(window.globalAuditConfigs?.[targetKmlId]?.isAuditing);
+    if (!isAuditingEnabled) {
+        Swal.fire('提示', '該圖層目前未開啟清查功能，無法新增點位！', 'warning');
         return;
     }
 
@@ -598,7 +607,19 @@ window.startAddCustomPoint = function(kmlId) {
     const handleMapClick = async function(e) {
         cleanup();
         const { lat, lng } = e.latlng;
-        await window.openAddPointModal(targetKmlId, lat, lng);
+        
+        // 優先使用整合後的 openAuditCUModal；若無則相容舊的 openAddPointModal
+        if (typeof window.openAuditCUModal === 'function') {
+            await window.openAuditCUModal({
+                isEditMode: false,
+                kmlId: targetKmlId,
+                lat: lat,
+                lng: lng,
+                deviceStatus: '新增'
+            });
+        } else if (typeof window.openAddPointModal === 'function') {
+            await window.openAddPointModal(targetKmlId, lat, lng);
+        }
     };
 
     // 支援 ESC 鍵取消選擇模式
@@ -619,7 +640,7 @@ window.startAddCustomPoint = function(kmlId) {
 
     activeAddPointCleanup = cleanup;
 
-    // 綁定事件 (使用 on 搭配 cleanup 確保可隨時取消)
+    // 綁定事件
     map.on('click', handleMapClick);
     document.addEventListener('keydown', handleKeydown);
 };
