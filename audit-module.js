@@ -1,6 +1,6 @@
 ﻿/**
- * audit-module.js - 清查模組單一檔案整合版 V3.12
- * 包含：核心同步、地圖渲染、統一編輯彈窗、ZIP打包、CSV報表與自訂點位管理
+ * audit-module.js - 清查模組單一檔案整合版 V3.3
+ * 包含：核心同步、地圖渲染、統一編輯彈窗、ZIP打包、CSV報表、自訂點位管理與全域UI按鈕
  */
 (function() {
     'use strict';
@@ -148,7 +148,10 @@
             return;
         }
         const select = document.getElementById('kmlLayerSelect');
-        if (!select || select.options.length <= 1) return;
+        if (!select || select.options.length <= 1) {
+            Swal.fire('提示', '尚未載入任何 KML 圖層選單！', 'info');
+            return;
+        }
 
         let listHtml = '<div style="max-height: 380px; overflow-y: auto; text-align: left;">';
         Array.from(select.options).forEach(opt => {
@@ -691,24 +694,42 @@
     };
 
     // =========================================================
-    // 7. 初始化執行與 UI 按鈕掛載
+    // 7. 初始化執行與 UI 按鈕掛載 (恢復清查管理按鈕)
     // =========================================================
     (function initUIControls() {
-        let btn = document.getElementById('btn-standalone-add-point');
-        if (!btn) {
-            btn = document.createElement('button');
-            btn.id = 'btn-standalone-add-point';
-            btn.innerHTML = '➕ 新增點位';
-            btn.style.cssText = `
-                position: fixed !important; bottom: 20px !important; right: 15px !important;
-                z-index: 4000 !important; background-color: #2ecc71 !important; color: #fff !important;
-                border: none !important; padding: 8px 20px !important; border-radius: 25px !important;
+        // 1. 掛載「📋 清查管理」按鈕
+        let btnAudit = document.getElementById('btn-standalone-audit-manage');
+        if (!btnAudit) {
+            btnAudit = document.createElement('button');
+            btnAudit.id = 'btn-standalone-audit-manage';
+            btnAudit.innerHTML = '📋 清查管理';
+            btnAudit.style.cssText = `
+                position: fixed !important; bottom: 65px !important; right: 15px !important;
+                z-index: 4000 !important; background-color: #3498db !important; color: #fff !important;
+                border: none !important; padding: 8px 18px !important; border-radius: 25px !important;
                 font-weight: bold !important; cursor: pointer !important; box-shadow: 0 3px 10px rgba(0,0,0,0.3);
             `;
-            btn.onclick = () => window.startAddCustomPoint();
-            document.body.appendChild(btn);
+            btnAudit.onclick = () => window.showAuditActionModal();
+            document.body.appendChild(btnAudit);
         }
 
+        // 2. 掛載「➕ 新增點位」按鈕
+        let btnAdd = document.getElementById('btn-standalone-add-point');
+        if (!btnAdd) {
+            btnAdd = document.createElement('button');
+            btnAdd.id = 'btn-standalone-add-point';
+            btnAdd.innerHTML = '➕ 新增點位';
+            btnAdd.style.cssText = `
+                position: fixed !important; bottom: 20px !important; right: 15px !important;
+                z-index: 4000 !important; background-color: #2ecc71 !important; color: #fff !important;
+                border: none !important; padding: 8px 18px !important; border-radius: 25px !important;
+                font-weight: bold !important; cursor: pointer !important; box-shadow: 0 3px 10px rgba(0,0,0,0.3);
+            `;
+            btnAdd.onclick = () => window.startAddCustomPoint();
+            document.body.appendChild(btnAdd);
+        }
+
+        // 3. Firestore 資料庫即時監聽
         const initListener = () => {
             if (typeof firebase === 'undefined' || !firebase.apps.length) {
                 setTimeout(initListener, 500);
