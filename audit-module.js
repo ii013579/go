@@ -1171,15 +1171,37 @@ window.updateAuditBottomMenuUI = function(mode, extraData) {
     const container = bottomControl._container;
     container.innerHTML = ''; // 清空內容
 
-    const currentKmlId = window.currentActiveKmlId;
-    if (!currentKmlId) {
+    // 取得當前圖層 ID
+    const currentKmlId = window.currentActiveKmlId || window.mapNamespace?.currentKmlLayerId;
+
+    // 🔒 權限檢查邏輯
+    const userRole = (window.currentUserRole || window.userRole || localStorage.getItem('userRole') || 'guest').toLowerCase().trim();
+    const hasPermission = typeof checkHasAuditPermission === 'function' 
+        ? checkHasAuditPermission() 
+        : (userRole !== 'guest' && userRole !== 'unapproved');
+
+    // 🔒 圖層清查狀態檢查
+    const isAuditingEnabled = !!(window.globalAuditConfigs?.[currentKmlId]?.isAuditing);
+
+    // ⛔ 隱藏條件：無圖層 ID、無權限、或該圖層未開啟清查功能
+    if (!currentKmlId || !hasPermission || !isAuditingEnabled) {
         container.style.display = 'none';
+
+        // 同步隱藏獨立懸浮的新增按鈕（若有使用）
+        const standaloneAddBtn = document.getElementById('btn-standalone-add-point');
+        if (standaloneAddBtn) standaloneAddBtn.style.display = 'none';
+
         return;
     }
 
+    // 通過檢查，顯示選單容器
     container.style.display = 'flex';
     container.style.alignItems = 'center';
     container.style.gap = '8px';
+
+    // 同步顯示獨立懸浮的新增按鈕（若有使用）
+    const standaloneAddBtn = document.getElementById('btn-standalone-add-point');
+    if (standaloneAddBtn) standaloneAddBtn.style.display = 'inline-flex';
 
     // ✨ 強化判斷：從多種可能的位置解析出 properties 與 isCustomPoint
     const props = extraData?.feature?.properties || extraData?.properties || extraData || {};
@@ -1198,13 +1220,11 @@ window.updateAuditBottomMenuUI = function(mode, extraData) {
         const editBtn = window.createUnifiedAuditButton('修改', '#f39c12', () => {
             if (isCustom) {
                 if (typeof window.openCustomPointModal === 'function') {
-                    // 取得點位有名稱/Key/座標
                     const pointKey = props.auditPointKey || props.name || props.title;
                     const coords = extraData?.geometry?.coordinates || extraData?.feature?.geometry?.coordinates;
                     const lat = coords ? coords[1] : (props.lat || 0);
                     const lng = coords ? coords[0] : (props.lng || 0);
 
-                    // 帶入快取中的完整歷史紀錄（包含舊照片與歷史狀態）
                     const historyRecord = window.auditLayersState?.[currentKmlId]?.[pointKey] || {};
 
                     window.openCustomPointModal({
