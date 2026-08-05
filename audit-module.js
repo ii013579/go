@@ -13,219 +13,263 @@
     const APP_PATH = 'artifacts/kmldata-d22fb/public/data/kmlLayers';
     const STORAGE_ROOT = 'kmldata-d22fb/storage';
 
-    // ---------------------------------------------------------
-    // 0. 權限防護與安全轉義機制
-    // ---------------------------------------------------------
-    function getUserRole() {
-        return window.currentUserRole || 
-               window.userRole || 
-               localStorage.getItem('userRole') || 
-               sessionStorage.getItem('userRole') || 
-               'guest';
-    }
+// =========================================================
+// 0. 權限防護與全域狀態控管机制
+// =========================================================
+function getUserRole() {
+    return window.currentUserRole || 
+           window.userRole || 
+           localStorage.getItem('userRole') || 
+           sessionStorage.getItem('userRole') || 
+           'guest';
+}
 
-    function checkHasAuditPermission() {
-        const role = getUserRole().toLowerCase().trim();
-        return role !== 'guest' && role !== 'unapproved';
-    }
+function checkHasAuditPermission() {
+    const role = getUserRole().toLowerCase().trim();
+    return role !== 'guest' && role !== 'unapproved';
+}
 
-    function canSeeAuditColors() {
-        const role = getUserRole().toLowerCase().trim();
-        return ['owner', 'editor', 'user'].includes(role);
-    }
+function canSeeAuditColors() {
+    const role = getUserRole().toLowerCase().trim();
+    return ['owner', 'editor', 'user'].includes(role);
+}
 
-    function escapeHtml(str) {
-        if (!str) return '';
-        return String(str)
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;')
-            .replace(/'/g, '&#39;');
-    }
+// 💡 0.1 判斷當前是否可使用「新增點位」功能 (圖層開啟清查 + 使用者有權限)
+window.canUserAddPoint = function(kmlId) {
+    const targetKmlId = kmlId || window.currentActiveKmlId || window.mapNamespace?.currentKmlLayerId;
+    if (!targetKmlId) return false;
 
-    // ---------------------------------------------------------
-    // 1. 樣式攔截器與強力重繪機制
-    // ---------------------------------------------------------
-    const originalAddLayers = window.addGeoJsonLayers;
-    window.addGeoJsonLayers = function(features) {
-        const ns = window.mapNamespace;
-        const kmlId = ns?.currentKmlLayerId;
+    // 1. 檢查帳號權限
+    const hasPermission = checkHasAuditPermission();
+    if (!hasPermission) return false;
 
-        if (kmlId && Array.isArray(features)) {
-            const config = window.globalAuditConfigs[kmlId];
-            const records = window.auditLayersState[kmlId] || {};
+    // 2. 檢查圖層清查開關 (isAuditing)
+    const isAuditingEnabled = !!(window.globalAuditConfigs?.[targetKmlId]?.isAuditing);
+    return isAuditingEnabled;
+};
 
-            features.forEach(f => {
-                if (!f.properties) f.properties = {};
-                f.properties.kmlId = kmlId;
-                
-                const pointKey = f.properties.name || f.properties.title || f.properties.id || f.id || "未知點位";
-                f.properties.auditPointKey = pointKey; 
+// 💡 0.2 全域按鈕顯隱同步函式
+window.syncAuditButtonVisibility = function() {
+    const currentKmlId = window.currentActiveKmlId || window.mapNamespace?.currentKmlLayerId;
+    const canShow = window.canUserAddPoint(currentKmlId);
 
-                if (config && config.isAuditing === true && canSeeAuditColors()) {
-                    const record = records[pointKey];
-                    if (record) {
-                        f.properties.auditStatus = record.deviceStatus || "正常";
-                        f.properties.auditNote = record.note;
-                        f.properties.photos = record.photos || [];
-                        f.properties.isAudited = true;
-                        f.properties.fillColor = "#FCD770"; // 粉紅色 (已清查)
-                        f.properties.radius = 8;
-                    } else {
-                        f.properties.isAudited = false;
-                        f.properties.auditStatus = null;
-                        f.properties.fillColor = "#2A00D2"; // 藍色 (未清查)
-                        f.properties.radius = 8;
-                    }
-                    f.properties.color = "#ffffff";
-                    f.properties.fillOpacity = 0.85;
-                } else {
-                    f.properties.fillColor = "#e74c3c"; // 紅色 (預設)
-                    f.properties.radius = 8;
-                    f.properties.isAudited = false;
-                    f.properties.fillOpacity = 0.85;
-                    delete f.properties.auditStatus;
-                }
-            });
+    // 同步控制右下角「新增點位」膠囊按鈕
+    const standaloneBtn = document.getElementById('btn-standalone-add-point');
+    if (standaloneBtn) {
+        if (canShow) {
+            standaloneBtn.style.setProperty('display', 'inline-flex', 'important');
+        } else {
+            standaloneBtn.style.setProperty('display', 'none', 'important');
         }
-        if (originalAddLayers) return originalAddLayers.apply(this, arguments);
-    };
+    }
 
-    function forceMapRefresh() {
-        const ns = window.mapNamespace;
-        const kmlId = ns?.currentKmlLayerId;
-        if (!ns?.map || !kmlId) return;
+    return canShow;
+};
 
-        const records = window.auditLayersState[kmlId] || {};
-        const showAuditMode = window.globalAuditConfigs[kmlId]?.isAuditing && canSeeAuditColors();
+function escapeHtml(str) {
+    if (!str) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
 
-        ns.map.eachLayer(function(layer) {
-            if (layer.feature && layer.feature.properties) {
-                const props = layer.feature.properties;
-                const pointKey = props.name || props.title || props.id || "未知點位";
-                
-                if (showAuditMode) {
-                    const record = records[pointKey];
-                    if (record) {
-                        props.isAudited = true;
-                        props.auditStatus = record.deviceStatus || "正常";
-                        props.photos = record.photos || [];
-                        props.auditNote = record.note;
 
-                        if (typeof layer.setStyle === 'function') {
-                            layer.setStyle({
-                                fillColor: "#ff85c0",
-                                color: "#ffffff",
-                                weight: 2,
-                                fillOpacity: 0.9,
-                                radius: 10
-                            });
-                        }
-                    } else {
-                        props.isAudited = false;
-                        if (typeof layer.setStyle === 'function') {
-                            layer.setStyle({
-                                fillColor: "#3498db",
-                                color: "#ffffff",
-                                weight: 2,
-                                fillOpacity: 0.9,
-                                radius: 10
-                            });
-                        }
-                    }
+// =========================================================
+// 1. 樣式攔截器與強力重繪機制
+// =========================================================
+const originalAddLayers = window.addGeoJsonLayers;
+window.addGeoJsonLayers = function(features) {
+    const ns = window.mapNamespace;
+    const kmlId = ns?.currentKmlLayerId;
+
+    if (kmlId && Array.isArray(features)) {
+        const config = window.globalAuditConfigs?.[kmlId];
+        const records = window.auditLayersState?.[kmlId] || {};
+
+        features.forEach(f => {
+            if (!f.properties) f.properties = {};
+            f.properties.kmlId = kmlId;
+            
+            const pointKey = f.properties.name || f.properties.title || f.properties.id || f.id || "未知點位";
+            f.properties.auditPointKey = pointKey; 
+
+            if (config && config.isAuditing === true && canSeeAuditColors()) {
+                const record = records[pointKey];
+                if (record) {
+                    f.properties.auditStatus = record.deviceStatus || "正常";
+                    f.properties.auditNote = record.note;
+                    f.properties.photos = record.photos || [];
+                    f.properties.isAudited = true;
+                    f.properties.fillColor = "#FCD770"; // 已清查
+                    f.properties.radius = 8;
                 } else {
+                    f.properties.isAudited = false;
+                    f.properties.auditStatus = null;
+                    f.properties.fillColor = "#2A00D2"; // 未清查
+                    f.properties.radius = 8;
+                }
+                f.properties.color = "#ffffff";
+                f.properties.fillOpacity = 0.85;
+            } else {
+                f.properties.fillColor = "#e74c3c"; // 預設紅色
+                f.properties.radius = 8;
+                f.properties.isAudited = false;
+                f.properties.fillOpacity = 0.85;
+                delete f.properties.auditStatus;
+            }
+        });
+    }
+
+    // 💡 順便同步一次按鈕顯示狀態
+    if (typeof window.syncAuditButtonVisibility === 'function') {
+        window.syncAuditButtonVisibility();
+    }
+
+    if (originalAddLayers) return originalAddLayers.apply(this, arguments);
+};
+
+function forceMapRefresh() {
+    const ns = window.mapNamespace;
+    const kmlId = ns?.currentKmlLayerId;
+    if (!ns?.map || !kmlId) return;
+
+    const records = window.auditLayersState?.[kmlId] || {};
+    const showAuditMode = window.globalAuditConfigs?.[kmlId]?.isAuditing && canSeeAuditColors();
+
+    ns.map.eachLayer(function(layer) {
+        if (layer.feature && layer.feature.properties) {
+            const props = layer.feature.properties;
+            const pointKey = props.name || props.title || props.id || "未知點位";
+            
+            if (showAuditMode) {
+                const record = records[pointKey];
+                if (record) {
+                    props.isAudited = true;
+                    props.auditStatus = record.deviceStatus || "正常";
+                    props.photos = record.photos || [];
+                    props.auditNote = record.note;
+
                     if (typeof layer.setStyle === 'function') {
                         layer.setStyle({
-                            fillColor: "#e74c3c",
+                            fillColor: "#ff85c0",
                             color: "#ffffff",
-                            weight: 1.5,
-                            fillOpacity: 0.85,
-                            radius: 8
+                            weight: 2,
+                            fillOpacity: 0.9,
+                            radius: 10
+                        });
+                    }
+                } else {
+                    props.isAudited = false;
+                    if (typeof layer.setStyle === 'function') {
+                        layer.setStyle({
+                            fillColor: "#3498db",
+                            color: "#ffffff",
+                            weight: 2,
+                            fillOpacity: 0.9,
+                            radius: 10
                         });
                     }
                 }
-            }
-        });
-
-        if (window.addGeoJsonLayers && ns.allKmlFeatures) {
-            window.addGeoJsonLayers(ns.allKmlFeatures);
-        }
-    }
-
-    // ---------------------------------------------------------
-    // 2. 底部控制按鈕面板
-    // ---------------------------------------------------------
-    function updateBottomBtnState() {
-        if (!bottomControl || !bottomControl._container) return;
-
-        if (!checkHasAuditPermission() || !canSeeAuditColors()) {
-            bottomControl._container.style.display = 'none';
-            return;
-        }
-
-        const active = window.currentSelectedPoint;
-        const kmlId = window.mapNamespace?.currentKmlLayerId;
-        const config = window.globalAuditConfigs[kmlId];
-
-        if (active && config && config.isAuditing === true) {
-            const layerProps = active.feature?.properties || active.properties || {};
-            const pointKey = layerProps.name || layerProps.title || layerProps.id || "未知點位";
-            const safePointKey = escapeHtml(pointKey);
-            
-            const currentRecords = window.auditLayersState[kmlId] || {};
-            const isAudited = currentRecords[pointKey] !== undefined;
-
-            // 💡 統一膠囊按鈕通用 Style（防黑框干擾、統一尺寸 shape、保留前景背景色）
-            const btnBaseStyle = `
-                color: white; 
-                border: none; 
-                padding: 8px 20px; 
-                border-radius: 25px; 
-                font-weight: bold; 
-                font-size: 15px; 
-                box-shadow: 0 3px 10px rgba(0,0,0,0.3); 
-                cursor: pointer;
-                outline: none;
-                line-height: 1.4;
-            `;
-
-            let btnHtml = '';
-            if (isAudited) {
-                btnHtml = `
-                    <button onclick="window.viewAuditDetailOnly('${safePointKey}')" 
-                            style="background: #e91e63; ${btnBaseStyle}">
-                        查看
-                    </button>
-                    <button onclick="window.openAuditEditor(true)" 
-                            style="background: #f39c12; ${btnBaseStyle}">
-                        修改
-                    </button>
-                `;
             } else {
-                btnHtml = `
-                    <button onclick="window.openAuditEditor(false)" 
-                            style="background: #2ecc71; ${btnBaseStyle}">
-                        清查點位
-                    </button>
-                `;
+                if (typeof layer.setStyle === 'function') {
+                    layer.setStyle({
+                        fillColor: "#e74c3c",
+                        color: "#ffffff",
+                        weight: 1.5,
+                        fillOpacity: 0.85,
+                        radius: 8
+                    });
+                }
             }
-
-            bottomControl._container.style.display = 'block';
-            // 💡 移除黑色半透明背景 (rgba(0,0,0,0.6)) 與毛玻璃效果，改為透明容器
-            bottomControl._container.innerHTML = `
-                <div style="text-align: center; pointer-events: auto; display: flex; gap: 10px; justify-content: center; background: transparent; padding: 0;">
-                    ${btnHtml}
-                </div>`;
-        } else {
-            bottomControl._container.style.display = 'none';
         }
+    });
+
+    if (window.addGeoJsonLayers && ns.allKmlFeatures) {
+        window.addGeoJsonLayers(ns.allKmlFeatures);
     }
 
-    window.addEventListener('click', () => { 
-        clearTimeout(clickDebounceTimer);
-        clickDebounceTimer = setTimeout(updateBottomBtnState, 150); 
-    });
+    // 💡 地圖強制刷新時同步膠囊按鈕狀態
+    if (typeof window.syncAuditButtonVisibility === 'function') {
+        window.syncAuditButtonVisibility();
+    }
+}
+
+
+// =========================================================
+// 2. 底部控制按鈕面板
+// =========================================================
+function updateBottomBtnState() {
+    if (!bottomControl || !bottomControl._container) return;
+
+    if (!checkHasAuditPermission() || !canSeeAuditColors()) {
+        bottomControl._container.style.display = 'none';
+        return;
+    }
+
+    const active = window.currentSelectedPoint;
+    const kmlId = window.mapNamespace?.currentKmlLayerId;
+    const config = window.globalAuditConfigs?.[kmlId];
+
+    if (active && config && config.isAuditing === true) {
+        const layerProps = active.feature?.properties || active.properties || {};
+        const pointKey = layerProps.name || layerProps.title || layerProps.id || "未知點位";
+        const safePointKey = escapeHtml(pointKey);
+        
+        const currentRecords = window.auditLayersState?.[kmlId] || {};
+        const isAudited = currentRecords[pointKey] !== undefined;
+
+        const btnBaseStyle = `
+            color: white; 
+            border: none; 
+            padding: 8px 20px; 
+            border-radius: 25px; 
+            font-weight: bold; 
+            font-size: 15px; 
+            box-shadow: 0 3px 10px rgba(0,0,0,0.3); 
+            cursor: pointer;
+            outline: none;
+            line-height: 1.4;
+        `;
+
+        let btnHtml = '';
+        if (isAudited) {
+            btnHtml = `
+                <button onclick="window.viewAuditDetailOnly('${safePointKey}')" 
+                        style="background: #e91e63; ${btnBaseStyle}">
+                    查看
+                </button>
+                <button onclick="window.openAuditEditor(true)" 
+                        style="background: #f39c12; ${btnBaseStyle}">
+                    修改
+                </button>
+            `;
+        } else {
+            btnHtml = `
+                <button onclick="window.openAuditEditor(false)" 
+                        style="background: #2ecc71; ${btnBaseStyle}">
+                    清查點位
+                </button>
+            `;
+        }
+
+        bottomControl._container.style.display = 'block';
+        bottomControl._container.innerHTML = `
+            <div style="text-align: center; pointer-events: auto; display: flex; gap: 10px; justify-content: center; background: transparent; padding: 0;">
+                ${btnHtml}
+            </div>`;
+    } else {
+        bottomControl._container.style.display = 'none';
+    }
+}
+
+let clickDebounceTimer = null;
+window.addEventListener('click', () => { 
+    clearTimeout(clickDebounceTimer);
+    clickDebounceTimer = setTimeout(updateBottomBtnState, 150); 
+});
 
     // ---------------------------------------------------------
     // 3. CSV 總表生成 (新增經緯度欄位)
@@ -527,14 +571,12 @@
 // =========================================================
 // 5.1 獨立區段：手動新增點位功能 & 底部按鈕 UI 渲染
 // =========================================================
-
-// 安全轉義字串 (防止 XSS)
 function safeEscape(str) {
     if (str === null || str === undefined) return '';
     if (typeof str === 'number' || typeof str === 'boolean') return String(str);
     if (typeof str !== 'string') {
         try {
-            return JSON.stringify(str); // 若傳入物件，轉成字串避免遞迴呼叫
+            return JSON.stringify(str);
         } catch (e) {
             return '';
         }
@@ -547,51 +589,31 @@ function safeEscape(str) {
         .replace(/'/g, "&#039;");
 }
 
-// 確保全域有 escapeHtml 可呼叫
 if (typeof window.escapeHtml !== 'function') {
     window.escapeHtml = safeEscape;
 }
 
-// 暫存挑選模式的清理函式，防止重複觸發殘留
 let activeAddPointCleanup = null;
 
-/**
- * 1. 觸發挑選位置模式 (點擊「新增點位」按鈕)
- */
 window.startAddCustomPoint = function(kmlId) {
-    // 🔒 1. 帳號權限檢查
-    if (typeof checkHasAuditPermission === 'function' && !checkHasAuditPermission()) {
-        Swal.fire('權限不足', '您的帳號角色不允許新增點位！', 'warning');
-        return;
-    }
-
-    // 🔒 2. 圖層選擇檢查
     const targetKmlId = kmlId || window.currentActiveKmlId || window.mapNamespace?.currentKmlLayerId;
-    if (!targetKmlId) {
-        Swal.fire('提示', '請先從選單開啟或選擇一個目標圖層再進行新增！', 'info');
-        return;
-    }
 
-    // 🔒 3. 圖層清查狀態檢查 (未開啟清查時攔截)
-    const isAuditingEnabled = !!(window.globalAuditConfigs?.[targetKmlId]?.isAuditing);
-    if (!isAuditingEnabled) {
-        Swal.fire('提示', '該圖層目前未開啟清查功能，無法新增點位！', 'warning');
+    // 🔒 雙重驗證：檢查權限與圖層清查開關
+    if (typeof window.canUserAddPoint === 'function' && !window.canUserAddPoint(targetKmlId)) {
+        Swal.fire('權限不足或未開啟清查', '當前圖層不允許進行新增點位操作！', 'warning');
         return;
     }
 
     const map = window.mapNamespace?.map;
     if (!map) return;
 
-    // 若先前已在挑選模式，先清理舊事件
     if (activeAddPointCleanup) {
         activeAddPointCleanup();
     }
 
-    // 修改滑鼠游標為十字準星
     const container = map.getContainer();
     container.style.cursor = 'crosshair';
 
-    // 提示 Toast
     Swal.mixin({
         toast: true,
         position: 'top',
@@ -603,12 +625,10 @@ window.startAddCustomPoint = function(kmlId) {
         title: '📍 請在地圖上點擊要新增點位的實體位置 (按 ESC 取消)' 
     });
 
-    // 定義點擊處理函式
     const handleMapClick = async function(e) {
         cleanup();
         const { lat, lng } = e.latlng;
         
-        // 優先使用整合後的 openAuditCUModal；若無則相容舊的 openAddPointModal
         if (typeof window.openAuditCUModal === 'function') {
             await window.openAuditCUModal({
                 isEditMode: false,
@@ -622,7 +642,6 @@ window.startAddCustomPoint = function(kmlId) {
         }
     };
 
-    // 支援 ESC 鍵取消選擇模式
     const handleKeydown = function(e) {
         if (e.key === 'Escape') {
             cleanup();
@@ -630,7 +649,6 @@ window.startAddCustomPoint = function(kmlId) {
         }
     };
 
-    // 定義清理作業
     const cleanup = () => {
         map.off('click', handleMapClick);
         document.removeEventListener('keydown', handleKeydown);
@@ -640,10 +658,10 @@ window.startAddCustomPoint = function(kmlId) {
 
     activeAddPointCleanup = cleanup;
 
-    // 綁定事件
     map.on('click', handleMapClick);
     document.addEventListener('keydown', handleKeydown);
 };
+
 
 // =========================================================
 // 5-2. 動態渲染獨立「新增點位」膠囊按鈕（固定於右下角）
@@ -653,12 +671,11 @@ window.startAddCustomPoint = function(kmlId) {
     if (!btn) {
         btn = document.createElement('button');
         btn.id = 'btn-standalone-add-point';
-        btn.className = 'audit-btn audit-btn-add'; // 建議使用已抽離的 CSS class
         btn.innerHTML = '➕ 新增點位';
         document.body.appendChild(btn);
     }
 
-    // 💡 預設強制隱藏 (display: none)，交由 syncAuditButtonVisibility 動態控制
+    // 💡 預設樣式為 display: none !important; 由 Section 0 的 syncAuditButtonVisibility 動態控制顯隱
     btn.setAttribute('style', `
         position: fixed !important;
         bottom: 20px !important;
@@ -689,11 +706,22 @@ window.startAddCustomPoint = function(kmlId) {
         }
     };
 
-    // 💡 掛載後立即主動同步一次顯示狀態
+    // 掛載完成後嘗試同步狀態
     if (typeof window.syncAuditButtonVisibility === 'function') {
         window.syncAuditButtonVisibility();
     }
 })();
+
+// 💡 監聽選單變更，當使用者切換圖層時即時更新按鈕顯示
+document.addEventListener('change', (e) => {
+    if (e.target && e.target.id === 'kmlLayerSelect') {
+        setTimeout(() => {
+            if (typeof window.syncAuditButtonVisibility === 'function') {
+                window.syncAuditButtonVisibility();
+            }
+        }, 100);
+    }
+});
 
 // =========================================================
 // 5-3. 彈窗 UI 介面與照片預覽 (採用原生 File Input 機制)
