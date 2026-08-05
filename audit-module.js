@@ -525,37 +525,15 @@ document.addEventListener('change', (e) => {
     };
        
 // =========================================================
-// 5.1 獨立區段：手動新增點位功能 & 底部按鈕 UI 渲染
+// 5-1. 獨立區段：手動新增點位功能 (地圖點擊與座標拾取)
 // =========================================================
-function safeEscape(str) {
-    if (str === null || str === undefined) return '';
-    if (typeof str === 'number' || typeof str === 'boolean') return String(str);
-    if (typeof str !== 'string') {
-        try {
-            return JSON.stringify(str);
-        } catch (e) {
-            return '';
-        }
-    }
-    return str
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
-}
-
-if (typeof window.escapeHtml !== 'function') {
-    window.escapeHtml = safeEscape;
-}
 
 let activeAddPointCleanup = null;
 
 window.startAddCustomPoint = function(kmlId) {
     const targetKmlId = kmlId || window.currentActiveKmlId || window.mapNamespace?.currentKmlLayerId;
 
-    // 🔒 雙重驗證：檢查權限與圖層清查開關
-    if (typeof window.canUserAddPoint === 'function' && !window.canUserAddPoint(targetKmlId)) {
+    if (!window.canUserAddPoint(targetKmlId)) {
         Swal.fire('權限不足或未開啟清查', '當前圖層不允許進行新增點位操作！', 'warning');
         return;
     }
@@ -585,16 +563,14 @@ window.startAddCustomPoint = function(kmlId) {
         cleanup();
         const { lat, lng } = e.latlng;
         
-        if (typeof window.openAuditCUModal === 'function') {
-            await window.openAuditCUModal({
+        if (typeof window.openCustomPointModal === 'function') {
+            await window.openCustomPointModal({
                 isEditMode: false,
                 kmlId: targetKmlId,
                 lat: lat,
                 lng: lng,
-                deviceStatus: '新增'
+                status: '新增'
             });
-        } else if (typeof window.openAddPointModal === 'function') {
-            await window.openAddPointModal(targetKmlId, lat, lng);
         }
     };
 
@@ -618,6 +594,42 @@ window.startAddCustomPoint = function(kmlId) {
     document.addEventListener('keydown', handleKeydown);
 };
 
+
+// =========================================================
+// 5-2. 動態渲染獨立「新增點位」膠囊按鈕（固定於右下角）
+// =========================================================
+
+(function renderStandaloneAddButton() {
+    let btn = document.getElementById('btn-standalone-add-point');
+    if (!btn) {
+        btn = document.createElement('button');
+        btn.id = 'btn-standalone-add-point';
+        btn.className = 'audit-btn audit-btn-add';
+        btn.innerHTML = '➕ 新增點位';
+        document.body.appendChild(btn);
+    }
+
+    btn.onclick = function(e) {
+        e.stopPropagation();
+        const currentKmlId = window.currentActiveKmlId || window.mapNamespace?.currentKmlLayerId;
+
+        if (window.canUserAddPoint(currentKmlId)) {
+            if (typeof window.startAddCustomPoint === 'function') {
+                window.startAddCustomPoint(currentKmlId);
+            }
+        } else {
+            Swal.fire('權限不足或未開啟清查', '當前圖層不允許進行新增點位操作！', 'warning');
+        }
+    };
+
+    window.syncAuditButtonVisibility();
+})();
+
+document.addEventListener('change', (e) => {
+    if (e.target && e.target.id === 'kmlLayerSelect') {
+        setTimeout(() => window.syncAuditButtonVisibility(), 100);
+    }
+});
 
 // =========================================================
 // 5-3. 彈窗 UI 介面與照片預覽 (採用原生 File Input 機制)
