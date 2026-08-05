@@ -445,21 +445,10 @@ body {
 /* 基礎標記層級 */
 .marker-label {
   z-index: 100 !important; 
-  display: none !important; /* ✨ 預設隱藏文字標籤 */
+  /* ✨ 注意：不可寫 display: none，否則 JS 抓不到像素邊界矩形 */
 }
 
-/* ✨ 地圖放大至 Level 16 (觸發 .show-labels) 時才顯示標籤 */
-.show-labels .marker-label {
-  display: block !important;
-}
-
-/* 💡 選填優化：若希望「點擊選取中 (.label-active)」的標籤即使在縮小時也能強制顯示，可啟用此段：
-.marker-label:has(.label-active) {
-  display: block !important;
-}
-*/
-
-/* .marker-label span：標籤的預設樣式（陰影避免與地圖背景衝突） */
+/* .marker-label span：標籤預設樣式 */
 .marker-label span {
   display: inline-block;
   transform: translate(10px, -6px);
@@ -475,7 +464,7 @@ body {
   z-index: 500;
 }
 
-/* 高亮（點擊或搜尋結果） */
+/* 高亮（點擊選取） */
 .marker-label span.label-active {
   color: #007bff;
   font-weight: bold;
@@ -489,10 +478,8 @@ body {
   transform: translateX(20px);
 }
 
-/* 導航按鈕相關樣式 */
-.nav-button-icon {
-  z-index: 9999 !important;
-}
+/* 導航按鈕與自訂圖標樣式 */
+.nav-button-icon { z-index: 9999 !important; }
 .nav-button-content img {
   width: 40px;
   height: 40px;
@@ -503,11 +490,7 @@ body {
   box-shadow: 0 2px 8px rgba(0,0,0,0.2);
   z-index: 5000 !important;
 }
-
-/* 自定義圓點圖標樣式（小點） */
-.custom-dot-icon {
-  display: none !important;
-}
+.custom-dot-icon { display: none !important; }
 
 /* ---------- 訊息框 / 模態框（Overlay） ---------- */
 .message-box-overlay, .registration-modal-overlay, .confirmation-modal-overlay {
