@@ -1,9 +1,3 @@
-/* ==========================================================================
-   全域樣式與變數（中文註記）
-   - 本檔已整合重複規則、修正語法錯誤（例如 !important 放置位置）
-   - 註解均為中文，段落以用途分類，盡量保留原始設計與行為
-   ========================================================================== */
-
 /* ---------- 全局與  本佈局 ---------- */
 html, body {
   margin: 0;
@@ -451,7 +445,19 @@ body {
 /* 基礎標記層級 */
 .marker-label {
   z-index: 100 !important; 
+  display: none !important; /* ✨ 預設隱藏文字標籤 */
 }
+
+/* ✨ 地圖放大至 Level 16 (觸發 .show-labels) 時才顯示標籤 */
+.show-labels .marker-label {
+  display: block !important;
+}
+
+/* 💡 選填優化：若希望「點擊選取中 (.label-active)」的標籤即使在縮小時也能強制顯示，可啟用此段：
+.marker-label:has(.label-active) {
+  display: block !important;
+}
+*/
 
 /* .marker-label span：標籤的預設樣式（陰影避免與地圖背景衝突） */
 .marker-label span {
@@ -485,7 +491,7 @@ body {
 
 /* 導航按鈕相關樣式 */
 .nav-button-icon {
-    z-index: 9999 !important;
+  z-index: 9999 !important;
 }
 .nav-button-content img {
   width: 40px;
@@ -500,7 +506,7 @@ body {
 
 /* 自定義圓點圖標樣式（小點） */
 .custom-dot-icon {
-    display: none !important;
+  display: none !important;
 }
 
 /* ---------- 訊息框 / 模態框（Overlay） ---------- */
