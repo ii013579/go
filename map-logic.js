@@ -52,68 +52,93 @@
         // =========================================================
         const updateLabelCollisions = () => {
             if (!ns.map) return;
-
+        
             if (ns._collisionRaf) cancelAnimationFrame(ns._collisionRaf);
-
+        
             ns._collisionRaf = requestAnimationFrame(() => {
                 const map = ns.map;
-                const bounds = map.getBounds();
+                const mapBounds = map.getBounds();
+                const mapSize = map.getSize();
+                
                 const visibleBoxes = [];
-                const candidateItems = [];
-
-                // 視窗裁剪 (Viewport Culling)：僅處理畫面內的標籤
+                const candidateLabels = [];
+        
+                // 1. 視窗初過濾 (Viewport Culling)：僅取畫面內的標籤
                 ns.markers.eachLayer(layer => {
                     if (layer instanceof L.Marker && layer.options?.icon?.options?.className === 'marker-label') {
-                        const el = layer.getElement();
-                        if (!el) return;
-
-                        if (bounds.contains(layer.getLatLng())) {
-                            candidateItems.push({ marker: layer, el });
+                        const latlng = layer.getLatLng();
+                        if (mapBounds.contains(latlng)) {
+                            candidateLabels.push(layer);
                         } else {
-                            el.style.visibility = 'hidden';
+                            const el = layer.getElement();
+                            if (el) el.style.visibility = 'hidden';
                         }
                     }
                 });
-
-                // 權重排序：選取中的標籤 (label-active) 優先顯示
-                candidateItems.sort((a, b) => {
-                    const aActive = a.el.querySelector('.label-active') ? 1 : 0;
-                    const bActive = b.el.querySelector('.label-active') ? 1 : 0;
+        
+                // 2. 權重排序：高亮選取中 (.label-active) 的標籤優先計算
+                candidateLabels.sort((a, b) => {
+                    const aActive = a.getElement()?.querySelector('.label-active') ? 1 : 0;
+                    const bActive = b.getElement()?.querySelector('.label-active') ? 1 : 0;
                     return bActive - aActive;
                 });
-
-                // 批次讀取 (Batch Read)
-                const targets = [];
-                candidateItems.forEach(item => {
-                    item.el.style.visibility = 'visible';
-                    const rect = item.el.getBoundingClientRect();
-                    if (rect.width > 0 && rect.height > 0) {
-                        targets.push({ el: item.el, rect });
+        
+                // 3. ✨ 純數學碰撞計算（不呼叫 getBoundingClientRect，避免 Reflow）
+                candidateLabels.forEach(marker => {
+                    const el = marker.getElement();
+                    if (!el) return;
+        
+                    const latlng = marker.getLatLng();
+                    // 將經緯度直接轉為當前螢幕像素點 (x, y)
+                    const p = map.latLngToContainerPoint(latlng);
+        
+                    const textSpan = el.querySelector('span');
+                    const text = textSpan ? textSpan.textContent : '';
+                    const isActive = textSpan?.classList.contains('label-active') || false;
+        
+                    // 依字數估算像素寬高（字體大小約 13px，中文寬度約 14px）
+                    const fontSize = isActive ? 18 : 13;
+                    const charWidth = fontSize * 1.05; 
+                    const boxWidth = Math.max(text.length * charWidth + 10, 20);
+                    const boxHeight = fontSize + 8;
+        
+                    // 計算預估邊界 (AABB Box)
+                    const left = p.x + (isActive ? 20 : 10);
+                    const top = p.y - 12;
+                    const right = left + boxWidth;
+                    const bottom = top + boxHeight;
+        
+                    // 畫面邊界檢查：若已超出當前可視螢幕範圍則隱藏
+                    if (right < 0 || left > mapSize.x || bottom < 0 || top > mapSize.y) {
+                        el.style.visibility = 'hidden';
+                        return;
                     }
-                });
-
-                // 批次寫入 (Batch Write)
-                targets.forEach(({ el, rect }) => {
-                    const isOverlap = visibleBoxes.some(box => 
-                        rect.left < box.right &&
-                        rect.right > box.left &&
-                        rect.top < box.bottom &&
-                        rect.bottom > box.top
-                    );
-
-                    if (isOverlap) {
+        
+                    // AABB 重疊檢測 (純數值比對)
+                    let isOverlap = false;
+                    for (let i = 0; i < visibleBoxes.length; i++) {
+                        const box = visibleBoxes[i];
+                        if (left < box.right && right > box.left && top < box.bottom && bottom > box.top) {
+                            isOverlap = true;
+                            break;
+                        }
+                    }
+        
+                    // 寫入顯示狀態
+                    if (isOverlap && !isActive) {
                         el.style.visibility = 'hidden';
                     } else {
                         el.style.visibility = 'visible';
-                        visibleBoxes.push(rect);
+                        visibleBoxes.push({ left, right, top, bottom });
                     }
                 });
             });
         };
-
+        
         ns.updateLabelCollisions = updateLabelCollisions;
-
-        // 地圖拖移與縮放結束時觸發碰撞運算
+        
+        // 僅在拖移結束與縮放結束時觸發，避免拖移過程中頻繁觸發
+        ns.map.off('moveend zoomend', updateLabelCollisions);
         ns.map.on('moveend zoomend', updateLabelCollisions);
         // =========================================================
         
