@@ -1019,6 +1019,21 @@ window.submitNewCustomPoint = async function(formValues) {
 // =========================================================
 
 /**
+ * 0. 取得 Storage 圖層資料夾名稱輔助函式
+ */
+window.getStorageLayerFolder = function(kmlId, kmlLayerName) {
+    let target = kmlLayerName || kmlId;
+    if (!target) {
+        const selectEl = document.getElementById('kmlLayerSelect');
+        target = selectEl?.options[selectEl.selectedIndex]?.getAttribute('data-basename') 
+            || window.currentActiveKmlName 
+            || window.mapNamespace?.currentKmlLayerId 
+            || '預設區域';
+    }
+    return String(target).replace(/\.kml$/i, '').trim();
+};
+
+/**
  * 1. Firebase Storage 照片上傳處理
  */
 window.uploadPhotosToStorage = async function(photos, kmlId, pointKey, kmlLayerName) {
@@ -1031,15 +1046,12 @@ window.uploadPhotosToStorage = async function(photos, kmlId, pointKey, kmlLayerN
         throw new Error("Firebase Storage SDK 未載入，請確認網頁已引用 firebase-storage.js");
     }
 
+    // 根目錄固定對齊 /kmldata-d22fb/storage
     const rawRoot = typeof STORAGE_ROOT !== 'undefined' ? STORAGE_ROOT : 'kmldata-d22fb/storage';
     const rootPath = rawRoot.replace(/^\/+|\/+$/g, '');
     
-    let targetLayerName = kmlLayerName;
-    if (!targetLayerName) {
-        const selectEl = document.getElementById('kmlLayerSelect');
-        const rawLayerName = selectEl?.options[selectEl.selectedIndex]?.getAttribute('data-basename') || window.currentActiveKmlName || '預設區域';
-        targetLayerName = rawLayerName.replace(/\.kml$/i, '').trim();
-    }
+    // 取得對應的圖層資料夾名稱 (如：M1LRE92id41FBzlsGbRR 或 外業抽測)
+    const targetLayerFolder = window.getStorageLayerFolder(kmlId, kmlLayerName);
 
     const storageRef = firebase.storage().ref();
     const safePointKey = String(pointKey).replace(/[/\\?%*:|"<>]/g, '_');
@@ -1052,7 +1064,8 @@ window.uploadPhotosToStorage = async function(photos, kmlId, pointKey, kmlLayerN
         }
 
         const photoIndexStr = String(index + 1).padStart(2, '0');
-        const customStoragePath = `${rootPath}/${targetLayerName}/${safePointKey}_${photoIndexStr}.jpg`;
+        // 建立完整 Storage 路徑：kmldata-d22fb/storage/{圖層名稱}/{點名}_01.jpg
+        const customStoragePath = `${rootPath}/${targetLayerFolder}/${safePointKey}_${photoIndexStr}.jpg`;
         const ref = storageRef.child(customStoragePath);
 
         try {
@@ -1084,35 +1097,7 @@ window.uploadPhotosToStorage = async function(photos, kmlId, pointKey, kmlLayerN
 };
 
 /**
- * 2. 通用膠囊按鈕
- */
-window.createUnifiedAuditButton = function(text, bgColor, onClickHandler) {
-    const btn = document.createElement('button');
-    btn.innerHTML = text;
-    btn.style.cssText = `
-        pointer-events: auto;
-        background: ${bgColor};
-        color: #ffffff;
-        border: none;
-        padding: 10px 22px;
-        border-radius: 25px;
-        font-weight: bold;
-        font-size: 15px;
-        box-shadow: 0 3px 10px rgba(0,0,0,0.25);
-        cursor: pointer;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        gap: 6px;
-        transition: transform 0.1s ease, box-shadow 0.1s ease;
-        outline: none;
-    `;
-    btn.onclick = onClickHandler;
-    return btn;
-};
-
-/**
- * 3. 刪除自訂點位
+ * 2. 刪除自訂點位與 Storage 中的照片
  */
 window.deleteCustomPoint = async function(kmlId, pointKey, kmlLayerName) {
     if (!kmlId || !pointKey) {
@@ -1143,30 +1128,32 @@ window.deleteCustomPoint = async function(kmlId, pointKey, kmlLayerName) {
         const rawRoot = typeof STORAGE_ROOT !== 'undefined' ? STORAGE_ROOT : 'kmldata-d22fb/storage';
         const rootPath = rawRoot.replace(/^\/+|\/+$/g, '');
         
-        let targetLayerName = kmlLayerName;
-        if (!targetLayerName) {
-            const selectEl = document.getElementById('kmlLayerSelect');
-            const rawLayerName = selectEl?.options[selectEl.selectedIndex]?.getAttribute('data-basename') || window.currentActiveKmlName || '預設區域';
-            targetLayerName = rawLayerName.replace(/\.kml$/i, '').trim();
-        }
-
+        const targetLayerFolder = window.getStorageLayerFolder(kmlId, kmlLayerName);
         const safePointKey = String(pointKey).replace(/[/\\?%*:|"<>]/g, '_');
         const storageRef = firebase.storage().ref();
 
         const config = window.globalAuditConfigs?.[kmlId] || {};
         const maxCheckPhotos = Math.max(config.targetPhotos || 2, 12);
 
-        const deletePhotoPromises = Array.from({ length: maxCheckPhotos }, (_, idx) => idx + 1).map(async (i) => {
-            const photoIndexStr = String(i).padStart(2, '0');
-            const customStoragePath = `${rootPath}/${targetLayerName}/${safePointKey}_${photoIndexStr}.jpg`;
-            try {
-                await storageRef.child(customStoragePath).delete();
-            } catch (err) {
-                // 忽略不存在照片的 404
+        // 為防止舊版本資料夾混用，同時搜詢圖層名稱資料夾與 kmlId 資料夾
+        const possibleFolders = Array.from(new Set([targetLayerFolder, kmlId].filter(Boolean)));
+
+        const deletePhotoPromises = [];
+        possibleFolders.forEach(folder => {
+            for (let i = 1; i <= maxCheckPhotos; i++) {
+                const photoIndexStr = String(i).padStart(2, '0');
+                const customStoragePath = `${rootPath}/${folder}/${safePointKey}_${photoIndexStr}.jpg`;
+                deletePhotoPromises.push(
+                    storageRef.child(customStoragePath).delete().catch(() => {
+                        // 忽略照片不存在的錯誤 (404)
+                    })
+                );
             }
         });
+
         await Promise.all(deletePhotoPromises);
 
+        // 刪除 Firestore 紀錄
         const appPath = typeof APP_PATH !== 'undefined' ? APP_PATH : 'kmlData';
         await firebase.firestore()
             .collection(appPath)
@@ -1175,6 +1162,7 @@ window.deleteCustomPoint = async function(kmlId, pointKey, kmlLayerName) {
             .doc(pointKey)
             .delete();
 
+        // 清除本地記憶體快取
         if (window.auditLayersState && window.auditLayersState[kmlId]) {
             delete window.auditLayersState[kmlId][pointKey];
         }
@@ -1189,12 +1177,12 @@ window.deleteCustomPoint = async function(kmlId, pointKey, kmlLayerName) {
 
         window.currentSelectedPoint = null;
         if (typeof generateLayerCsvReport === 'function') {
-            await generateLayerCsvReport(kmlId, targetLayerName, 2);
+            await generateLayerCsvReport(kmlId, targetLayerFolder, 2);
         }
 
         Swal.fire({
             icon: 'success',
-            title: '已順利刪除點位',
+            title: '已順利刪除點位與照片',
             timer: 1200,
             showConfirmButton: false
         });
