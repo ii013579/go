@@ -47,9 +47,9 @@
         window.mapNamespace = ns;
 
         // =========================================================
-        // ✨【新增】：限定縮放層級（Zoom Level >= 16 才顯示文字標籤）
+        // 限定縮放層級（Zoom Level >= 8 才顯示文字標籤）
         // =========================================================
-        const MIN_ZOOM_FOR_LABELS = 16;
+        const MIN_ZOOM_FOR_LABELS = 8;
         const updateLabelVisibility = () => {
             if (!ns.map) return;
             const currentZoom = ns.map.getZoom();
