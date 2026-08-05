@@ -1,9 +1,8 @@
-﻿// map-logic.js v3.12
+﻿// map-logic.js v2.05 (Collision Detection Integrated)
 
 (function () {
     'use strict';
 
-    // 全域命名空間，以降低直接污染 window
     const ns = {
         map: null,
         markers: L.featureGroup(),
@@ -11,7 +10,8 @@
         geoJsonLayers: L.featureGroup(),
         allKmlFeatures: [],
         currentKmlLayerId: null,
-        isLoadingKml: false
+        isLoadingKml: false,
+        updateLabelCollisions: null
     };
     window.mapNamespace = ns;
 
@@ -31,7 +31,7 @@
             minZoom: 5
         }).setView([23.6, 120.9], 8);
         
-        // 2. 建立 Leaflet 缺失的 bottomcenter 容器 (封裝成一個動作)
+        // 2. 建立 Leaflet 缺失的 bottomcenter 容器
         if (ns.map._controlContainer && !ns.map._controlCorners['bottomcenter']) {
             ns.map._controlCorners['bottomcenter'] = L.DomUtil.create(
                 'div', 
@@ -40,39 +40,76 @@
             );
         }
         
-        // 3. 設定全域變數提供給 audit-module.js 使用
+        // 3. 設定全域變數
         window.map = ns.map;
         window.geoJsonLayers = ns.geoJsonLayers;
         window.markers = ns.markers;
         window.mapNamespace = ns;
 
         // =========================================================
-        // 限定縮放層級（Zoom Level >= 8 才顯示文字標籤）
+        // ✨【核心修改】：動態標籤碰撞檢測邏輯 (Collision Detection)
         // =========================================================
-        const MIN_ZOOM_FOR_LABELS = 8;
-        const updateLabelVisibility = () => {
+        const updateLabelCollisions = () => {
             if (!ns.map) return;
-            const currentZoom = ns.map.getZoom();
-            const mapContainer = ns.map.getContainer();
 
-            if (currentZoom >= MIN_ZOOM_FOR_LABELS) {
-                mapContainer.classList.add('show-labels');
-            } else {
-                mapContainer.classList.remove('show-labels');
-            }
+            const visibleBoxes = [];
+            const labelMarkers = [];
+
+            // 搜尋所有標籤 Marker
+            ns.markers.eachLayer(layer => {
+                if (layer instanceof L.Marker && layer.options?.icon?.options?.className === 'marker-label') {
+                    labelMarkers.push(layer);
+                }
+            });
+
+            // 優先級排序：被選取高亮的標籤 (label-active) 排前面，確保不被覆蓋
+            labelMarkers.sort((a, b) => {
+                const aActive = a.getElement()?.querySelector('.label-active') ? 1 : 0;
+                const bActive = b.getElement()?.querySelector('.label-active') ? 1 : 0;
+                return bActive - aActive;
+            });
+
+            // AABB 矩形碰撞判定
+            labelMarkers.forEach(marker => {
+                const el = marker.getElement();
+                if (!el) return;
+
+                // 先恢復可見狀態以取得正確的螢幕邊界矩形
+                el.style.visibility = 'visible';
+                const rect = el.getBoundingClientRect();
+
+                // 若標籤超出螢幕範圍則直接忽視
+                if (rect.width === 0 || rect.height === 0) return;
+
+                // 檢查是否與已排入可見清單的矩形重疊
+                const isOverlap = visibleBoxes.some(box => 
+                    rect.left < box.right &&
+                    rect.right > box.left &&
+                    rect.top < box.bottom &&
+                    rect.bottom > box.top
+                );
+
+                if (isOverlap) {
+                    el.style.visibility = 'hidden'; // 重疊：隱藏
+                } else {
+                    el.style.visibility = 'visible'; // 無重疊：顯示
+                    visibleBoxes.push(rect); // 註冊邊界
+                }
+            });
         };
 
-        // 監聽地圖縮放結束事件，並在初次載入時主動檢查一次
-        ns.map.on('zoomend', updateLabelVisibility);
-        updateLabelVisibility();
+        ns.updateLabelCollisions = updateLabelCollisions;
+
+        // 監聽地圖平移、縮放結束事件觸發碰撞計算
+        ns.map.on('moveend zoomend', updateLabelCollisions);
         // =========================================================
         
-        // 4. 啟動清查系統底部控制選單 (僅需呼叫一次)
+        // 4. 啟動清查系統底部控制選單
         if (window.initBottomAuditControl) {
             window.initBottomAuditControl(ns.map);
         }
 
-        // 基本圖層定義（使用常數）
+        // 基本圖層定義
         const baseLayers = {
             'Google 街道圖': L.tileLayer('https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {
                 attribution: 'Google Maps',
@@ -96,33 +133,25 @@
             })
         };
 
-        // 嘗試還原上次使用的圖層（若不合法則回到預設）
         try {
             const lastLayerName = localStorage.getItem('lastBaseLayer');
             if (lastLayerName && baseLayers[lastLayerName]) {
                 baseLayers[lastLayerName].addTo(ns.map);
-                console.info(`已還原上次使用的圖層：${lastLayerName}`);
             } else {
-                if (lastLayerName) {
-                    console.warn(`找不到記憶圖層 "${lastLayerName}"，已清除記錄。`);
-                    localStorage.removeItem('lastBaseLayer');
-                }
                 baseLayers['Google 街道圖'].addTo(ns.map);
             }
         } catch (e) {
-            console.warn('讀取 localStorage 時發生錯誤，使用預設圖層。', e);
             baseLayers['Google 街道圖'].addTo(ns.map);
         }
 
-        // 將 feature groups 加到地圖（確保順序）
         ns.geoJsonLayers.addTo(ns.map);
         ns.markers.addTo(ns.map);
         ns.navButtons.addTo(ns.map);
 
-        // --- 自動清理 24 小時前的過期快取 ---
+        // 清理過期快取
         const cleanupOldCache = () => {
             const now = Date.now();
-            const EXPIRE_LIMIT = 24 * 60 * 60 * 1000; // 24小時毫秒數
+            const EXPIRE_LIMIT = 24 * 60 * 60 * 1000;
             let count = 0;
             Object.keys(localStorage).forEach(key => {
                 if (key.startsWith('kml_time_')) {
@@ -139,15 +168,11 @@
         };
         cleanupOldCache();
         
-        // 設定圖層/標記的 z-index（確保標記在上層）
         try {
             ns.map.getPane('markerPane').style.zIndex = 600;
             ns.map.getPane('overlayPane').style.zIndex = 500;
-        } catch (e) {
-            console.debug('設定 pane zIndex 時發生錯誤：', e);
-        }
+        } catch (e) {}
 
-        // 縮放控制（右上）
         L.control.zoom({ position: 'topright' }).addTo(ns.map);
 
         // 自定義定位控制
@@ -216,7 +241,6 @@
                         this._updateLocation(latlng, accuracy);
                     },
                     (err) => {
-                        console.error("定位失敗:", err && err.message ? err.message : err);
                         this._stopTracking();
                         window.showMessageCustom({
                             title: "定位失敗",
@@ -224,11 +248,7 @@
                             buttonText: "確定"
                         });
                     },
-                    {
-                        enableHighAccuracy: true,
-                        maximumAge: 0,
-                        timeout: 10000
-                    }
+                    { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }
                 );
 
                 this._setButtonActive(true);
@@ -242,13 +262,6 @@
                 this._clearLocationMarkers();
                 this._setButtonActive(false);
                 window.closeMessageCustom?.();
-                window.showMessageCustom({
-                    title: '定位已停止',
-                    message: '位置追蹤已關閉。',
-                    buttonText: '確定',
-                    autoClose: true,
-                    autoCloseDelay: 2000
-                });
             },
 
             _updateLocation: function (latlng, accuracy) {
@@ -301,17 +314,10 @@
             onConfirm = null
         } = {}) {
             const overlay = document.querySelector('.message-box-overlay');
-            if (!overlay) {
-                console.warn('找不到 .message-box-overlay 元素，無法顯示訊息。', title, message);
-                if (typeof onClose === 'function') onClose();
-                return;
-            }
+            if (!overlay) return;
             const content = overlay.querySelector('.message-box-content');
-            if (!content) {
-                console.warn('.message-box-content 不存在');
-                if (typeof onClose === 'function') onClose();
-                return;
-            }
+            if (!content) return;
+            
             const header = content.querySelector('h3');
             const paragraph = content.querySelector('p');
             const button = content.querySelector('button');
@@ -339,19 +345,12 @@
 
         window.closeMessageCustom = function () {
             const overlay = document.querySelector('.message-box-overlay');
-            if (overlay) {
-                overlay.classList.remove('visible');
-            }
+            if (overlay) overlay.classList.remove('visible');
         };
 
         const layerControl = L.control.layers(baseLayers, null, { position: 'topright' }).addTo(ns.map);
         ns.map.on('baselayerchange', function (e) {
-            console.info("基本圖層已變更:", e.name);
-            try {
-                localStorage.setItem('lastBaseLayer', e.name);
-            } catch (err) {
-                console.warn('無法寫入 localStorage: ', err);
-            }
+            try { localStorage.setItem('lastBaseLayer', e.name); } catch (err) {}
             const controlContainer = layerControl.getContainer();
             if (controlContainer && controlContainer.classList.contains('leaflet-control-layers-expanded')) {
                 controlContainer.classList.remove('leaflet-control-layers-expanded');
@@ -366,13 +365,15 @@
                 searchContainer?.classList.remove('search-active');
             }
             const searchBox = document.getElementById('searchBox');
-            if (searchBox) {
-                searchBox.value = '';
-            }
+            if (searchBox) searchBox.value = '';
+
             document.querySelectorAll('.marker-label span.label-active').forEach(el => {
                 el.classList.remove('label-active');
             });
             ns.navButtons.clearLayers();
+            
+            // 點擊空白處取消高亮後，重新進行碰撞計算
+            ns.updateLabelCollisions?.();
         });
     });
 
@@ -401,10 +402,7 @@
                 if (!exists) {
                     geojsonFeatures.push({
                         type: "Feature",
-                        geometry: {
-                            type: "Point",
-                            coordinates: [numLng, numLat]
-                        },
+                        geometry: { type: "Point", coordinates: [numLng, numLat] },
                         properties: {
                             name: pointKey,
                             title: pointKey,
@@ -469,11 +467,10 @@
     
                     ns.markers.eachLayer(layer => {
                         if (layer instanceof L.CircleMarker && layer.feature) {
-                            const style = {
+                            layer.setStyle({
                                 ...defaultStyle,
                                 fillColor: layer.feature.properties?.fillColor || defaultStyle.fillColor
-                            };
-                            layer.setStyle(style);
+                            });
                         }
                     });
     
@@ -486,6 +483,9 @@
                     if (typeof window.createNavButton === 'function') {
                         window.createNavButton(latlng, name);
                     }
+
+                    // ✨ 選取點位變更高亮狀態後，重新整理碰撞權重
+                    ns.updateLabelCollisions?.();
                 });
     
                 ns.markers.addLayer(dot);
@@ -523,32 +523,19 @@
             }
         });
     
-        ns.map.off('click').on('click', () => {
-            window.currentSelectedPoint = null;
-            ns.markers.eachLayer(layer => {
-                if (layer instanceof L.CircleMarker && layer.feature) {
-                    layer.setStyle({
-                        ...defaultStyle,
-                        fillColor: layer.feature.properties?.fillColor || defaultStyle.fillColor
-                    });
-                }
-            });
-            document.querySelectorAll('.marker-label span').forEach(s => s.classList.remove('label-active'));
-            ns.navButtons.clearLayers();
-        });
-    
         ns.allKmlFeatures = geojsonFeatures;
+
+        // ✨ 渲染完成後延遲一小段時間讓 DOM 渲染，隨即進行動態碰撞檢測
+        setTimeout(() => {
+            ns.updateLabelCollisions?.();
+        }, 100);
     };
        
     // ---------- 公開方法：建立導航按鈕 ----------
     window.createNavButton = function (latlng, name) {
-        if (!ns.map) {
-            console.error("地圖尚未初始化。");
-            return;
-        }
+        if (!ns.map) return;
 
         ns.navButtons.clearLayers();
-
         const googleMapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${latlng.lat},${latlng.lng}`;
         
         const buttonHtml = `
@@ -580,19 +567,13 @@
         } catch (e) {
             ns.map.setView(latlng);
         }
-
-        console.info(`已為 ${name} 創建導航圖示 (${latlng.lat}, ${latlng.lng})`);
     };
     
-    // ---------- 輔助函式：多邊形質心 ----------
+    // 幾何計算工具
     window.getPolygonCentroid = function (coords) {
         if (!Array.isArray(coords) || coords.length === 0) return null;
-
-        let area = 0;
-        let cx = 0;
-        let cy = 0;
+        let area = 0, cx = 0, cy = 0;
         const n = coords.length;
-
         for (let i = 0; i < n; i++) {
             const [x0, y0] = coords[i];
             const [x1, y1] = coords[(i + 1) % n];
@@ -601,34 +582,26 @@
             cx += (x0 + x1) * a;
             cy += (y0 + y1) * a;
         }
-
         if (Math.abs(area) < 1e-12) {
             let sx = 0, sy = 0;
             coords.forEach(p => { sx += p[0]; sy += p[1]; });
             return [sx / n, sy / n];
         }
-
         area *= 0.5;
-        cx = cx / (6 * area);
-        cy = cy / (6 * area);
-        return [cx, cy];
+        return [cx / (6 * area), cy / (6 * area)];
     };
 
-    // ---------- 輔助函式：LineString 中點 ----------
     window.getLineStringMidpoint = function (coords) {
         if (!Array.isArray(coords) || coords.length === 0) return null;
         if (coords.length === 1) return coords[0];
-
         const toRad = deg => deg * Math.PI / 180;
         const R = 6371000;
         function dist(a, b) {
             const lat1 = toRad(a[1]), lon1 = toRad(a[0]);
             const lat2 = toRad(b[1]), lon2 = toRad(b[0]);
-            const dlat = lat2 - lat1;
-            const dlon = lon2 - lon1;
+            const dlat = lat2 - lat1, dlon = lon2 - lon1;
             const A = Math.sin(dlat/2)**2 + Math.cos(lat1)*Math.cos(lat2)*Math.sin(dlon/2)**2;
-            const C = 2 * Math.atan2(Math.sqrt(A), Math.sqrt(1-A));
-            return R * C;
+            return R * 2 * Math.atan2(Math.sqrt(A), Math.sqrt(1-A));
         }
 
         const segLengths = [];
@@ -646,18 +619,13 @@
                 const remain = half - acc;
                 const ratio = segLengths[i] === 0 ? 0 : remain / segLengths[i];
                 const a = coords[i], b = coords[i+1];
-                const lon = a[0] + (b[0] - a[0]) * ratio;
-                const lat = a[1] + (b[1] - a[1]) * ratio;
-                return [lon, lat];
+                return [a[0] + (b[0] - a[0]) * ratio, a[1] + (b[1] - a[1]) * ratio];
             }
             acc += segLengths[i];
         }
-
-        const mid = Math.floor(coords.length / 2);
-        return coords[mid];
+        return coords[Math.floor(coords.length / 2)];
     };
 
-    // ---------- 清除所有 KML/GeoJSON 圖層 ----------
     window.clearAllKmlLayers = function () {
         ns.markers.clearLayers();
         ns.navButtons.clearLayers();
@@ -665,68 +633,39 @@
         window.allKmlFeatures = [];
         ns.allKmlFeatures = [];
         ns.currentKmlLayerId = null;
-        console.info('所有 KML 圖層和相關數據已清除。');
     };
 
-    // ---------- 從 Firestore 載入 KML 圖層 ----------
     window.loadKmlLayerFromFirestore = async function(kmlId) {
         const ns = window.mapNamespace;
         const APP_ID = 'kmldata-d22fb';
         
-        if (!kmlId) return;
-        if (ns.isLoadingKml) {
-            console.log("⏳ 圖層正在載入中，請稍候...");
-            return;
-        }
+        if (!kmlId || ns.isLoadingKml) return;
         ns.isLoadingKml = true;
-    
         const CONTENT_CACHE_KEY = `kml_data_${kmlId}`;
     
         try {
             const cachedContent = localStorage.getItem(CONTENT_CACHE_KEY);
-            
             if (cachedContent) {
-                console.log(`%c[數據快取命中] 載入圖層: ${kmlId}`, "color: #2196F3; font-weight: bold;");
                 const kmlData = JSON.parse(cachedContent);
-                
                 if (typeof clearExistingLayers === 'function') clearExistingLayers(ns);
                 if (typeof renderKmlData === 'function') renderKmlData(kmlData, kmlId);
                 return;
             }
-    
-            console.log(`%c[網路讀取] 開始下載圖層資料: ${kmlId}`, "color: #f44336;");
-            
+
             const doc = await db.collection('artifacts').doc(APP_ID)
                                 .collection('public').doc('data')
                                 .collection('kmlLayers').doc(kmlId).get();
-            
-            console.log(`%c🔥 [Firestore Read] 成功下載特定圖層內容`, "color: white; background: red; padding: 2px 5px;");
     
-            if (!doc.exists) {
-                console.error("❌ 找不到文件於路徑: ", `artifacts/${APP_ID}/public/data/kmlLayers/${kmlId}`);
-                throw new Error('資料庫中找不到該圖層，可能已被刪除。');
-            }
-    
+            if (!doc.exists) throw new Error('資料庫中找不到該圖層，可能已被刪除。');
+
             const kmlData = doc.data();
-    
-            try {
-                localStorage.setItem(CONTENT_CACHE_KEY, JSON.stringify(kmlData));
-            } catch (e) {
-                console.warn("⚠️ LocalStorage 空間不足，無法快取此圖層內容。");
-            }
-    
+            try { localStorage.setItem(CONTENT_CACHE_KEY, JSON.stringify(kmlData)); } catch (e) {}
+
             if (typeof clearExistingLayers === 'function') clearExistingLayers(ns);
             if (typeof renderKmlData === 'function') renderKmlData(kmlData, kmlId);
-    
         } catch (error) {
-            console.error("❌ 載入圖層失敗:", error);
-            
             if (window.showMessageCustom) {
-                window.showMessageCustom({ 
-                    title: '載入失敗', 
-                    message: error.message, 
-                    buttonText: '確定' 
-                });
+                window.showMessageCustom({ title: '載入失敗', message: error.message, buttonText: '確定' });
             }
         } finally {
             ns.isLoadingKml = false;
@@ -740,14 +679,8 @@
 
     function renderKmlData(kmlData, kmlId) {
         let geojson = kmlData.geojson;
-
         if (typeof geojson === 'string') {
-            try {
-                geojson = JSON.parse(geojson);
-            } catch (e) {
-                console.error('解析 GeoJSON 失敗', e);
-                return;
-            }
+            try { geojson = JSON.parse(geojson); } catch (e) { return; }
         }
 
         const loadedFeatures = (geojson?.features || []).filter(f =>
