@@ -47,7 +47,7 @@ window.canUserAddPoint = function(kmlId) {
     return isAuditingEnabled;
 };
 
-// 全域顯隱同步（控制右下角按鈕與底部選單）
+// 全域顯隱同步（控制右下角懸浮按鈕與底部面板）
 window.syncAuditButtonVisibility = function() {
     const currentKmlId = window.currentActiveKmlId || window.mapNamespace?.currentKmlLayerId;
     const canShow = window.canUserAddPoint(currentKmlId);
@@ -70,7 +70,77 @@ window.syncAuditButtonVisibility = function() {
 
 
 // =========================================================
-// 1. 統一按鈕建立工廠 (Unified Button Factory)
+// 1. 樣式攔截器與強力重繪機制 (解決 ReferenceError)
+// =========================================================
+
+window.forceMapRefresh = function forceMapRefresh() {
+    const ns = window.mapNamespace;
+    const kmlId = ns?.currentKmlLayerId;
+    if (!ns?.map || !kmlId) return;
+
+    const records = window.auditLayersState?.[kmlId] || {};
+    const showAuditMode = window.globalAuditConfigs?.[kmlId]?.isAuditing && canSeeAuditColors();
+
+    ns.map.eachLayer(function(layer) {
+        if (layer.feature && layer.feature.properties) {
+            const props = layer.feature.properties;
+            const pointKey = props.auditPointKey || props.name || props.title || props.id || "未知點位";
+            
+            if (showAuditMode) {
+                const record = records[pointKey];
+                if (record) {
+                    props.isAudited = true;
+                    props.auditStatus = record.deviceStatus || "正常";
+                    props.photos = record.photos || [];
+                    props.auditNote = record.note;
+
+                    if (typeof layer.setStyle === 'function') {
+                        layer.setStyle({
+                            fillColor: "#FCD770",
+                            color: "#ffffff",
+                            weight: 2,
+                            fillOpacity: 0.9,
+                            radius: 10
+                        });
+                    }
+                } else {
+                    props.isAudited = false;
+                    if (typeof layer.setStyle === 'function') {
+                        layer.setStyle({
+                            fillColor: "#2A00D2",
+                            color: "#ffffff",
+                            weight: 2,
+                            fillOpacity: 0.9,
+                            radius: 10
+                        });
+                    }
+                }
+            } else {
+                if (typeof layer.setStyle === 'function') {
+                    layer.setStyle({
+                        fillColor: "#e74c3c",
+                        color: "#ffffff",
+                        weight: 1.5,
+                        fillOpacity: 0.85,
+                        radius: 8
+                    });
+                }
+            }
+        }
+    });
+
+    if (window.addGeoJsonLayers && ns.allKmlFeatures) {
+        window.addGeoJsonLayers(ns.allKmlFeatures);
+    }
+
+    if (typeof window.syncAuditButtonVisibility === 'function') {
+        window.syncAuditButtonVisibility();
+    }
+};
+
+
+// =========================================================
+// 2. 統一按鈕建立工廠 (Unified Button Factory)
 // =========================================================
 
 window.createUnifiedAuditButton = function(text, btnTypeClass, onClickHandler) {
@@ -86,7 +156,7 @@ window.createUnifiedAuditButton = function(text, btnTypeClass, onClickHandler) {
 
 
 // =========================================================
-// 2. 動態渲染底部選單 UI（查看、修改、清查點位、新增點位、刪除）
+// 3. 動態渲染底部選單 UI（查看、修改、清查點位、新增點位、刪除）
 // =========================================================
 
 window.updateAuditBottomMenuUI = function(mode, extraData) {
@@ -94,7 +164,6 @@ window.updateAuditBottomMenuUI = function(mode, extraData) {
 
     const container = bottomControl._container;
 
-    // 先做權限與清查開關同步，條件不符則清空並隱藏
     if (!window.syncAuditButtonVisibility()) {
         container.style.display = 'none';
         container.innerHTML = '';
@@ -105,7 +174,6 @@ window.updateAuditBottomMenuUI = function(mode, extraData) {
     const props = extraData?.feature?.properties || extraData?.properties || extraData || {};
     const isCustom = !!(props.isCustomPoint || extraData?.isCustomPoint);
 
-    // 建置容器結構
     container.innerHTML = '';
     container.style.display = 'flex';
 
@@ -113,7 +181,6 @@ window.updateAuditBottomMenuUI = function(mode, extraData) {
     barContainer.className = 'audit-bottom-bar';
 
     if (mode === 'VIEW_EDIT') {
-        // 1. 查看按鈕
         const viewBtn = window.createUnifiedAuditButton('查看', 'audit-btn-view', () => {
             if (typeof window.openAuditDetailModal === 'function') {
                 window.openAuditDetailModal(extraData);
@@ -121,7 +188,6 @@ window.updateAuditBottomMenuUI = function(mode, extraData) {
         });
         barContainer.appendChild(viewBtn);
 
-        // 2. 修改按鈕
         const editBtn = window.createUnifiedAuditButton('修改', 'audit-btn-edit', () => {
             if (isCustom) {
                 if (typeof window.openCustomPointModal === 'function') {
@@ -150,7 +216,6 @@ window.updateAuditBottomMenuUI = function(mode, extraData) {
         });
         barContainer.appendChild(editBtn);
 
-        // 3. 刪除按鈕 (僅自訂點位顯示)
         if (isCustom) {
             const delBtn = window.createUnifiedAuditButton('🗑️ 刪除', 'audit-btn-delete', () => {
                 const pointKey = props.auditPointKey || props.name || props.title;
@@ -166,7 +231,6 @@ window.updateAuditBottomMenuUI = function(mode, extraData) {
         }
 
     } else if (mode === 'AUDIT_MAIN') {
-        // 清查點位按鈕
         const auditBtn = window.createUnifiedAuditButton('清查點位', 'audit-btn-audit', () => {
             if (typeof window.openAuditFormModal === 'function') {
                 window.openAuditFormModal(extraData);
@@ -175,7 +239,6 @@ window.updateAuditBottomMenuUI = function(mode, extraData) {
         barContainer.appendChild(auditBtn);
 
     } else {
-        // 新增點位按鈕
         const addBtn = window.createUnifiedAuditButton('➕ 新增點位', 'audit-btn-add', () => {
             if (typeof window.startAddCustomPoint === 'function') {
                 window.startAddCustomPoint(currentKmlId);
@@ -189,7 +252,78 @@ window.updateAuditBottomMenuUI = function(mode, extraData) {
 
 
 // =========================================================
-// 3. 右下角獨立懸浮「新增點位」按鈕與事件綁定
+// 4. 手動新增點位功能 (地圖點擊與座標拾取)
+// =========================================================
+
+let activeAddPointCleanup = null;
+
+window.startAddCustomPoint = function(kmlId) {
+    const targetKmlId = kmlId || window.currentActiveKmlId || window.mapNamespace?.currentKmlLayerId;
+
+    if (!window.canUserAddPoint(targetKmlId)) {
+        Swal.fire('權限不足或未開啟清查', '當前圖層不允許進行新增點位操作！', 'warning');
+        return;
+    }
+
+    const map = window.mapNamespace?.map;
+    if (!map) return;
+
+    if (activeAddPointCleanup) {
+        activeAddPointCleanup();
+    }
+
+    const container = map.getContainer();
+    container.style.cursor = 'crosshair';
+
+    Swal.mixin({
+        toast: true,
+        position: 'top',
+        showConfirmButton: false,
+        timer: 4000,
+        timerProgressBar: true
+    }).fire({ 
+        icon: 'info', 
+        title: '📍 請在地圖上點擊要新增點位的實體位置 (按 ESC 取消)' 
+    });
+
+    const handleMapClick = async function(e) {
+        cleanup();
+        const { lat, lng } = e.latlng;
+        
+        if (typeof window.openCustomPointModal === 'function') {
+            await window.openCustomPointModal({
+                isEditMode: false,
+                kmlId: targetKmlId,
+                lat: lat,
+                lng: lng,
+                status: '新增'
+            });
+        }
+    };
+
+    const handleKeydown = function(e) {
+        if (e.key === 'Escape') {
+            cleanup();
+            Swal.fire({ icon: 'info', title: '已取消新增點位', timer: 1000, showConfirmButton: false });
+        }
+    };
+
+    const cleanup = () => {
+        map.off('click', handleMapClick);
+        document.removeEventListener('keydown', handleKeydown);
+        container.style.cursor = '';
+        activeAddPointCleanup = null;
+    };
+
+    activeAddPointCleanup = cleanup;
+
+    map.on('click', handleMapClick);
+    document.addEventListener('keydown', handleKeydown);
+};
+
+
+// =========================================================
+// 5. 右下角獨立懸浮「新增點位」按鈕與事件綁定
 // =========================================================
 
 (function renderStandaloneAddButton() {
@@ -215,16 +349,16 @@ window.updateAuditBottomMenuUI = function(mode, extraData) {
         }
     };
 
-    // 初始狀態同步
     window.syncAuditButtonVisibility();
 })();
 
-// 圖層切換時自動同步 UI
 document.addEventListener('change', (e) => {
     if (e.target && e.target.id === 'kmlLayerSelect') {
         setTimeout(() => window.syncAuditButtonVisibility(), 100);
     }
 });
+
+
 
 
     // ---------------------------------------------------------
@@ -523,113 +657,7 @@ document.addEventListener('change', (e) => {
             });
         }
     };
-       
-// =========================================================
-// 5-1. 獨立區段：手動新增點位功能 (地圖點擊與座標拾取)
-// =========================================================
-
-let activeAddPointCleanup = null;
-
-window.startAddCustomPoint = function(kmlId) {
-    const targetKmlId = kmlId || window.currentActiveKmlId || window.mapNamespace?.currentKmlLayerId;
-
-    if (!window.canUserAddPoint(targetKmlId)) {
-        Swal.fire('權限不足或未開啟清查', '當前圖層不允許進行新增點位操作！', 'warning');
-        return;
-    }
-
-    const map = window.mapNamespace?.map;
-    if (!map) return;
-
-    if (activeAddPointCleanup) {
-        activeAddPointCleanup();
-    }
-
-    const container = map.getContainer();
-    container.style.cursor = 'crosshair';
-
-    Swal.mixin({
-        toast: true,
-        position: 'top',
-        showConfirmButton: false,
-        timer: 4000,
-        timerProgressBar: true
-    }).fire({ 
-        icon: 'info', 
-        title: '📍 請在地圖上點擊要新增點位的實體位置 (按 ESC 取消)' 
-    });
-
-    const handleMapClick = async function(e) {
-        cleanup();
-        const { lat, lng } = e.latlng;
-        
-        if (typeof window.openCustomPointModal === 'function') {
-            await window.openCustomPointModal({
-                isEditMode: false,
-                kmlId: targetKmlId,
-                lat: lat,
-                lng: lng,
-                status: '新增'
-            });
-        }
-    };
-
-    const handleKeydown = function(e) {
-        if (e.key === 'Escape') {
-            cleanup();
-            Swal.fire({ icon: 'info', title: '已取消新增點位', timer: 1000, showConfirmButton: false });
-        }
-    };
-
-    const cleanup = () => {
-        map.off('click', handleMapClick);
-        document.removeEventListener('keydown', handleKeydown);
-        container.style.cursor = '';
-        activeAddPointCleanup = null;
-    };
-
-    activeAddPointCleanup = cleanup;
-
-    map.on('click', handleMapClick);
-    document.addEventListener('keydown', handleKeydown);
-};
-
-
-// =========================================================
-// 5-2. 動態渲染獨立「新增點位」膠囊按鈕（固定於右下角）
-// =========================================================
-
-(function renderStandaloneAddButton() {
-    let btn = document.getElementById('btn-standalone-add-point');
-    if (!btn) {
-        btn = document.createElement('button');
-        btn.id = 'btn-standalone-add-point';
-        btn.className = 'audit-btn audit-btn-add';
-        btn.innerHTML = '➕ 新增點位';
-        document.body.appendChild(btn);
-    }
-
-    btn.onclick = function(e) {
-        e.stopPropagation();
-        const currentKmlId = window.currentActiveKmlId || window.mapNamespace?.currentKmlLayerId;
-
-        if (window.canUserAddPoint(currentKmlId)) {
-            if (typeof window.startAddCustomPoint === 'function') {
-                window.startAddCustomPoint(currentKmlId);
-            }
-        } else {
-            Swal.fire('權限不足或未開啟清查', '當前圖層不允許進行新增點位操作！', 'warning');
-        }
-    };
-
-    window.syncAuditButtonVisibility();
-})();
-
-document.addEventListener('change', (e) => {
-    if (e.target && e.target.id === 'kmlLayerSelect') {
-        setTimeout(() => window.syncAuditButtonVisibility(), 100);
-    }
-});
+    
 
 // =========================================================
 // 5-3. 彈窗 UI 介面與照片預覽 (採用原生 File Input 機制)
