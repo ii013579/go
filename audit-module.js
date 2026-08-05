@@ -1554,7 +1554,7 @@ window.openAuditEditor = async function(isModifyMode = false) {
             const uploadPromises = res.photos.map(async (photoData, i) => {
                 if (photoData && photoData.startsWith('data:image')) {
                     const photoIndexStr = String(i + 1).padStart(2, '0');
-                    const customStoragePath = `${rootPath}/${kmlLayerName}/${pointKey}_${photoIndexStr}.jpg`;
+                    const customStoragePath = `${STORAGE_ROOT}/${kmlLayerName}/${pointKey}_${photoIndexStr}.jpg`;
                     const ref = firebase.storage().ref().child(customStoragePath);
                     const blob = await (await fetch(photoData)).blob();
                     await ref.put(blob);
