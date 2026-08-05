@@ -653,10 +653,12 @@ window.startAddCustomPoint = function(kmlId) {
     if (!btn) {
         btn = document.createElement('button');
         btn.id = 'btn-standalone-add-point';
+        btn.className = 'audit-btn audit-btn-add'; // 建議使用已抽離的 CSS class
         btn.innerHTML = '➕ 新增點位';
         document.body.appendChild(btn);
     }
 
+    // 💡 預設強制隱藏 (display: none)，交由 syncAuditButtonVisibility 動態控制
     btn.setAttribute('style', `
         position: fixed !important;
         bottom: 20px !important;
@@ -671,7 +673,7 @@ window.startAddCustomPoint = function(kmlId) {
         font-size: 15px !important;
         box-shadow: 0 3px 10px rgba(0,0,0,0.3) !important;
         cursor: pointer !important;
-        display: inline-flex !important;
+        display: none !important;
         align-items: center !important;
         justify-content: center !important;
         gap: 6px !important;
@@ -686,6 +688,11 @@ window.startAddCustomPoint = function(kmlId) {
             window.startAddCustomPoint();
         }
     };
+
+    // 💡 掛載後立即主動同步一次顯示狀態
+    if (typeof window.syncAuditButtonVisibility === 'function') {
+        window.syncAuditButtonVisibility();
+    }
 })();
 
 // =========================================================
