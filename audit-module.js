@@ -13,353 +13,219 @@
     const APP_PATH = 'artifacts/kmldata-d22fb/public/data/kmlLayers';
     const STORAGE_ROOT = 'kmldata-d22fb/storage';
 
-// =========================================================
-// 0. 權限防護與全域狀態控管
-// =========================================================
-
-function getUserRole() {
-    return window.currentUserRole || 
-           window.userRole || 
-           localStorage.getItem('userRole') || 
-           sessionStorage.getItem('userRole') || 
-           'guest';
-}
-
-function checkHasAuditPermission() {
-    const role = getUserRole().toLowerCase().trim();
-    return role !== 'guest' && role !== 'unapproved';
-}
-
-function canSeeAuditColors() {
-    const role = getUserRole().toLowerCase().trim();
-    return ['owner', 'editor', 'user'].includes(role);
-}
-
-// 判斷當前圖層與權限是否允許「新增/清查」操作
-window.canUserAddPoint = function(kmlId) {
-    const targetKmlId = kmlId || window.currentActiveKmlId || window.mapNamespace?.currentKmlLayerId;
-    if (!targetKmlId) return false;
-
-    const hasPermission = checkHasAuditPermission();
-    if (!hasPermission) return false;
-
-    const isAuditingEnabled = !!(window.globalAuditConfigs?.[targetKmlId]?.isAuditing);
-    return isAuditingEnabled;
-};
-
-// 全域顯隱同步（控制右下角懸浮按鈕與底部面板）
-window.syncAuditButtonVisibility = function() {
-    const currentKmlId = window.currentActiveKmlId || window.mapNamespace?.currentKmlLayerId;
-    const canShow = window.canUserAddPoint(currentKmlId);
-
-    // 控制右下角「新增點位」懸浮按鈕
-    const standaloneBtn = document.getElementById('btn-standalone-add-point');
-    if (standaloneBtn) {
-        standaloneBtn.style.setProperty('display', canShow ? 'inline-flex' : 'none', 'important');
+    // ---------------------------------------------------------
+    // 0. 權限防護與安全轉義機制
+    // ---------------------------------------------------------
+    function getUserRole() {
+        return window.currentUserRole || 
+               window.userRole || 
+               localStorage.getItem('userRole') || 
+               sessionStorage.getItem('userRole') || 
+               'guest';
     }
 
-    // 控制底部面板
-    if (typeof bottomControl !== 'undefined' && bottomControl && bottomControl._container) {
-        if (!canShow) {
+    function checkHasAuditPermission() {
+        const role = getUserRole().toLowerCase().trim();
+        return role !== 'guest' && role !== 'unapproved';
+    }
+
+    function canSeeAuditColors() {
+        const role = getUserRole().toLowerCase().trim();
+        return ['owner', 'editor', 'user'].includes(role);
+    }
+
+    function escapeHtml(str) {
+        if (!str) return '';
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    // ---------------------------------------------------------
+    // 1. 樣式攔截器與強力重繪機制
+    // ---------------------------------------------------------
+    const originalAddLayers = window.addGeoJsonLayers;
+    window.addGeoJsonLayers = function(features) {
+        const ns = window.mapNamespace;
+        const kmlId = ns?.currentKmlLayerId;
+
+        if (kmlId && Array.isArray(features)) {
+            const config = window.globalAuditConfigs[kmlId];
+            const records = window.auditLayersState[kmlId] || {};
+
+            features.forEach(f => {
+                if (!f.properties) f.properties = {};
+                f.properties.kmlId = kmlId;
+                
+                const pointKey = f.properties.name || f.properties.title || f.properties.id || f.id || "未知點位";
+                f.properties.auditPointKey = pointKey; 
+
+                if (config && config.isAuditing === true && canSeeAuditColors()) {
+                    const record = records[pointKey];
+                    if (record) {
+                        f.properties.auditStatus = record.deviceStatus || "正常";
+                        f.properties.auditNote = record.note;
+                        f.properties.photos = record.photos || [];
+                        f.properties.isAudited = true;
+                        f.properties.fillColor = "#FCD770"; // 粉紅色 (已清查)
+                        f.properties.radius = 8;
+                    } else {
+                        f.properties.isAudited = false;
+                        f.properties.auditStatus = null;
+                        f.properties.fillColor = "#2A00D2"; // 藍色 (未清查)
+                        f.properties.radius = 8;
+                    }
+                    f.properties.color = "#ffffff";
+                    f.properties.fillOpacity = 0.85;
+                } else {
+                    f.properties.fillColor = "#e74c3c"; // 紅色 (預設)
+                    f.properties.radius = 8;
+                    f.properties.isAudited = false;
+                    f.properties.fillOpacity = 0.85;
+                    delete f.properties.auditStatus;
+                }
+            });
+        }
+        if (originalAddLayers) return originalAddLayers.apply(this, arguments);
+    };
+
+    function forceMapRefresh() {
+        const ns = window.mapNamespace;
+        const kmlId = ns?.currentKmlLayerId;
+        if (!ns?.map || !kmlId) return;
+
+        const records = window.auditLayersState[kmlId] || {};
+        const showAuditMode = window.globalAuditConfigs[kmlId]?.isAuditing && canSeeAuditColors();
+
+        ns.map.eachLayer(function(layer) {
+            if (layer.feature && layer.feature.properties) {
+                const props = layer.feature.properties;
+                const pointKey = props.name || props.title || props.id || "未知點位";
+                
+                if (showAuditMode) {
+                    const record = records[pointKey];
+                    if (record) {
+                        props.isAudited = true;
+                        props.auditStatus = record.deviceStatus || "正常";
+                        props.photos = record.photos || [];
+                        props.auditNote = record.note;
+
+                        if (typeof layer.setStyle === 'function') {
+                            layer.setStyle({
+                                fillColor: "#ff85c0",
+                                color: "#ffffff",
+                                weight: 2,
+                                fillOpacity: 0.9,
+                                radius: 10
+                            });
+                        }
+                    } else {
+                        props.isAudited = false;
+                        if (typeof layer.setStyle === 'function') {
+                            layer.setStyle({
+                                fillColor: "#3498db",
+                                color: "#ffffff",
+                                weight: 2,
+                                fillOpacity: 0.9,
+                                radius: 10
+                            });
+                        }
+                    }
+                } else {
+                    if (typeof layer.setStyle === 'function') {
+                        layer.setStyle({
+                            fillColor: "#e74c3c",
+                            color: "#ffffff",
+                            weight: 1.5,
+                            fillOpacity: 0.85,
+                            radius: 8
+                        });
+                    }
+                }
+            }
+        });
+
+        if (window.addGeoJsonLayers && ns.allKmlFeatures) {
+            window.addGeoJsonLayers(ns.allKmlFeatures);
+        }
+    }
+
+    // ---------------------------------------------------------
+    // 2. 底部控制按鈕面板
+    // ---------------------------------------------------------
+    function updateBottomBtnState() {
+        if (!bottomControl || !bottomControl._container) return;
+
+        if (!checkHasAuditPermission() || !canSeeAuditColors()) {
+            bottomControl._container.style.display = 'none';
+            return;
+        }
+
+        const active = window.currentSelectedPoint;
+        const kmlId = window.mapNamespace?.currentKmlLayerId;
+        const config = window.globalAuditConfigs[kmlId];
+
+        if (active && config && config.isAuditing === true) {
+            const layerProps = active.feature?.properties || active.properties || {};
+            const pointKey = layerProps.name || layerProps.title || layerProps.id || "未知點位";
+            const safePointKey = escapeHtml(pointKey);
+            
+            const currentRecords = window.auditLayersState[kmlId] || {};
+            const isAudited = currentRecords[pointKey] !== undefined;
+
+            // 💡 統一膠囊按鈕通用 Style（防黑框干擾、統一尺寸 shape、保留前景背景色）
+            const btnBaseStyle = `
+                color: white; 
+                border: none; 
+                padding: 8px 20px; 
+                border-radius: 25px; 
+                font-weight: bold; 
+                font-size: 15px; 
+                box-shadow: 0 3px 10px rgba(0,0,0,0.3); 
+                cursor: pointer;
+                outline: none;
+                line-height: 1.4;
+            `;
+
+            let btnHtml = '';
+            if (isAudited) {
+                btnHtml = `
+                    <button onclick="window.viewAuditDetailOnly('${safePointKey}')" 
+                            style="background: #e91e63; ${btnBaseStyle}">
+                        查看
+                    </button>
+                    <button onclick="window.openAuditEditor(true)" 
+                            style="background: #f39c12; ${btnBaseStyle}">
+                        修改
+                    </button>
+                `;
+            } else {
+                btnHtml = `
+                    <button onclick="window.openAuditEditor(false)" 
+                            style="background: #2ecc71; ${btnBaseStyle}">
+                        清查點位
+                    </button>
+                `;
+            }
+
+            bottomControl._container.style.display = 'block';
+            // 💡 移除黑色半透明背景 (rgba(0,0,0,0.6)) 與毛玻璃效果，改為透明容器
+            bottomControl._container.innerHTML = `
+                <div style="text-align: center; pointer-events: auto; display: flex; gap: 10px; justify-content: center; background: transparent; padding: 0;">
+                    ${btnHtml}
+                </div>`;
+        } else {
             bottomControl._container.style.display = 'none';
         }
     }
 
-    return canShow;
-};
-
-
-// =========================================================
-// 1. 樣式攔截器與強力重繪機制 (解決 ReferenceError)
-// =========================================================
-
-window.forceMapRefresh = function forceMapRefresh() {
-    const ns = window.mapNamespace;
-    const kmlId = ns?.currentKmlLayerId;
-    if (!ns?.map || !kmlId) return;
-
-    const records = window.auditLayersState?.[kmlId] || {};
-    const showAuditMode = window.globalAuditConfigs?.[kmlId]?.isAuditing && canSeeAuditColors();
-
-    ns.map.eachLayer(function(layer) {
-        if (layer.feature && layer.feature.properties) {
-            const props = layer.feature.properties;
-            const pointKey = props.auditPointKey || props.name || props.title || props.id || "未知點位";
-            
-            if (showAuditMode) {
-                const record = records[pointKey];
-                if (record) {
-                    props.isAudited = true;
-                    props.auditStatus = record.deviceStatus || "正常";
-                    props.photos = record.photos || [];
-                    props.auditNote = record.note;
-
-                    if (typeof layer.setStyle === 'function') {
-                        layer.setStyle({
-                            fillColor: "#FCD770",
-                            color: "#ffffff",
-                            weight: 2,
-                            fillOpacity: 0.9,
-                            radius: 10
-                        });
-                    }
-                } else {
-                    props.isAudited = false;
-                    if (typeof layer.setStyle === 'function') {
-                        layer.setStyle({
-                            fillColor: "#2A00D2",
-                            color: "#ffffff",
-                            weight: 2,
-                            fillOpacity: 0.9,
-                            radius: 10
-                        });
-                    }
-                }
-            } else {
-                if (typeof layer.setStyle === 'function') {
-                    layer.setStyle({
-                        fillColor: "#e74c3c",
-                        color: "#ffffff",
-                        weight: 1.5,
-                        fillOpacity: 0.85,
-                        radius: 8
-                    });
-                }
-            }
-        }
+    window.addEventListener('click', () => { 
+        clearTimeout(clickDebounceTimer);
+        clickDebounceTimer = setTimeout(updateBottomBtnState, 150); 
     });
-
-    if (window.addGeoJsonLayers && ns.allKmlFeatures) {
-        window.addGeoJsonLayers(ns.allKmlFeatures);
-    }
-
-    if (typeof window.syncAuditButtonVisibility === 'function') {
-        window.syncAuditButtonVisibility();
-    }
-};
-
-
-// =========================================================
-// 2. 統一按鈕建立工廠 (Unified Button Factory)
-// =========================================================
-
-window.createUnifiedAuditButton = function(text, btnTypeClass, onClickHandler) {
-    const btn = document.createElement('button');
-    btn.className = `audit-btn ${btnTypeClass}`;
-    btn.innerHTML = text;
-    btn.onclick = (e) => {
-        e.stopPropagation();
-        if (typeof onClickHandler === 'function') onClickHandler(e);
-    };
-    return btn;
-};
-
-
-// =========================================================
-// 3. 動態渲染底部選單 UI（查看、修改、清查點位、新增點位、刪除）
-// =========================================================
-
-window.updateAuditBottomMenuUI = function(mode, extraData) {
-    if (typeof bottomControl === 'undefined' || !bottomControl || !bottomControl._container) return;
-
-    const container = bottomControl._container;
-
-    if (!window.syncAuditButtonVisibility()) {
-        container.style.display = 'none';
-        container.innerHTML = '';
-        return;
-    }
-
-    const currentKmlId = window.currentActiveKmlId || window.mapNamespace?.currentKmlLayerId;
-    const props = extraData?.feature?.properties || extraData?.properties || extraData || {};
-    const isCustom = !!(props.isCustomPoint || extraData?.isCustomPoint);
-
-    container.innerHTML = '';
-    container.style.display = 'flex';
-
-    const barContainer = document.createElement('div');
-    barContainer.className = 'audit-bottom-bar';
-
-    if (mode === 'VIEW_EDIT') {
-        const viewBtn = window.createUnifiedAuditButton('查看', 'audit-btn-view', () => {
-            if (typeof window.openAuditDetailModal === 'function') {
-                window.openAuditDetailModal(extraData);
-            }
-        });
-        barContainer.appendChild(viewBtn);
-
-        const editBtn = window.createUnifiedAuditButton('修改', 'audit-btn-edit', () => {
-            if (isCustom) {
-                if (typeof window.openCustomPointModal === 'function') {
-                    const pointKey = props.auditPointKey || props.name || props.title;
-                    const coords = extraData?.geometry?.coordinates || extraData?.feature?.geometry?.coordinates;
-                    const lat = coords ? coords[1] : (props.lat || 0);
-                    const lng = coords ? coords[0] : (props.lng || 0);
-                    const historyRecord = window.auditLayersState?.[currentKmlId]?.[pointKey] || {};
-
-                    window.openCustomPointModal({
-                        isEditMode: true,
-                        oldPointKey: pointKey,
-                        pointKey: pointKey,
-                        status: historyRecord.deviceStatus || props.auditStatus || '新增',
-                        remark: historyRecord.note || props.auditNote || '',
-                        photos: historyRecord.photos || props.photos || [],
-                        lat: lat,
-                        lng: lng
-                    });
-                }
-            } else {
-                if (typeof window.openAuditFormModal === 'function') {
-                    window.openAuditFormModal(extraData);
-                }
-            }
-        });
-        barContainer.appendChild(editBtn);
-
-        if (isCustom) {
-            const delBtn = window.createUnifiedAuditButton('🗑️ 刪除', 'audit-btn-delete', () => {
-                const pointKey = props.auditPointKey || props.name || props.title;
-                const selectEl = document.getElementById('kmlLayerSelect');
-                const rawLayerName = selectEl?.options[selectEl.selectedIndex]?.getAttribute('data-basename') || window.currentActiveKmlName || '預設區域';
-                const layerFolderName = rawLayerName.replace(/\.kml$/i, '').trim();
-
-                if (typeof window.deleteCustomPoint === 'function') {
-                    window.deleteCustomPoint(currentKmlId, pointKey, layerFolderName);
-                }
-            });
-            barContainer.appendChild(delBtn);
-        }
-
-    } else if (mode === 'AUDIT_MAIN') {
-        const auditBtn = window.createUnifiedAuditButton('清查點位', 'audit-btn-audit', () => {
-            if (typeof window.openAuditFormModal === 'function') {
-                window.openAuditFormModal(extraData);
-            }
-        });
-        barContainer.appendChild(auditBtn);
-
-    } else {
-        const addBtn = window.createUnifiedAuditButton('➕ 新增點位', 'audit-btn-add', () => {
-            if (typeof window.startAddCustomPoint === 'function') {
-                window.startAddCustomPoint(currentKmlId);
-            }
-        });
-        barContainer.appendChild(addBtn);
-    }
-
-    container.appendChild(barContainer);
-};
-
-
-// =========================================================
-// 4. 手動新增點位功能 (地圖點擊與座標拾取)
-// =========================================================
-
-let activeAddPointCleanup = null;
-
-window.startAddCustomPoint = function(kmlId) {
-    const targetKmlId = kmlId || window.currentActiveKmlId || window.mapNamespace?.currentKmlLayerId;
-
-    if (!window.canUserAddPoint(targetKmlId)) {
-        Swal.fire('權限不足或未開啟清查', '當前圖層不允許進行新增點位操作！', 'warning');
-        return;
-    }
-
-    const map = window.mapNamespace?.map;
-    if (!map) return;
-
-    if (activeAddPointCleanup) {
-        activeAddPointCleanup();
-    }
-
-    const container = map.getContainer();
-    container.style.cursor = 'crosshair';
-
-    Swal.mixin({
-        toast: true,
-        position: 'top',
-        showConfirmButton: false,
-        timer: 4000,
-        timerProgressBar: true
-    }).fire({ 
-        icon: 'info', 
-        title: '📍 請在地圖上點擊要新增點位的實體位置 (按 ESC 取消)' 
-    });
-
-    const handleMapClick = async function(e) {
-        cleanup();
-        const { lat, lng } = e.latlng;
-        
-        if (typeof window.openCustomPointModal === 'function') {
-            await window.openCustomPointModal({
-                isEditMode: false,
-                kmlId: targetKmlId,
-                lat: lat,
-                lng: lng,
-                status: '新增'
-            });
-        }
-    };
-
-    const handleKeydown = function(e) {
-        if (e.key === 'Escape') {
-            cleanup();
-            Swal.fire({ icon: 'info', title: '已取消新增點位', timer: 1000, showConfirmButton: false });
-        }
-    };
-
-    const cleanup = () => {
-        map.off('click', handleMapClick);
-        document.removeEventListener('keydown', handleKeydown);
-        container.style.cursor = '';
-        activeAddPointCleanup = null;
-    };
-
-    activeAddPointCleanup = cleanup;
-
-    map.on('click', handleMapClick);
-    document.addEventListener('keydown', handleKeydown);
-};
-
-
-// =========================================================
-// 5. 右下角獨立懸浮「新增點位」按鈕與事件綁定
-// =========================================================
-
-(function renderStandaloneAddButton() {
-    let btn = document.getElementById('btn-standalone-add-point');
-    if (!btn) {
-        btn = document.createElement('button');
-        btn.id = 'btn-standalone-add-point';
-        btn.className = 'audit-btn audit-btn-add';
-        btn.innerHTML = '➕ 新增點位';
-        document.body.appendChild(btn);
-    }
-
-    btn.onclick = function(e) {
-        e.stopPropagation();
-        const currentKmlId = window.currentActiveKmlId || window.mapNamespace?.currentKmlLayerId;
-
-        if (window.canUserAddPoint(currentKmlId)) {
-            if (typeof window.startAddCustomPoint === 'function') {
-                window.startAddCustomPoint(currentKmlId);
-            }
-        } else {
-            Swal.fire('權限不足或未開啟清查', '當前圖層不允許進行新增點位操作！', 'warning');
-        }
-    };
-
-    window.syncAuditButtonVisibility();
-})();
-
-document.addEventListener('change', (e) => {
-    if (e.target && e.target.id === 'kmlLayerSelect') {
-        setTimeout(() => window.syncAuditButtonVisibility(), 100);
-    }
-});
-
-
-
 
     // ---------------------------------------------------------
     // 3. CSV 總表生成 (新增經緯度欄位)
@@ -657,7 +523,149 @@ document.addEventListener('change', (e) => {
             });
         }
     };
-    
+       
+// =========================================================
+// 5.1 獨立區段：手動新增點位功能 & 底部按鈕 UI 渲染
+// =========================================================
+
+// 安全轉義字串 (防止 XSS)
+function safeEscape(str) {
+    if (str === null || str === undefined) return '';
+    if (typeof str === 'number' || typeof str === 'boolean') return String(str);
+    if (typeof str !== 'string') {
+        try {
+            return JSON.stringify(str); // 若傳入物件，轉成字串避免遞迴呼叫
+        } catch (e) {
+            return '';
+        }
+    }
+    return str
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
+// 確保全域有 escapeHtml 可呼叫
+if (typeof window.escapeHtml !== 'function') {
+    window.escapeHtml = safeEscape;
+}
+
+// 暫存挑選模式的清理函式，防止重複觸發殘留
+let activeAddPointCleanup = null;
+
+/**
+ * 1. 觸發挑選位置模式 (點擊「新增點位」按鈕)
+ */
+window.startAddCustomPoint = function(kmlId) {
+    if (typeof checkHasAuditPermission === 'function' && !checkHasAuditPermission()) {
+        Swal.fire('權限不足', '您的帳號角色不允許新增點位！', 'warning');
+        return;
+    }
+
+    const targetKmlId = kmlId || window.currentActiveKmlId || window.mapNamespace?.currentKmlLayerId;
+    if (!targetKmlId) {
+        Swal.fire('提示', '請先從選單開啟或選擇一個目標圖層再進行新增！', 'info');
+        return;
+    }
+
+    const map = window.mapNamespace?.map;
+    if (!map) return;
+
+    // 若先前已在挑選模式，先清理舊事件
+    if (activeAddPointCleanup) {
+        activeAddPointCleanup();
+    }
+
+    // 修改滑鼠游標為十字準星
+    const container = map.getContainer();
+    container.style.cursor = 'crosshair';
+
+    // 提示 Toast
+    Swal.mixin({
+        toast: true,
+        position: 'top',
+        showConfirmButton: false,
+        timer: 4000,
+        timerProgressBar: true
+    }).fire({ 
+        icon: 'info', 
+        title: '📍 請在地圖上點擊要新增點位的實體位置 (按 ESC 取消)' 
+    });
+
+    // 定義點擊處理函式
+    const handleMapClick = async function(e) {
+        cleanup();
+        const { lat, lng } = e.latlng;
+        await window.openAddPointModal(targetKmlId, lat, lng);
+    };
+
+    // 支援 ESC 鍵取消選擇模式
+    const handleKeydown = function(e) {
+        if (e.key === 'Escape') {
+            cleanup();
+            Swal.fire({ icon: 'info', title: '已取消新增點位', timer: 1000, showConfirmButton: false });
+        }
+    };
+
+    // 定義清理作業
+    const cleanup = () => {
+        map.off('click', handleMapClick);
+        document.removeEventListener('keydown', handleKeydown);
+        container.style.cursor = '';
+        activeAddPointCleanup = null;
+    };
+
+    activeAddPointCleanup = cleanup;
+
+    // 綁定事件 (使用 on 搭配 cleanup 確保可隨時取消)
+    map.on('click', handleMapClick);
+    document.addEventListener('keydown', handleKeydown);
+};
+
+// =========================================================
+// 5-2. 動態渲染獨立「新增點位」膠囊按鈕（固定於右下角）
+// =========================================================
+(function renderStandaloneAddButton() {
+    let btn = document.getElementById('btn-standalone-add-point');
+    if (!btn) {
+        btn = document.createElement('button');
+        btn.id = 'btn-standalone-add-point';
+        btn.innerHTML = '➕ 新增點位';
+        document.body.appendChild(btn);
+    }
+
+    btn.setAttribute('style', `
+        position: fixed !important;
+        bottom: 20px !important;
+        right: 15px !important;
+        z-index: 4000 !important;
+        background-color: #2ecc71 !important;
+        color: #ffffff !important;
+        border: none !important;
+        padding: 8px 20px !important;
+        border-radius: 25px !important;
+        font-weight: bold !important;
+        font-size: 15px !important;
+        box-shadow: 0 3px 10px rgba(0,0,0,0.3) !important;
+        cursor: pointer !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        gap: 6px !important;
+        outline: none !important;
+        line-height: 1.4 !important;
+        white-space: nowrap !important;
+    `);
+
+    btn.onclick = function(e) {
+        e.stopPropagation();
+        if (typeof window.startAddCustomPoint === 'function') {
+            window.startAddCustomPoint();
+        }
+    };
+})();
 
 // =========================================================
 // 5-3. 彈窗 UI 介面與照片預覽 (採用原生 File Input 機制)
@@ -1163,37 +1171,15 @@ window.updateAuditBottomMenuUI = function(mode, extraData) {
     const container = bottomControl._container;
     container.innerHTML = ''; // 清空內容
 
-    // 取得當前圖層 ID
-    const currentKmlId = window.currentActiveKmlId || window.mapNamespace?.currentKmlLayerId;
-
-    // 🔒 權限檢查邏輯
-    const userRole = (window.currentUserRole || window.userRole || localStorage.getItem('userRole') || 'guest').toLowerCase().trim();
-    const hasPermission = typeof checkHasAuditPermission === 'function' 
-        ? checkHasAuditPermission() 
-        : (userRole !== 'guest' && userRole !== 'unapproved');
-
-    // 🔒 圖層清查狀態檢查
-    const isAuditingEnabled = !!(window.globalAuditConfigs?.[currentKmlId]?.isAuditing);
-
-    // ⛔ 隱藏條件：無圖層 ID、無權限、或該圖層未開啟清查功能
-    if (!currentKmlId || !hasPermission || !isAuditingEnabled) {
+    const currentKmlId = window.currentActiveKmlId;
+    if (!currentKmlId) {
         container.style.display = 'none';
-
-        // 同步隱藏獨立懸浮的新增按鈕（若有使用）
-        const standaloneAddBtn = document.getElementById('btn-standalone-add-point');
-        if (standaloneAddBtn) standaloneAddBtn.style.display = 'none';
-
         return;
     }
 
-    // 通過檢查，顯示選單容器
     container.style.display = 'flex';
     container.style.alignItems = 'center';
     container.style.gap = '8px';
-
-    // 同步顯示獨立懸浮的新增按鈕（若有使用）
-    const standaloneAddBtn = document.getElementById('btn-standalone-add-point');
-    if (standaloneAddBtn) standaloneAddBtn.style.display = 'inline-flex';
 
     // ✨ 強化判斷：從多種可能的位置解析出 properties 與 isCustomPoint
     const props = extraData?.feature?.properties || extraData?.properties || extraData || {};
@@ -1212,11 +1198,13 @@ window.updateAuditBottomMenuUI = function(mode, extraData) {
         const editBtn = window.createUnifiedAuditButton('修改', '#f39c12', () => {
             if (isCustom) {
                 if (typeof window.openCustomPointModal === 'function') {
+                    // 取得點位有名稱/Key/座標
                     const pointKey = props.auditPointKey || props.name || props.title;
                     const coords = extraData?.geometry?.coordinates || extraData?.feature?.geometry?.coordinates;
                     const lat = coords ? coords[1] : (props.lat || 0);
                     const lng = coords ? coords[0] : (props.lng || 0);
 
+                    // 帶入快取中的完整歷史紀錄（包含舊照片與歷史狀態）
                     const historyRecord = window.auditLayersState?.[currentKmlId]?.[pointKey] || {};
 
                     window.openCustomPointModal({
