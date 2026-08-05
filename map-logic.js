@@ -1,4 +1,4 @@
-﻿// map-logic.js v2.05 (Collision Detection Integrated)
+﻿// map-logic.js v2.06 (Performance Collision Detection Integrated)
 
 (function () {
     'use strict';
@@ -11,7 +11,8 @@
         allKmlFeatures: [],
         currentKmlLayerId: null,
         isLoadingKml: false,
-        updateLabelCollisions: null
+        updateLabelCollisions: null,
+        _collisionRaf: null
     };
     window.mapNamespace = ns;
 
@@ -47,60 +48,72 @@
         window.mapNamespace = ns;
 
         // =========================================================
-        // ✨【核心修改】：動態標籤碰撞檢測邏輯 (Collision Detection)
+        // ✨ 高效能動態標籤碰撞檢測邏輯 (Collision Detection)
         // =========================================================
         const updateLabelCollisions = () => {
             if (!ns.map) return;
 
-            const visibleBoxes = [];
-            const labelMarkers = [];
+            if (ns._collisionRaf) cancelAnimationFrame(ns._collisionRaf);
 
-            // 搜尋所有標籤 Marker
-            ns.markers.eachLayer(layer => {
-                if (layer instanceof L.Marker && layer.options?.icon?.options?.className === 'marker-label') {
-                    labelMarkers.push(layer);
-                }
-            });
+            ns._collisionRaf = requestAnimationFrame(() => {
+                const map = ns.map;
+                const bounds = map.getBounds();
+                const visibleBoxes = [];
+                const candidateItems = [];
 
-            // 優先級排序：被選取高亮的標籤 (label-active) 排前面，確保不被覆蓋
-            labelMarkers.sort((a, b) => {
-                const aActive = a.getElement()?.querySelector('.label-active') ? 1 : 0;
-                const bActive = b.getElement()?.querySelector('.label-active') ? 1 : 0;
-                return bActive - aActive;
-            });
+                // 視窗裁剪 (Viewport Culling)：僅處理畫面內的標籤
+                ns.markers.eachLayer(layer => {
+                    if (layer instanceof L.Marker && layer.options?.icon?.options?.className === 'marker-label') {
+                        const el = layer.getElement();
+                        if (!el) return;
 
-            // AABB 矩形碰撞判定
-            labelMarkers.forEach(marker => {
-                const el = marker.getElement();
-                if (!el) return;
+                        if (bounds.contains(layer.getLatLng())) {
+                            candidateItems.push({ marker: layer, el });
+                        } else {
+                            el.style.visibility = 'hidden';
+                        }
+                    }
+                });
 
-                // 先恢復可見狀態以取得正確的螢幕邊界矩形
-                el.style.visibility = 'visible';
-                const rect = el.getBoundingClientRect();
+                // 權重排序：選取中的標籤 (label-active) 優先顯示
+                candidateItems.sort((a, b) => {
+                    const aActive = a.el.querySelector('.label-active') ? 1 : 0;
+                    const bActive = b.el.querySelector('.label-active') ? 1 : 0;
+                    return bActive - aActive;
+                });
 
-                // 若標籤超出螢幕範圍則直接忽視
-                if (rect.width === 0 || rect.height === 0) return;
+                // 批次讀取 (Batch Read)
+                const targets = [];
+                candidateItems.forEach(item => {
+                    item.el.style.visibility = 'visible';
+                    const rect = item.el.getBoundingClientRect();
+                    if (rect.width > 0 && rect.height > 0) {
+                        targets.push({ el: item.el, rect });
+                    }
+                });
 
-                // 檢查是否與已排入可見清單的矩形重疊
-                const isOverlap = visibleBoxes.some(box => 
-                    rect.left < box.right &&
-                    rect.right > box.left &&
-                    rect.top < box.bottom &&
-                    rect.bottom > box.top
-                );
+                // 批次寫入 (Batch Write)
+                targets.forEach(({ el, rect }) => {
+                    const isOverlap = visibleBoxes.some(box => 
+                        rect.left < box.right &&
+                        rect.right > box.left &&
+                        rect.top < box.bottom &&
+                        rect.bottom > box.top
+                    );
 
-                if (isOverlap) {
-                    el.style.visibility = 'hidden'; // 重疊：隱藏
-                } else {
-                    el.style.visibility = 'visible'; // 無重疊：顯示
-                    visibleBoxes.push(rect); // 註冊邊界
-                }
+                    if (isOverlap) {
+                        el.style.visibility = 'hidden';
+                    } else {
+                        el.style.visibility = 'visible';
+                        visibleBoxes.push(rect);
+                    }
+                });
             });
         };
 
         ns.updateLabelCollisions = updateLabelCollisions;
 
-        // 監聽地圖平移、縮放結束事件觸發碰撞計算
+        // 地圖拖移與縮放結束時觸發碰撞運算
         ns.map.on('moveend zoomend', updateLabelCollisions);
         // =========================================================
         
@@ -372,7 +385,6 @@
             });
             ns.navButtons.clearLayers();
             
-            // 點擊空白處取消高亮後，重新進行碰撞計算
             ns.updateLabelCollisions?.();
         });
     });
@@ -484,7 +496,6 @@
                         window.createNavButton(latlng, name);
                     }
 
-                    // ✨ 選取點位變更高亮狀態後，重新整理碰撞權重
                     ns.updateLabelCollisions?.();
                 });
     
@@ -525,7 +536,6 @@
     
         ns.allKmlFeatures = geojsonFeatures;
 
-        // ✨ 渲染完成後延遲一小段時間讓 DOM 渲染，隨即進行動態碰撞檢測
         setTimeout(() => {
             ns.updateLabelCollisions?.();
         }, 100);
