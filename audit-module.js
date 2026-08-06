@@ -92,12 +92,12 @@
     }
     window.syncAuditButtonVisibility = syncAuditButtonVisibility;
 
-    // ---------------------------------------------------------
-    // 1 樣式配置與色彩算式
+// ---------------------------------------------------------
+    // 1. 樣式算式與常量
     // ---------------------------------------------------------
     const BASE_STYLE = { color: "#ffffff", fillOpacity: 0.85, radius: 8 };
 
-    // 取得點位色彩：未開啟為紅點；開啟清查後，無紀錄為藍點(未清查)，有紀錄為黃點(已清查)
+    // 色彩規則：未開啟清查為紅色(#e74c3c)；開啟清查後，已清查為黃色(#FCD770)，未清查為藍色(#2A00D2)
     function getPointStyle(isAuditMode, hasRecord) {
         if (!isAuditMode) {
             return { ...BASE_STYLE, fillColor: "#e74c3c", weight: 1.5 };
@@ -109,15 +109,17 @@
         };
     }
 
-    // 樣式攔截器
+    // ---------------------------------------------------------
+    // 2. 樣式攔截器
+    // ---------------------------------------------------------
     const originalAddLayers = window.addGeoJsonLayers;
     window.addGeoJsonLayers = function(features) {
         const ns = window.mapNamespace;
         const kmlId = ns?.currentKmlLayerId;
 
         if (kmlId && Array.isArray(features)) {
-            const config = window.globalAuditConfigs[kmlId];
-            const records = window.auditLayersState[kmlId] || {};
+            const config = window.globalAuditConfigs?.[kmlId];
+            const records = window.auditLayersState?.[kmlId] || {};
             const isAuditMode = Boolean(config?.isAuditing === true && canSeeAuditColors());
 
             features.forEach(f => {
@@ -131,6 +133,7 @@
                 const hasRecord = Boolean(record);
                 const style = getPointStyle(isAuditMode, hasRecord);
 
+                // 同步寫入 properties，讓 Leaflet 點擊事件能讀到正確的 fillColor
                 Object.assign(f.properties, style, {
                     isAudited: hasRecord,
                     auditStatus: record ? (record.deviceStatus || "正常") : null,
@@ -144,7 +147,9 @@
         if (originalAddLayers) return originalAddLayers.apply(this, arguments);
     };
 
-    // 地圖重繪
+    // ---------------------------------------------------------
+    // 3. 強力重繪機制
+    // ---------------------------------------------------------
     function forceMapRefresh() {
         const ns = window.mapNamespace;
         const kmlId = ns?.currentKmlLayerId;
@@ -167,9 +172,10 @@
 
             const record = isAuditMode ? records[pointKey] : null;
             const hasRecord = Boolean(record);
-            const newStyle = getPointStyle(isAuditMode, hasRecord);
+            const style = getPointStyle(isAuditMode, hasRecord);
 
-            Object.assign(props, newStyle, {
+            // 核心關鍵：必須同時更新 props 裡面的 fillColor，點擊地圖時才不會讀到舊的紅色！
+            Object.assign(props, style, {
                 isAudited: hasRecord,
                 auditStatus: record ? (record.deviceStatus || record.status || "正常") : props.auditStatus,
                 photos: record?.photos || props.photos || [],
@@ -177,7 +183,7 @@
             });
 
             if (typeof layer.setStyle === 'function') {
-                layer.setStyle(newStyle);
+                layer.setStyle(style);
             }
         });
 
