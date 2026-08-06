@@ -92,8 +92,8 @@
     }
     window.syncAuditButtonVisibility = syncAuditButtonVisibility;
 
-// ---------------------------------------------------------
-    // 1. 樣式算式與常量
+    // ---------------------------------------------------------
+    // 1. 樣式算式與常量 (防錯 key 比對)
     // ---------------------------------------------------------
     const BASE_STYLE = { color: "#ffffff", fillOpacity: 0.85, radius: 8 };
 
@@ -107,6 +107,14 @@
             fillColor: hasRecord ? "#FCD770" : "#2A00D2",
             weight: 2
         };
+    }
+
+    // 安全檢查是否有紀錄 (強轉字串比對，解決型態不符問題)
+    function checkHasRecord(records, pointKey, props) {
+        if (!records) return false;
+        const strKey = String(pointKey);
+        const altKey = String(props?.id || props?.name || props?.title || '');
+        return Boolean(records[strKey] || (altKey && records[altKey]));
     }
 
     // ---------------------------------------------------------
@@ -129,11 +137,11 @@
                 const pointKey = f.properties.name || f.properties.title || f.properties.id || f.id || "未知點位";
                 f.properties.auditPointKey = pointKey;
 
-                const record = isAuditMode ? records[pointKey] : null;
-                const hasRecord = Boolean(record);
+                const hasRecord = isAuditMode ? checkHasRecord(records, pointKey, f.properties) : false;
+                const record = hasRecord ? (records[String(pointKey)] || records[pointKey]) : null;
                 const style = getPointStyle(isAuditMode, hasRecord);
 
-                // 同步寫入 properties，讓 Leaflet 點擊事件能讀到正確的 fillColor
+                // 💡 強制同步寫入 feature.properties，確保 Leaflet 點擊事件能讀取正確色彩
                 Object.assign(f.properties, style, {
                     isAudited: hasRecord,
                     auditStatus: record ? (record.deviceStatus || "正常") : null,
@@ -148,7 +156,7 @@
     };
 
     // ---------------------------------------------------------
-    // 3. 強力重繪機制
+    // 3. 強力重繪機制 (同步修復 Click 與 style)
     // ---------------------------------------------------------
     function forceMapRefresh() {
         const ns = window.mapNamespace;
@@ -165,16 +173,16 @@
             const pointKey = props.name || props.title || props.id || props.auditPointKey || "未知點位";
             const isCustomPoint = props.isCustomPoint || props.auditStatus === "新增" || props.status === "新增" || String(pointKey).startsWith("NEW_");
 
-            if (isCustomPoint && !records[pointKey]) {
+            if (isCustomPoint && !checkHasRecord(records, pointKey, props)) {
                 ns.map.removeLayer(layer);
                 return;
             }
 
-            const record = isAuditMode ? records[pointKey] : null;
-            const hasRecord = Boolean(record);
+            const hasRecord = isAuditMode ? checkHasRecord(records, pointKey, props) : false;
+            const record = hasRecord ? (records[String(pointKey)] || records[pointKey]) : null;
             const style = getPointStyle(isAuditMode, hasRecord);
 
-            // 核心關鍵：必須同時更新 props 裡面的 fillColor，點擊地圖時才不會讀到舊的紅色！
+            // 💡 關鍵：更新 properties 的同時，直接重新寫入 feature.properties
             Object.assign(props, style, {
                 isAudited: hasRecord,
                 auditStatus: record ? (record.deviceStatus || record.status || "正常") : props.auditStatus,
