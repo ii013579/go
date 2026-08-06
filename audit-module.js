@@ -97,12 +97,15 @@
     // ---------------------------------------------------------
     const BASE_STYLE = { color: "#ffffff", fillOpacity: 0.85, radius: 8 };
 
-    function getPointStyle(isAuditing, canSee, hasRecord) {
-        const active = Boolean(isAuditing && canSee);
+    // 取得點位色彩：預設紅色，清查模式下依紀錄判定黃/藍
+    function getPointStyle(isAuditMode, hasRecord) {
+        if (!isAuditMode) {
+            return { ...BASE_STYLE, fillColor: "#e74c3c", weight: 1.5 };
+        }
         return {
             ...BASE_STYLE,
-            fillColor: !active ? "#e74c3c" : (hasRecord ? "#FCD770" : "#2A00D2"),
-            weight: !active ? 1.5 : 2
+            fillColor: hasRecord ? "#FCD770" : "#2A00D2",
+            weight: 2
         };
     }
 
@@ -115,8 +118,8 @@
         if (kmlId && Array.isArray(features)) {
             const config = window.globalAuditConfigs[kmlId];
             const records = window.auditLayersState[kmlId] || {};
-            const canSee = canSeeAuditColors();
-            const isAuditing = config?.isAuditing === true;
+            // 💡 完全還原舊版條件：明確計算出目前是否處於清查顯色模式
+            const isAuditMode = Boolean(config?.isAuditing === true && canSeeAuditColors());
 
             features.forEach(f => {
                 if (!f.properties) f.properties = {};
@@ -125,8 +128,8 @@
                 const pointKey = f.properties.name || f.properties.title || f.properties.id || f.id || "未知點位";
                 f.properties.auditPointKey = pointKey;
 
-                const record = (isAuditing && canSee) ? records[pointKey] : null;
-                const style = getPointStyle(isAuditing, canSee, !!record);
+                const record = isAuditMode ? records[pointKey] : null;
+                const style = getPointStyle(isAuditMode, !!record);
 
                 Object.assign(f.properties, style, {
                     isAudited: !!record,
@@ -135,7 +138,7 @@
                     photos: record?.photos || []
                 });
 
-                if (!isAuditing) delete f.properties.auditStatus;
+                if (!isAuditMode) delete f.properties.auditStatus;
             });
         }
         if (originalAddLayers) return originalAddLayers.apply(this, arguments);
@@ -148,8 +151,8 @@
         if (!ns?.map || !kmlId) return;
 
         const records = window.auditLayersState?.[kmlId] || {};
-        const isAuditing = !!window.globalAuditConfigs?.[kmlId]?.isAuditing;
-        const canSee = canSeeAuditColors();
+        // 💡 完全還原舊版條件：即時驗證目前圖層狀態
+        const isAuditMode = Boolean(window.globalAuditConfigs?.[kmlId]?.isAuditing && canSeeAuditColors());
 
         ns.map.eachLayer(layer => {
             const props = layer.feature?.properties;
@@ -163,8 +166,8 @@
                 return;
             }
 
-            const record = (isAuditing && canSee) ? records[pointKey] : null;
-            const newStyle = getPointStyle(isAuditing, canSee, !!record);
+            const record = isAuditMode ? records[pointKey] : null;
+            const newStyle = getPointStyle(isAuditMode, !!record);
 
             Object.assign(props, newStyle, {
                 isAudited: !!record,
