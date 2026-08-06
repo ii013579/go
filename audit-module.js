@@ -906,6 +906,36 @@
             if (typeof generateLayerCsvReport === 'function') {
                 await generateLayerCsvReport(kmlId, layerFolderName, targetPhotosCount);
             }
+
+            // 💡【即時繪製】建立 Marker 並立即顯示在地圖上
+            if (ns && ns.map && typeof L !== 'undefined') {
+                const currentKmlGroup = ns.geoJsonLayers?.[kmlId] || ns.kmlLayerCache?.[kmlId];
+                
+                const newMarker = L.circleMarker([numLat, numLng], {
+                    radius: 8,
+                    fillColor: "#FCD770",
+                    color: "#ffffff",
+                    weight: 2,
+                    opacity: 1,
+                    fillOpacity: 0.85
+                });
+
+                newMarker.feature = newGeoJsonFeature;
+                newMarker.on('click', function(e) {
+                    L.DomEvent.stopPropagation(e);
+                    window.currentSelectedPoint = newMarker;
+                    if (typeof updateBottomBtnState === 'function') {
+                        updateBottomBtnState();
+                    }
+                });
+
+                if (currentKmlGroup && typeof currentKmlGroup.addLayer === 'function') {
+                    currentKmlGroup.addLayer(newMarker);
+                } else {
+                    newMarker.addTo(ns.map);
+                }
+            }
+
             Swal.fire({
                 icon: 'success',
                 title: isEditMode ? '修改點位成功' : '新增清查點位成功',
