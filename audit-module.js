@@ -97,7 +97,7 @@
     // ---------------------------------------------------------
     const BASE_STYLE = { color: "#ffffff", fillOpacity: 0.85, radius: 8 };
 
-    // 取得點位色彩：預設紅色，清查模式下依紀錄判定黃/藍
+    // 取得點位色彩：未開啟為紅點；開啟清查後，無紀錄為藍點(未清查)，有紀錄為黃點(已清查)
     function getPointStyle(isAuditMode, hasRecord) {
         if (!isAuditMode) {
             return { ...BASE_STYLE, fillColor: "#e74c3c", weight: 1.5 };
@@ -118,7 +118,6 @@
         if (kmlId && Array.isArray(features)) {
             const config = window.globalAuditConfigs[kmlId];
             const records = window.auditLayersState[kmlId] || {};
-            // 💡 完全還原舊版條件：明確計算出目前是否處於清查顯色模式
             const isAuditMode = Boolean(config?.isAuditing === true && canSeeAuditColors());
 
             features.forEach(f => {
@@ -129,10 +128,11 @@
                 f.properties.auditPointKey = pointKey;
 
                 const record = isAuditMode ? records[pointKey] : null;
-                const style = getPointStyle(isAuditMode, !!record);
+                const hasRecord = Boolean(record);
+                const style = getPointStyle(isAuditMode, hasRecord);
 
                 Object.assign(f.properties, style, {
-                    isAudited: !!record,
+                    isAudited: hasRecord,
                     auditStatus: record ? (record.deviceStatus || "正常") : null,
                     auditNote: record?.note,
                     photos: record?.photos || []
@@ -151,7 +151,6 @@
         if (!ns?.map || !kmlId) return;
 
         const records = window.auditLayersState?.[kmlId] || {};
-        // 💡 完全還原舊版條件：即時驗證目前圖層狀態
         const isAuditMode = Boolean(window.globalAuditConfigs?.[kmlId]?.isAuditing && canSeeAuditColors());
 
         ns.map.eachLayer(layer => {
@@ -167,10 +166,11 @@
             }
 
             const record = isAuditMode ? records[pointKey] : null;
-            const newStyle = getPointStyle(isAuditMode, !!record);
+            const hasRecord = Boolean(record);
+            const newStyle = getPointStyle(isAuditMode, hasRecord);
 
             Object.assign(props, newStyle, {
-                isAudited: !!record,
+                isAudited: hasRecord,
                 auditStatus: record ? (record.deviceStatus || record.status || "正常") : props.auditStatus,
                 photos: record?.photos || props.photos || [],
                 auditNote: record ? (record.note || record.remark) : props.auditNote
