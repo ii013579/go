@@ -92,9 +92,15 @@
     }
     window.syncAuditButtonVisibility = syncAuditButtonVisibility;
 
-    // ---------------------------------------------------------
-    // 1. 樣式攔截器與重繪機制 (已修正重複繪製問題)
-    // ---------------------------------------------------------
+// 樣式配置與色彩算式
+    const BASE_STYLE = { color: "#ffffff", fillOpacity: 0.85, radius: 8 };
+
+    function getPointStyle(isAuditing, canSee, hasRecord) {
+        if (!isAuditing || !canSee) return { ...BASE_STYLE, fillColor: "#e74c3c", weight: 1.5 };
+        return { ...BASE_STYLE, fillColor: hasRecord ? "#FCD770" : "#2A00D2", weight: 2 };
+    }
+
+    // 樣式攔截器
     const originalAddLayers = window.addGeoJsonLayers;
     window.addGeoJsonLayers = function(features) {
         const ns = window.mapNamespace;
@@ -103,103 +109,64 @@
         if (kmlId && Array.isArray(features)) {
             const config = window.globalAuditConfigs[kmlId];
             const records = window.auditLayersState[kmlId] || {};
+            const isAuditing = config?.isAuditing === true && canSeeAuditColors();
 
             features.forEach(f => {
                 if (!f.properties) f.properties = {};
                 f.properties.kmlId = kmlId;
                 
                 const pointKey = f.properties.name || f.properties.title || f.properties.id || f.id || "未知點位";
-                f.properties.auditPointKey = pointKey; 
+                f.properties.auditPointKey = pointKey;
 
-                if (config && config.isAuditing === true && canSeeAuditColors()) {
-                    const record = records[pointKey];
-                    if (record) {
-                        f.properties.auditStatus = record.deviceStatus || "正常";
-                        f.properties.auditNote = record.note;
-                        f.properties.photos = record.photos || [];
-                        f.properties.isAudited = true;
-                        f.properties.fillColor = "#FCD770";
-                        f.properties.radius = 8;
-                    } else {
-                        f.properties.isAudited = false;
-                        f.properties.auditStatus = null;
-                        f.properties.fillColor = "#2A00D2";
-                        f.properties.radius = 8;
-                    }
-                    f.properties.color = "#ffffff";
-                    f.properties.fillOpacity = 0.85;
-                } else {
-                    f.properties.fillColor = "#e74c3c";
-                    f.properties.radius = 8;
-                    f.properties.isAudited = false;
-                    f.properties.fillOpacity = 0.85;
-                    delete f.properties.auditStatus;
-                }
+                const record = isAuditing ? records[pointKey] : null;
+                const style = getPointStyle(config?.isAuditing, canSeeAuditColors(), !!record);
+
+                Object.assign(f.properties, style, {
+                    isAudited: !!record,
+                    auditStatus: record ? (record.deviceStatus || "正常") : null,
+                    auditNote: record?.note,
+                    photos: record?.photos || []
+                });
+
+                if (!isAuditing) delete f.properties.auditStatus;
             });
         }
         if (originalAddLayers) return originalAddLayers.apply(this, arguments);
     };
 
+    // 地圖重繪
     function forceMapRefresh() {
         const ns = window.mapNamespace;
         const kmlId = ns?.currentKmlLayerId;
         if (!ns?.map || !kmlId) return;
 
         const records = window.auditLayersState?.[kmlId] || {};
-        const showAuditMode = window.globalAuditConfigs?.[kmlId]?.isAuditing && canSeeAuditColors();
+        const isAuditing = window.globalAuditConfigs?.[kmlId]?.isAuditing;
+        const canSee = canSeeAuditColors();
 
-        ns.map.eachLayer(function(layer) {
-            if (layer.feature && layer.feature.properties) {
-                const props = layer.feature.properties;
-                const pointKey = props.name || props.title || props.id || "未知點位";
+        ns.map.eachLayer(layer => {
+            const props = layer.feature?.properties;
+            if (!props) return;
 
-                // 💡【關鍵修復 1】如果這個點位是自訂點位，但在 records 紀錄中已經被刪除了，直接從地圖拔除！
-                const isCustomPoint = props.isCustomPoint || props.auditStatus === "新增" || props.status === "新增";
-                if (isCustomPoint && !records[pointKey]) {
-                    ns.map.removeLayer(layer);
-                    return; // 已刪除的點位直接跳過後續樣式設定
-                }
+            const pointKey = props.name || props.title || props.id || props.auditPointKey || "未知點位";
+            const isCustomPoint = props.isCustomPoint || props.auditStatus === "新增" || props.status === "新增" || String(pointKey).startsWith("NEW_");
 
-                if (showAuditMode) {
-                    const record = records[pointKey];
-                    if (record) {
-                        props.isAudited = true;
-                        props.auditStatus = record.deviceStatus || "正常";
-                        props.photos = record.photos || [];
-                        props.auditNote = record.note;
+            if (isCustomPoint && !records[pointKey]) {
+                ns.map.removeLayer(layer);
+                return;
+            }
 
-                        if (typeof layer.setStyle === 'function') {
-                            layer.setStyle({
-                                fillColor: "#ff85c0",
-                                color: "#ffffff",
-                                weight: 2,
-                                fillOpacity: 0.9,
-                                radius: 10
-                            });
-                        }
-                    } else {
-                        props.isAudited = false;
-                        if (typeof layer.setStyle === 'function') {
-                            layer.setStyle({
-                                fillColor: "#3498db",
-                                color: "#ffffff",
-                                weight: 2,
-                                fillOpacity: 0.9,
-                                radius: 10
-                            });
-                        }
-                    }
-                } else {
-                    if (typeof layer.setStyle === 'function') {
-                        layer.setStyle({
-                            fillColor: "#e74c3c",
-                            color: "#ffffff",
-                            weight: 1.5,
-                            fillOpacity: 0.85,
-                            radius: 8
-                        });
-                    }
-                }
+            const record = (isAuditing && canSee) ? records[pointKey] : null;
+
+            Object.assign(props, {
+                isAudited: !!record,
+                auditStatus: record ? (record.deviceStatus || record.status || "正常") : props.auditStatus,
+                photos: record?.photos || props.photos || [],
+                auditNote: record ? (record.note || record.remark) : props.auditNote
+            });
+
+            if (typeof layer.setStyle === 'function') {
+                layer.setStyle(getPointStyle(isAuditing, canSee, !!record));
             }
         });
 
