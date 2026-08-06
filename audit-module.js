@@ -145,14 +145,21 @@
         const kmlId = ns?.currentKmlLayerId;
         if (!ns?.map || !kmlId) return;
 
-        const records = window.auditLayersState[kmlId] || {};
-        const showAuditMode = window.globalAuditConfigs[kmlId]?.isAuditing && canSeeAuditColors();
+        const records = window.auditLayersState?.[kmlId] || {};
+        const showAuditMode = window.globalAuditConfigs?.[kmlId]?.isAuditing && canSeeAuditColors();
 
         ns.map.eachLayer(function(layer) {
             if (layer.feature && layer.feature.properties) {
                 const props = layer.feature.properties;
                 const pointKey = props.name || props.title || props.id || "未知點位";
-                
+
+                // 💡【關鍵修復 1】如果這個點位是自訂點位，但在 records 紀錄中已經被刪除了，直接從地圖拔除！
+                const isCustomPoint = props.isCustomPoint || props.auditStatus === "新增" || props.status === "新增";
+                if (isCustomPoint && !records[pointKey]) {
+                    ns.map.removeLayer(layer);
+                    return; // 已刪除的點位直接跳過後續樣式設定
+                }
+
                 if (showAuditMode) {
                     const record = records[pointKey];
                     if (record) {
@@ -646,7 +653,11 @@
         } = config;
 
         const currentKmlId = config.kmlId || window.currentActiveKmlId || window.mapNamespace?.currentKmlLayerId;
-        const maxPhotos = 2;
+        
+        // 💡 讀取該圖層設定的照片張數 (若無設定則預設為 2 張，與既有點位一致)
+        const layerConfig = window.globalAuditConfigs?.[currentKmlId] || {};
+        const maxPhotos = layerConfig.targetPhotos || 2;
+
         let photoHtml = '';
 
         for (let i = 0; i < maxPhotos; i++) {
@@ -657,15 +668,15 @@
             const tagText = hasExisting ? '已有照片' : '圖庫/拍照';
 
             photoHtml += `
-                <div style="position:relative; margin-bottom:15px; width:80px;">
-                    <div style="border:2px dashed #ccc; height:80px; width:80px; position:relative; display:flex; align-items:center; justify-content:center; background:#fafafa; border-radius:12px; overflow:hidden; cursor:pointer;">
+                <div style="position:relative; margin-bottom:18px;">
+                    <div style="border:2px dashed #ccc; height:85px; position:relative; display:flex; align-items:center; justify-content:center; background:#fafafa; border-radius:8px; overflow:hidden;">
                         <img id="add-prev-${i}" src="${hasExisting ? safeEscape(existingPhoto) : ''}" style="width:100%; height:100%; object-fit:cover; display:${displayImg}; position:absolute; top:0; left:0; z-index:1;">
                         <span id="add-icon-${i}" style="font-size:24px; color:#bbb; display:${displayIcon}; z-index:1;">📷</span>
                         <input type="file" id="add-photo-input-${i}" accept="image/*" capture="environment" onchange="window.handleAddPhotoPreview(this, ${i})" style="position:absolute; width:100%; height:100%; opacity:0; z-index:2; cursor:pointer;" title="現場拍照">
                     </div>
-                    <label for="add-photo-input-${i}" style="position:absolute; left:50%; transform:translateX(-50%); bottom:-10px; z-index:3; background:#555; color:#fff; font-size:11px; padding:2px 8px; border-radius:12px; cursor:pointer; display:flex; align-items:center; gap:4px; box-shadow:0 2px 4px rgba(0,0,0,0.2); white-space:nowrap; border:1px solid #777;">
-                        <span>🖼️</span> <span id="add-tag-text-${i}">${tagText}</span>
-                    </label>
+                    <div id="add-tag-${i}" style="position:absolute; left:50%; transform:translateX(-50%); bottom:-10px; z-index:3; background:#444; color:#fff; font-size:11px; padding:2px 8px; border-radius:10px; display:flex; align-items:center; gap:3px; white-space:nowrap;">
+                        <span>📷</span> <span id="add-tag-text-${i}">${tagText}</span>
+                    </div>
                 </div>`;
         }
 
@@ -694,7 +705,7 @@
                 <label style="display: block; font-size: 15px; font-weight: bold; color: #4a4a4a; margin-bottom: 8px;">
                     現場照片 (需拍 ${maxPhotos} 張) <span style="color: #e74c3c;">*必填</span>
                 </label>
-                <div style="display: flex; gap: 15px;">${photoHtml}</div>
+                <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(95px, 1fr)); gap: 10px;">${photoHtml}</div>
             </div>
             <div style="margin-bottom: 0px;">
                 <label style="display: block; font-size: 15px; font-weight: bold; color: #4a4a4a; margin-bottom: 8px;">
@@ -755,7 +766,7 @@
             await window.submitNewCustomPoint(formValues);
         }
     };
-
+    
     window.openAddPointModal = function(kmlId, lat, lng) {
         return window.openCustomPointModal({ kmlId, lat, lng, isEditMode: false });
     };
@@ -899,10 +910,10 @@
                 .set(structuredData, { merge: true });
 
             const layerFolderName = getCleanLayerName(kmlId, kmlLayerName);
+            const targetPhotosCount = window.globalAuditConfigs?.[kmlId]?.targetPhotos || 2;
             if (typeof generateLayerCsvReport === 'function') {
-                await generateLayerCsvReport(kmlId, layerFolderName, 2);
+                await generateLayerCsvReport(kmlId, layerFolderName, targetPhotosCount);
             }
-
             Swal.fire({
                 icon: 'success',
                 title: isEditMode ? '修改點位成功' : '新增清查點位成功',
@@ -1011,18 +1022,42 @@
             }
 
             const ns = window.mapNamespace;
-            if (ns && Array.isArray(ns.allKmlFeatures)) {
-                ns.allKmlFeatures = ns.allKmlFeatures.filter(f => {
-                    const name = f.properties?.name || f.properties?.title || f.properties?.auditPointKey;
-                    return name !== pointKey;
-                });
+            if (ns) {
+                // 1. 從 GeoJSON 特徵列表中移除該點位
+                if (Array.isArray(ns.allKmlFeatures)) {
+                    ns.allKmlFeatures = ns.allKmlFeatures.filter(f => {
+                        const name = f.properties?.name || f.properties?.title || f.properties?.auditPointKey;
+                        return name !== pointKey;
+                    });
+                }
+
+                // 2. 💡【關鍵修復】從目前渲染在 Leaflet 地圖上的圖層中直接下架並移除 Marker
+                const currentGeoJsonLayer = ns.geoJsonLayers?.[kmlId] || ns.kmlLayerCache?.[kmlId];
+                if (currentGeoJsonLayer && typeof currentGeoJsonLayer.eachLayer === 'function') {
+                    currentGeoJsonLayer.eachLayer(layer => {
+                        const prop = layer.feature?.properties || {};
+                        const layerPointName = prop.name || prop.title || prop.auditPointKey;
+                        if (layerPointName === pointKey) {
+                            if (currentGeoJsonLayer.removeLayer) {
+                                currentGeoJsonLayer.removeLayer(layer);
+                            }
+                            if (ns.map && typeof ns.map.removeLayer === 'function') {
+                                ns.map.removeLayer(layer);
+                            }
+                        }
+                    });
+                }
             }
 
             window.currentSelectedPoint = null;
-            await generateLayerCsvReport(kmlId, targetLayerFolder, 2);
+            
+            // 💡【同步修改】生成 CSV 時使用該圖層正確的照片張數，避免寫死 2 張
+            const targetPhotosCount = config.targetPhotos || 2;
+            await generateLayerCsvReport(kmlId, targetLayerFolder, targetPhotosCount);
 
             Swal.fire({ icon: 'success', title: '已順利刪除點位與照片', timer: 1200, showConfirmButton: false });
 
+            // 重新刷新地圖與按鈕狀態
             forceMapRefresh();
             setTimeout(updateBottomBtnState, 300);
 
