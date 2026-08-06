@@ -1056,18 +1056,24 @@ window.uploadPhotosToStorage = async function(photos, kmlId, pointKey, kmlLayerN
     const storageRef = firebase.storage().ref();
     const safePointKey = String(pointKey).replace(/[/\\?%*:|"<>]/g, '_');
 
-    const uploadPromises = photos.map(async (photoData, index) => {
-        if (!photoData) return '';
-        // 若已經是 HTTP/HTTPS 上傳好的網址，直接傳回
-        if (typeof photoData === 'string' && !photoData.startsWith('data:image')) {
-            return photoData;
-        }
+    const uploadPromises = res.photos.map(async (photoData, i) => {
+                if (photoData && photoData.startsWith('data:image')) {
+                    const photoIndexStr = String(i + 1).padStart(2, '0');
+                    // 💡 統一設定照片上傳位置
+                    const customStoragePath = `${STORAGE_ROOT}/${kmlLayerName}/${pointKey}_${photoIndexStr}.jpg`;
+                    const ref = firebase.storage().ref().child(customStoragePath);
+                    const blob = await (await fetch(photoData)).blob();
+                    await ref.put(blob);
+                    return await ref.getDownloadURL();
+                }
+                return photoData || '';
+            });       }
 
         const photoIndexStr = String(index + 1).padStart(2, '0');
         // 建立完整 Storage 路徑：kmldata-d22fb/storage/{圖層名稱}/{點名}_01.jpg
-        const customStoragePath = `${rootPath}/${targetLayerFolder}/${safePointKey}_${photoIndexStr}.jpg`;
+        const customStoragePath = `${STORAGE_ROOT}/${kmlLayerName}/${safePointKey}_${photoIndexStr}.jpg`;
         const ref = storageRef.child(customStoragePath);
-
+        
         try {
             let blob;
             if (photoData instanceof File || photoData instanceof Blob) {
@@ -1139,10 +1145,10 @@ window.deleteCustomPoint = async function(kmlId, pointKey, kmlLayerName) {
         const possibleFolders = Array.from(new Set([targetLayerFolder, kmlId].filter(Boolean)));
 
         const deletePhotoPromises = [];
-        possibleFolders.forEach(folder => {
             for (let i = 1; i <= maxCheckPhotos; i++) {
                 const photoIndexStr = String(i).padStart(2, '0');
-                const customStoragePath = `${rootPath}/${folder}/${safePointKey}_${photoIndexStr}.jpg`;
+                // 💡 指向同一個 Storage 相片位置進行刪除
+                const customStoragePath = `${STORAGE_ROOT}/${kmlLayerName}/${safePointKey}_${photoIndexStr}.jpg`;
                 deletePhotoPromises.push(
                     storageRef.child(customStoragePath).delete().catch(() => {
                         // 忽略照片不存在的錯誤 (404)
@@ -1346,27 +1352,28 @@ window.openAuditEditor = async function(isModifyMode = false) {
         });
     }
 
-    // 設備狀態設定
+// 設備狀態選項設定
     const currentStatus = isUserCreatedPoint ? '新增' : (historyRecord.deviceStatus || '');
     const currentNote = historyRecord.note || '';
 
-    // 💡 選單樣式：新增點位鎖定為 "新增" (灰底 + disabled)
+    // 取得預設選項
     const layerConfig = window.globalAuditConfigs?.[kmlId] || {};
-    let statusOptions = layerConfig.statusOptions || 
-                          (localStorage.getItem('audit_status_options') ? JSON.parse(localStorage.getItem('audit_status_options')) : ['正常','損壞','遺失']);
-
-    if (!statusOptions.includes('新增')) {
-        statusOptions = ['新增', ...statusOptions];
-    }
+    let rawOptions = layerConfig.statusOptions || 
+                     (localStorage.getItem('audit_status_options') ? JSON.parse(localStorage.getItem('audit_status_options')) : ['正常','損壞','遺失']);
 
     let statusSelectHtml = '';
+    
     if (isUserCreatedPoint) {
+        // 💡 1. 新增點位：固定鎖定為 "新增" 選項
         statusSelectHtml = `
             <select id="swal-status" class="swal2-input" disabled style="width:100%; margin:6px 0 16px 0; background-color:#e9ecef; color:#495057; cursor:not-allowed;">
                 <option value="新增" selected>新增</option>
             </select>`;
     } else {
-        const statusOptionsHtml = statusOptions.map(opt => 
+        // 💡 2. 既有點位：排除 "新增" 選項
+        const filteredOptions = rawOptions.filter(opt => opt !== '新增');
+
+        const statusOptionsHtml = filteredOptions.map(opt => 
             `<option value="${opt}" ${currentStatus === opt ? 'selected' : ''}>${opt}</option>`
         ).join('');
         
