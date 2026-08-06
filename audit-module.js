@@ -1415,15 +1415,28 @@
     // 8. 監聽與退場機制
     // ---------------------------------------------------------
     const initGlobalConfigListener = () => {
-        if (typeof firebase === 'undefined' || !firebase.apps.length) {
+        if (typeof firebase === 'undefined' || !firebase.apps || !firebase.apps.length) {
             setTimeout(initGlobalConfigListener, 500); 
             return;
         }
-        firebase.firestore().collection(APP_PATH).onSnapshot(snapshot => {
+
+        // 💡 修正 2: 儲存全域監聽器，確保 cleanupAuditListeners 能徹底清理
+        if (auditUnsubscribes['__global__']) {
+            auditUnsubscribes['__global__']();
+        }
+
+        auditUnsubscribes['__global__'] = firebase.firestore().collection(APP_PATH).onSnapshot(snapshot => {
             snapshot.forEach(doc => { 
                 const data = doc.data();
-                window.globalAuditConfigs[doc.id] = data; 
-                if (data.isAuditing) startAuditDataListener(doc.id);
+                const kmlId = doc.id;
+                window.globalAuditConfigs[kmlId] = data; 
+
+                // 💡 修正 1: 當關閉清查時，主動斷開子監聽器
+                if (data.isAuditing) {
+                    startAuditDataListener(kmlId);
+                } else {
+                    stopAuditDataListener(kmlId);
+                }
             });
             updateKmlSelectUI();
             forceMapRefresh();
@@ -1445,6 +1458,14 @@
             }, err => {
                 console.warn(`監聽 ${kmlId} 紀錄失敗:`, err.message);
             });
+    }
+
+    // 💡 新增：單一圖層取消監聽函式
+    function stopAuditDataListener(kmlId) {
+        if (typeof auditUnsubscribes[kmlId] === 'function') {
+            auditUnsubscribes[kmlId]();
+            delete auditUnsubscribes[kmlId];
+        }
     }
 
     window.cleanupAuditListeners = function() {
@@ -1478,6 +1499,11 @@
         if (window.mapNamespace?.map && typeof L !== 'undefined') {
             clearInterval(checkMapInterval);
             
+            // 💡 修正 3: 防止重複掛載舊的 Control 實體
+            if (bottomControl && window.mapNamespace.map) {
+                try { window.mapNamespace.map.removeControl(bottomControl); } catch (e) {}
+            }
+
             const AuditMenu = L.Control.extend({
                 onAdd: function() {
                     this._container = L.DomUtil.create('div', 'audit-bottom-menu');
