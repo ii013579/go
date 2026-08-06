@@ -92,12 +92,18 @@
     }
     window.syncAuditButtonVisibility = syncAuditButtonVisibility;
 
-// 樣式配置與色彩算式
+    // ---------------------------------------------------------
+    // 1 樣式配置與色彩算式
+    // ---------------------------------------------------------
     const BASE_STYLE = { color: "#ffffff", fillOpacity: 0.85, radius: 8 };
 
     function getPointStyle(isAuditing, canSee, hasRecord) {
-        if (!isAuditing || !canSee) return { ...BASE_STYLE, fillColor: "#e74c3c", weight: 1.5 };
-        return { ...BASE_STYLE, fillColor: hasRecord ? "#FCD770" : "#2A00D2", weight: 2 };
+        const active = Boolean(isAuditing && canSee);
+        return {
+            ...BASE_STYLE,
+            fillColor: !active ? "#e74c3c" : (hasRecord ? "#FCD770" : "#2A00D2"),
+            weight: !active ? 1.5 : 2
+        };
     }
 
     // 樣式攔截器
@@ -109,7 +115,8 @@
         if (kmlId && Array.isArray(features)) {
             const config = window.globalAuditConfigs[kmlId];
             const records = window.auditLayersState[kmlId] || {};
-            const isAuditing = config?.isAuditing === true && canSeeAuditColors();
+            const canSee = canSeeAuditColors();
+            const isAuditing = config?.isAuditing === true;
 
             features.forEach(f => {
                 if (!f.properties) f.properties = {};
@@ -118,8 +125,8 @@
                 const pointKey = f.properties.name || f.properties.title || f.properties.id || f.id || "未知點位";
                 f.properties.auditPointKey = pointKey;
 
-                const record = isAuditing ? records[pointKey] : null;
-                const style = getPointStyle(config?.isAuditing, canSeeAuditColors(), !!record);
+                const record = (isAuditing && canSee) ? records[pointKey] : null;
+                const style = getPointStyle(isAuditing, canSee, !!record);
 
                 Object.assign(f.properties, style, {
                     isAudited: !!record,
@@ -141,7 +148,7 @@
         if (!ns?.map || !kmlId) return;
 
         const records = window.auditLayersState?.[kmlId] || {};
-        const isAuditing = window.globalAuditConfigs?.[kmlId]?.isAuditing;
+        const isAuditing = !!window.globalAuditConfigs?.[kmlId]?.isAuditing;
         const canSee = canSeeAuditColors();
 
         ns.map.eachLayer(layer => {
@@ -157,8 +164,9 @@
             }
 
             const record = (isAuditing && canSee) ? records[pointKey] : null;
+            const newStyle = getPointStyle(isAuditing, canSee, !!record);
 
-            Object.assign(props, {
+            Object.assign(props, newStyle, {
                 isAudited: !!record,
                 auditStatus: record ? (record.deviceStatus || record.status || "正常") : props.auditStatus,
                 photos: record?.photos || props.photos || [],
@@ -166,7 +174,7 @@
             });
 
             if (typeof layer.setStyle === 'function') {
-                layer.setStyle(getPointStyle(isAuditing, canSee, !!record));
+                layer.setStyle(newStyle);
             }
         });
 
