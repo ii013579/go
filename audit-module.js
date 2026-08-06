@@ -53,18 +53,34 @@
     window.escapeHtml = safeEscape;
 
     function getCleanLayerName(kmlId, kmlLayerName) {
-        let target = kmlLayerName || kmlId;
+        let target = (kmlLayerName && kmlLayerName !== kmlId) ? kmlLayerName : null;
+
+        if (!target && kmlId && window.globalAuditConfigs?.[kmlId]) {
+            const config = window.globalAuditConfigs[kmlId];
+            target = config.name || config.kmlName || config.layerName;
+        }
+
         if (!target) {
             const selectEl = document.getElementById('kmlLayerSelect');
-            target = selectEl?.options[selectEl.selectedIndex]?.getAttribute('data-basename') 
-                || window.currentActiveKmlName 
-                || window.mapNamespace?.currentKmlLayerId 
-                || '預設區域';
+            if (selectEl) {
+                // 先找與 kmlId 匹配的 option，找不到才拿當前選中的 option
+                const matchedOpt = Array.from(selectEl.options).find(opt => opt.value === kmlId) 
+                                || selectEl.options[selectEl.selectedIndex];
+                if (matchedOpt && matchedOpt.value) {
+                    target = matchedOpt.getAttribute('data-basename') || matchedOpt.textContent.split(' (')[0];
+                }
+            }
         }
+
+        if (!target || target === kmlId) {
+            target = window.currentActiveKmlName || '預設區域';
+        }
+
         return String(target).replace(/\.kml$/i, '').trim();
     }
+    
     window.getStorageLayerFolder = getCleanLayerName;
-
+    
     function buildStoragePath(layerName, fileName) {
         const root = (STORAGE_ROOT || 'kmldata-d22fb/storage').replace(/^\/+|\/+$/g, '');
         const folder = (layerName || 'default_layer').replace(/^\/+|\/+$/g, '');
@@ -962,7 +978,10 @@
         const targetLayerFolder = getCleanLayerName(kmlId, kmlLayerName);
         const storageRef = firebase.storage().ref();
         const safePointKey = String(pointKey).replace(/[/\\?%*:|"<>]/g, '_');
-
+        const photoIndexStr = String(i + 1).padStart(2, '0');
+        const customStoragePath = `${APP_PATH}/${targetLayerFolder}/${safePointKey}_${photoIndexStr}.jpg`;
+        const photoRef = storageRef.child(customStoragePath);
+        
         const uploadPromises = photos.map(async (photoData, index) => {
             if (!photoData) return '';
             if (typeof photoData === 'string' && !photoData.startsWith('data:image')) {
@@ -1015,7 +1034,8 @@
 
         try {
             const config = window.globalAuditConfigs?.[kmlId] || {};
-            const targetLayerFolder = getCleanLayerName(kmlId, kmlLayerName);
+            // 修正：帶入 config.name 作為第二個備援參數
+            const targetLayerFolder = getCleanLayerName(kmlId, kmlLayerName || config.name || config.kmlName);
 
             // 1. 從 Firestore 刪除資料
             await firebase.firestore()
@@ -1025,6 +1045,20 @@
                 .doc(pointKey)
                 .delete();
 
+            // 2. 從 Firebase Storage 刪除對應相片 (若有)
+            const maxPhotos = config.targetPhotos || 3;
+            const safePointKey = String(pointKey).replace(/[/\\?%*:|"<>]/g, '_');
+            const storageRef = firebase.storage().ref();
+
+            for (let i = 0; i < maxPhotos; i++) {
+                const photoIndexStr = String(i + 1).padStart(2, '0');
+                const photoPath = `${APP_PATH}/${targetLayerFolder}/${safePointKey}_${photoIndexStr}.jpg`;
+                try {
+                    await storageRef.child(photoPath).delete();
+                } catch (imgErr) {
+                    // 若照片本來就不存在，忽略 404 錯誤
+                }
+            }
             // 2. 清除前端全域狀態中的記憶
             if (window.auditLayersState?.[kmlId]) {
                 delete window.auditLayersState[kmlId][pointKey];
