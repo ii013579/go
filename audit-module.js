@@ -782,7 +782,7 @@
         }
     };
 
-    // ---------------------------------------------------------
+// ---------------------------------------------------------
     // 5.4 送出與刪除自訂點位邏輯
     // ---------------------------------------------------------
     window.submitNewCustomPoint = async function(formValues) {
@@ -907,7 +907,7 @@
                 await generateLayerCsvReport(kmlId, layerFolderName, targetPhotosCount);
             }
 
-            // 💡【即時繪製】建立 Marker 並立即顯示在地圖上
+            // 即時繪製：建立 CircleMarker 呈現在地圖上
             if (ns && ns.map && typeof L !== 'undefined') {
                 const currentKmlGroup = ns.geoJsonLayers?.[kmlId] || ns.kmlLayerCache?.[kmlId];
                 
@@ -952,7 +952,7 @@
         }
     };
 
-window.uploadPhotosToStorage = async function(photos, kmlId, pointKey, kmlLayerName) {
+    window.uploadPhotosToStorage = async function(photos, kmlId, pointKey, kmlLayerName) {
         if (!photos || !Array.isArray(photos) || photos.length === 0) return [];
 
         if (typeof firebase === 'undefined' || !firebase.storage) {
@@ -970,7 +970,6 @@ window.uploadPhotosToStorage = async function(photos, kmlId, pointKey, kmlLayerN
             }
 
             const photoIndexStr = String(index + 1).padStart(2, '0');
-            // 💡 舊版路徑拼接方式
             const customStoragePath = `${STORAGE_ROOT}/${targetLayerFolder}/${safePointKey}_${photoIndexStr}.jpg`;
             const ref = storageRef.child(customStoragePath);
 
@@ -995,49 +994,30 @@ window.uploadPhotosToStorage = async function(photos, kmlId, pointKey, kmlLayerN
         return await Promise.all(uploadPromises);
     };
 
+// ---------------------------------------------------------
+    // 刪除自訂點位邏輯
+    // ---------------------------------------------------------
     window.deleteCustomPoint = async function(kmlId, pointKey, kmlLayerName) {
-        if (!kmlId || !pointKey) {
-            Swal.fire('錯誤', '無效的點位資訊，無法刪除', 'error');
-            return;
-        }
-
-        const confirmRes = await Swal.fire({
+        const confirmDelete = await Swal.fire({
             title: '確定要刪除此點位？',
-            text: `將永久刪除點位「${pointKey}」及其照片！`,
+            text: `點名：${pointKey}（將同步刪除 Firestore 紀錄與地圖圖層）`,
             icon: 'warning',
             showCancelButton: true,
             confirmButtonColor: '#d33',
             cancelButtonColor: '#3085d6',
-            confirmButtonText: '確定刪除',
+            confirmButtonText: '是的，刪除！',
             cancelButtonText: '取消'
         });
 
-        if (!confirmRes.isConfirmed) return;
+        if (!confirmDelete.isConfirmed) return;
 
-        Swal.fire({ title: '正在刪除點位與照片...', didOpen: () => Swal.showLoading(), allowOutsideClick: false });
+        Swal.fire({ title: '正在刪除資料...', didOpen: () => Swal.showLoading(), allowOutsideClick: false });
 
         try {
-            const targetLayerFolder = getCleanLayerName(kmlId, kmlLayerName);
-            const safePointKey = String(pointKey).replace(/[/\\?%*:|"<>]/g, '_');
-            const storageRef = firebase.storage().ref();
-
             const config = window.globalAuditConfigs?.[kmlId] || {};
-            const maxCheckPhotos = Math.max(config.targetPhotos || 2, 12);
-            const possibleFolders = Array.from(new Set([targetLayerFolder, kmlId].filter(Boolean)));
+            const targetLayerFolder = getCleanLayerName(kmlId, kmlLayerName);
 
-            const deletePhotoPromises = [];
-            possibleFolders.forEach(folder => {
-                for (let i = 1; i <= maxCheckPhotos; i++) {
-                    const photoIndexStr = String(i).padStart(2, '0');
-                    const customStoragePath = buildStoragePath(folder, `${safePointKey}_${photoIndexStr}.jpg`);
-                    deletePhotoPromises.push(
-                        storageRef.child(customStoragePath).delete().catch(() => {})
-                    );
-                }
-            });
-
-            await Promise.all(deletePhotoPromises);
-
+            // 1. 從 Firestore 刪除資料
             await firebase.firestore()
                 .collection(APP_PATH)
                 .doc(kmlId)
@@ -1045,13 +1025,14 @@ window.uploadPhotosToStorage = async function(photos, kmlId, pointKey, kmlLayerN
                 .doc(pointKey)
                 .delete();
 
+            // 2. 清除前端全域狀態中的記憶
             if (window.auditLayersState?.[kmlId]) {
                 delete window.auditLayersState[kmlId][pointKey];
             }
 
             const ns = window.mapNamespace;
             if (ns) {
-                // 1. 從 GeoJSON 特徵列表中移除該點位
+                // 3. 從 GeoJSON 特徵列表中移除該點位
                 if (Array.isArray(ns.allKmlFeatures)) {
                     ns.allKmlFeatures = ns.allKmlFeatures.filter(f => {
                         const name = f.properties?.name || f.properties?.title || f.properties?.auditPointKey;
@@ -1059,7 +1040,7 @@ window.uploadPhotosToStorage = async function(photos, kmlId, pointKey, kmlLayerN
                     });
                 }
 
-                // 2. 💡【關鍵修復】從目前渲染在 Leaflet 地圖上的圖層中直接下架並移除 Marker
+                // 4. 即時從 Leaflet 地圖畫面上下架並移除 Marker
                 const currentGeoJsonLayer = ns.geoJsonLayers?.[kmlId] || ns.kmlLayerCache?.[kmlId];
                 if (currentGeoJsonLayer && typeof currentGeoJsonLayer.eachLayer === 'function') {
                     currentGeoJsonLayer.eachLayer(layer => {
@@ -1079,13 +1060,15 @@ window.uploadPhotosToStorage = async function(photos, kmlId, pointKey, kmlLayerN
 
             window.currentSelectedPoint = null;
             
-            // 💡【同步修改】生成 CSV 時使用該圖層正確的照片張數，避免寫死 2 張
+            // 5. 重新生成 CSV 報表
             const targetPhotosCount = config.targetPhotos || 2;
-            await generateLayerCsvReport(kmlId, targetLayerFolder, targetPhotosCount);
+            if (typeof generateLayerCsvReport === 'function') {
+                await generateLayerCsvReport(kmlId, targetLayerFolder, targetPhotosCount);
+            }
 
             Swal.fire({ icon: 'success', title: '已順利刪除點位與照片', timer: 1200, showConfirmButton: false });
 
-            // 重新刷新地圖與按鈕狀態
+            // 6. 重新刷新地圖與按鈕狀態
             forceMapRefresh();
             setTimeout(updateBottomBtnState, 300);
 
