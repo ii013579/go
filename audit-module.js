@@ -952,7 +952,7 @@
         }
     };
 
-    window.uploadPhotosToStorage = async function(photos, kmlId, pointKey, kmlLayerName) {
+window.uploadPhotosToStorage = async function(photos, kmlId, pointKey, kmlLayerName) {
         if (!photos || !Array.isArray(photos) || photos.length === 0) return [];
 
         if (typeof firebase === 'undefined' || !firebase.storage) {
@@ -970,20 +970,26 @@
             }
 
             const photoIndexStr = String(index + 1).padStart(2, '0');
-            const customStoragePath = buildStoragePath(targetLayerFolder, `${safePointKey}_${photoIndexStr}.jpg`);
+            // 💡 舊版路徑拼接方式
+            const customStoragePath = `${STORAGE_ROOT}/${targetLayerFolder}/${safePointKey}_${photoIndexStr}.jpg`;
             const ref = storageRef.child(customStoragePath);
 
-            let blob;
-            if (photoData instanceof File || photoData instanceof Blob) {
-                blob = photoData;
-            } else if (typeof photoData === 'string' && photoData.startsWith('data:image')) {
-                blob = await (await fetch(photoData)).blob();
-            } else {
-                return photoData;
-            }
+            try {
+                let blob;
+                if (photoData instanceof File || photoData instanceof Blob) {
+                    blob = photoData;
+                } else if (typeof photoData === 'string' && photoData.startsWith('data:image')) {
+                    blob = await (await fetch(photoData)).blob();
+                } else {
+                    return photoData;
+                }
 
-            await ref.put(blob);
-            return await ref.getDownloadURL();
+                await ref.put(blob);
+                return await ref.getDownloadURL();
+            } catch (uploadError) {
+                console.error(`❌ 照片 ${index + 1} 上傳失敗:`, uploadError);
+                throw new Error(`照片 ${index + 1} 上傳失敗: ${uploadError.message}`);
+            }
         });
 
         return await Promise.all(uploadPromises);
@@ -1256,7 +1262,8 @@
                 const uploadPromises = res.photos.map(async (photoData, i) => {
                     if (photoData && photoData.startsWith('data:image')) {
                         const photoIndexStr = String(i + 1).padStart(2, '0');
-                        const customStoragePath = buildStoragePath(kmlLayerName, `${safePointKey}_${photoIndexStr}.jpg`);
+                        // 💡 完全對齊舊版 Storage 上傳路徑格式，並加上 safePointKey
+                        const customStoragePath = `${STORAGE_ROOT}/${kmlLayerName}/${safePointKey}_${photoIndexStr}.jpg`;
                         const ref = firebase.storage().ref().child(customStoragePath);
                         const blob = await (await fetch(photoData)).blob();
                         await ref.put(blob);
@@ -1298,7 +1305,6 @@
                 Swal.fire('錯誤', e.message || '儲存失敗', 'error'); 
             }
         }
-    };
 
     // ---------------------------------------------------------
     // 7. 查看詳細紀錄與下載 ZIP 專用
