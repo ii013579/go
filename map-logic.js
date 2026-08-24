@@ -1,4 +1,4 @@
-﻿// map-logic.js v2.04 (整合極速標籤避讓與 v2.03 原版點位邏輯)
+﻿// map-logic.js v2.03
 
 (function () {
     'use strict';
@@ -11,123 +11,9 @@
         geoJsonLayers: L.featureGroup(),
         allKmlFeatures: [],
         currentKmlLayerId: null,
-        isLoadingKml: false,
-        _collisionRaf: null
+        isLoadingKml: false
     };
     window.mapNamespace = ns;
-
-    // 預設樣式定義 (保持 v2.03 原版)
-    const defaultStyle = {
-        radius: 8,
-        fillColor: "#e74c3c", // 預設紅色
-        fillOpacity: 1,
-        color: "#ffffff",     // 白色外框
-        weight: 2,
-        opacity: 1,
-        interactive: true
-    };
-
-    // 輔助函式：還原所有圓點為原始樣式 (保持 v2.03 原版)
-    const resetAllMarkerStyles = () => {
-        ns.markers.eachLayer(layer => {
-            if (layer instanceof L.CircleMarker && layer.feature) {
-                const style = {
-                    ...defaultStyle,
-                    radius: layer.feature.properties?.radius || defaultStyle.radius,
-                    fillColor: layer.feature.properties?.fillColor || defaultStyle.fillColor,
-                    fillOpacity: layer.feature.properties?.fillOpacity || defaultStyle.fillOpacity,
-                    color: layer.feature.properties?.color || defaultStyle.color,
-                    weight: defaultStyle.weight
-                };
-                layer.setStyle(style);
-            }
-        });
-    };
-
-    // 🚀【極速版】：純數學像素投影標籤碰撞檢測（零 DOM 讀取，絕不卡頓）
-    const updateLabelCollisions = () => {
-        if (!ns.map) return;
-
-        if (ns._collisionRaf) cancelAnimationFrame(ns._collisionRaf);
-
-        ns._collisionRaf = requestAnimationFrame(() => {
-            const map = ns.map;
-            const mapBounds = map.getBounds();
-            const mapSize = map.getSize();
-            
-            const visibleBoxes = [];
-            const candidateLabels = [];
-
-            // 1. 視窗初過濾 (Viewport Culling)：僅取畫面內的標籤
-            ns.markers.eachLayer(layer => {
-                if (layer instanceof L.Marker && layer.options?.icon?.options?.className === 'marker-label') {
-                    const latlng = layer.getLatLng();
-                    if (mapBounds.contains(latlng)) {
-                        candidateLabels.push(layer);
-                    } else {
-                        const el = layer.getElement();
-                        if (el) el.style.visibility = 'hidden';
-                    }
-                }
-            });
-
-            // 2. 權重排序：高亮選取中 (.label-active) 的標籤優先繪製
-            candidateLabels.sort((a, b) => {
-                const aActive = a.getElement()?.querySelector('.label-active') ? 1 : 0;
-                const bActive = b.getElement()?.querySelector('.label-active') ? 1 : 0;
-                return bActive - aActive;
-            });
-
-            // 3. ✨ 純數學碰撞計算（直接計算經緯度對應螢幕像素）
-            candidateLabels.forEach(marker => {
-                const el = marker.getElement();
-                if (!el) return;
-
-                const latlng = marker.getLatLng();
-                const p = map.latLngToContainerPoint(latlng);
-
-                const textSpan = el.querySelector('span');
-                const text = textSpan ? textSpan.textContent : '';
-                const isActive = textSpan?.classList.contains('label-active') || false;
-
-                // 依字數估算像素寬高
-                const fontSize = isActive ? 18 : 13;
-                const charWidth = fontSize * 1.05; 
-                const boxWidth = Math.max(text.length * charWidth + 10, 20);
-                const boxHeight = fontSize + 8;
-
-                // 計算 AABB 預估邊界
-                const left = p.x + (isActive ? 20 : 10);
-                const top = p.y - 12;
-                const right = left + boxWidth;
-                const bottom = top + boxHeight;
-
-                // 畫面邊界檢查
-                if (right < 0 || left > mapSize.x || bottom < 0 || top > mapSize.y) {
-                    el.style.visibility = 'hidden';
-                    return;
-                }
-
-                // 重疊檢測
-                let isOverlap = false;
-                for (let i = 0; i < visibleBoxes.length; i++) {
-                    const box = visibleBoxes[i];
-                    if (left < box.right && right > box.left && top < box.bottom && bottom > box.top) {
-                        isOverlap = true;
-                        break;
-                    }
-                }
-
-                if (isOverlap && !isActive) {
-                    el.style.visibility = 'hidden';
-                } else {
-                    el.style.visibility = 'visible';
-                    visibleBoxes.push({ left, right, top, bottom });
-                }
-            });
-        });
-    };
-    ns.updateLabelCollisions = updateLabelCollisions;
 
     // ---------- DOMContentLoaded: 初始化地圖與控制項 ----------
     document.addEventListener('DOMContentLoaded', () => {
@@ -136,36 +22,36 @@
             return;
         }
 
-        // 1. 初始化地圖
-        ns.map = L.map('map', {
-            preferCanvas: true,
-            attributionControl: true,
-            zoomControl: false,
-            maxZoom: 25,
-            minZoom: 5
-        }).setView([23.6, 120.9], 8);
-        
-        // 2. 建立 Leaflet 缺失的 bottomcenter 容器
-        if (ns.map._controlContainer && !ns.map._controlCorners['bottomcenter']) {
-            ns.map._controlCorners['bottomcenter'] = L.DomUtil.create(
-                'div', 
-                'leaflet-bottomcenter', 
-                ns.map._controlContainer
-            );
-        }
-        
-        // 3. 設定全域變數提供給 audit-module.js 使用
-        window.map = ns.map;
-        window.geoJsonLayers = ns.geoJsonLayers;
-        window.markers = ns.markers;
-        window.mapNamespace = ns;
-        
-        // 4. 啟動清查系統底部控制選單
-        if (window.initBottomAuditControl) {
-            window.initBottomAuditControl(ns.map);
-        }
+    // 1. 初始化地圖
+    ns.map = L.map('map', {
+        preferCanvas: true,
+        attributionControl: true,
+        zoomControl: false,
+        maxZoom: 25,
+        minZoom: 5
+    }).setView([23.6, 120.9], 8);
+    
+    // 2. 建立 Leaflet 缺失的 bottomcenter 容器 (封裝成一個動作)
+    if (ns.map._controlContainer && !ns.map._controlCorners['bottomcenter']) {
+        ns.map._controlCorners['bottomcenter'] = L.DomUtil.create(
+            'div', 
+            'leaflet-bottomcenter', 
+            ns.map._controlContainer
+        );
+    }
+    
+    // 3. 設定全域變數提供給 audit-module.js 使用
+    window.map = ns.map;
+    window.geoJsonLayers = ns.geoJsonLayers;
+    window.markers = ns.markers;
+    window.mapNamespace = ns;
+    
+    // 4. 啟動清查系統底部控制選單 (僅需呼叫一次)
+    if (window.initBottomAuditControl) {
+        window.initBottomAuditControl(ns.map);
+    }
 
-        // 基本圖層定義
+        // 基本圖層定義（使用常數）
         const baseLayers = {
             'Google 街道圖': L.tileLayer('https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {
                 attribution: 'Google Maps',
@@ -189,6 +75,7 @@
             })
         };
 
+        // 嘗試還原上次使用的圖層（若不合法則回到預設）
         try {
             const lastLayerName = localStorage.getItem('lastBaseLayer');
             if (lastLayerName && baseLayers[lastLayerName]) {
@@ -196,22 +83,25 @@
                 console.info(`已還原上次使用的圖層：${lastLayerName}`);
             } else {
                 if (lastLayerName) {
+                    console.warn(`找不到記憶圖層 "${lastLayerName}"，已清除記錄。`);
                     localStorage.removeItem('lastBaseLayer');
                 }
                 baseLayers['Google 街道圖'].addTo(ns.map);
             }
         } catch (e) {
+            console.warn('讀取 localStorage 時發生錯誤，使用預設圖層。', e);
             baseLayers['Google 街道圖'].addTo(ns.map);
         }
 
+        // 將 feature groups 加到地圖（確保順序）
         ns.geoJsonLayers.addTo(ns.map);
         ns.markers.addTo(ns.map);
         ns.navButtons.addTo(ns.map);
 
-        // 清理 24 小時前的過期快取
+        // --- 【新增】自動清理 24 小時前的過期快取 ---
         const cleanupOldCache = () => {
             const now = Date.now();
-            const EXPIRE_LIMIT = 24 * 60 * 60 * 1000;
+            const EXPIRE_LIMIT = 24 * 60 * 60 * 1000; // 24小時毫秒數
             let count = 0;
             Object.keys(localStorage).forEach(key => {
                 if (key.startsWith('kml_time_')) {
@@ -228,14 +118,19 @@
         };
         cleanupOldCache();
         
+        // 設定圖層/標記的 z-index（確保標記在上層）
         try {
             ns.map.getPane('markerPane').style.zIndex = 600;
             ns.map.getPane('overlayPane').style.zIndex = 500;
-        } catch (e) {}
+        } catch (e) {
+            // 某些情況下 pane 可能不存在
+            console.debug('設定 pane zIndex 時發生錯誤：', e);
+        }
 
+        // 縮放控制（右上）
         L.control.zoom({ position: 'topright' }).addTo(ns.map);
 
-        // 自定義定位控制
+        // 自定義定位控制（包含顯示使用者位置的功能）
         const LocateMeControl = L.Control.extend({
             _userLocationMarker: null,
             _userLocationCircle: null,
@@ -279,6 +174,7 @@
 
                 this._firstViewCentered = false;
 
+                // 顯示「定位中」訊息（可被其他程式關閉）
                 window.showMessageCustom({
                     title: '定位中',
                     message: '正在追蹤您的位置...',
@@ -287,17 +183,20 @@
                     onConfirm: () => this._stopTracking()
                 });
 
+                // 開始 watchPosition（高精度）
                 this._watchId = navigator.geolocation.watchPosition(
                     (pos) => {
                         const latlng = [pos.coords.latitude, pos.coords.longitude];
                         const accuracy = pos.coords.accuracy || 0;
 
+                        // 第一次定位時移動地圖視角，並關閉「定位中」訊息
                         if (!this._firstViewCentered) {
                             ns.map.setView(latlng, 16);
                             this._firstViewCentered = true;
                             window.closeMessageCustom?.();
                         }
 
+                        // 更新藍點（不會干擾其他地圖操作）
                         this._updateLocation(latlng, accuracy);
                     },
                     (err) => {
@@ -374,9 +273,10 @@
             }
         });
 
+        // 註：將自訂定位控制項加入地圖（右上）
         new LocateMeControl({ position: 'topright' }).addTo(ns.map);
 
-        // 訊息視窗 UI
+        // 顯示/關閉自訂訊息 UI 的輔助函式（容錯處理）
         window.showMessageCustom = function ({
             title = '',
             message = '',
@@ -387,10 +287,17 @@
             onConfirm = null
         } = {}) {
             const overlay = document.querySelector('.message-box-overlay');
-            if (!overlay) return;
+            if (!overlay) {
+                console.warn('找不到 .message-box-overlay 元素，無法顯示訊息。', title, message);
+                if (typeof onClose === 'function') onClose();
+                return;
+            }
             const content = overlay.querySelector('.message-box-content');
-            if (!content) return;
-
+            if (!content) {
+                console.warn('.message-box-content 不存在');
+                if (typeof onClose === 'function') onClose();
+                return;
+            }
             const header = content.querySelector('h3');
             const paragraph = content.querySelector('p');
             const button = content.querySelector('button');
@@ -418,53 +325,80 @@
 
         window.closeMessageCustom = function () {
             const overlay = document.querySelector('.message-box-overlay');
-            if (overlay) overlay.classList.remove('visible');
+            if (overlay) {
+                overlay.classList.remove('visible');
+            }
         };
 
+        // 圖層控制（右上），當切換圖層時會自動收合控制面板並記錄選擇
         const layerControl = L.control.layers(baseLayers, null, { position: 'topright' }).addTo(ns.map);
         ns.map.on('baselayerchange', function (e) {
+            console.info("基本圖層已變更:", e.name);
             try {
                 localStorage.setItem('lastBaseLayer', e.name);
-            } catch (err) {}
+            } catch (err) {
+                console.warn('無法寫入 localStorage: ', err);
+            }
             const controlContainer = layerControl.getContainer();
             if (controlContainer && controlContainer.classList.contains('leaflet-control-layers-expanded')) {
                 controlContainer.classList.remove('leaflet-control-layers-expanded');
             }
         });
 
-        // ✨ 地圖移動與縮放結束時執行標籤避讓計算
-        ns.map.on('moveend zoomend', updateLabelCollisions);
+        // 地圖點擊時：隱藏搜尋結果、取消標籤高亮、清除導航按鈕
+        ns.map.on('click', () => {
+            const searchResults = document.getElementById('searchResults');
+            const searchContainer = document.getElementById('searchContainer');
+            if (searchResults) {
+                searchResults.style.display = 'none';
+                searchContainer?.classList.remove('search-active');
+            }
+            const searchBox = document.getElementById('searchBox');
+            if (searchBox) {
+                searchBox.value = '';
+            }
+            document.querySelectorAll('.marker-label span.label-active').forEach(el => {
+                el.classList.remove('label-active');
+            });
+            ns.navButtons.clearLayers();
+        });
     });
 
-    // ---------- 公開方法：添加 GeoJSON 圖層 (完整維持 v2.03 原版邏輯) ----------
+    // ---------- 公開方法：添加 GeoJSON 圖層（v2.06 已清查顏色修復版） ----------
     window.addGeoJsonLayers = function (geojsonFeatures = []) {
         if (!ns.map) return;
     
+        // 清除舊圖層
         ns.geoJsonLayers.clearLayers();
         ns.markers.clearLayers();
         ns.navButtons.clearLayers();
     
+        // 取得當前圖層 ID
         const kmlId = ns?.currentKmlLayerId;
         const records = (kmlId && window.auditLayersState) ? (window.auditLayersState[kmlId] || {}) : {};
     
-        // 補全自訂點位
+        // =========================================================
+        // ✨【修復重點】：補全自訂點位，並設定為「已清查」樣式與屬性
+        // =========================================================
         Object.keys(records).forEach(pointKey => {
             const rec = records[pointKey];
             if (rec && rec.isCustomPoint && rec.lat && rec.lng) {
                 const numLat = parseFloat(rec.lat);
                 const numLng = parseFloat(rec.lng);
     
+                // 檢查傳進來的 geojsonFeatures 是否已經包含此點
                 const exists = geojsonFeatures.some(f => {
                     const name = f.properties?.name || f.properties?.title || f.properties?.auditPointKey;
                     return name === pointKey;
                 });
     
+                // 若不在原始 KML 內，自動補一個「已清查」樣式的 Feature 進去
                 if (!exists) {
                     geojsonFeatures.push({
                         type: "Feature",
                         geometry: {
                             type: "Point",
-                            coordinates: [numLng, numLat]
+                            coordinates: [numLng, numLat] // GeoJSON 規範: [經度, 緯度]
                         },
                         properties: {
                             name: pointKey,
@@ -472,11 +406,13 @@
                             kmlId: kmlId,
                             auditPointKey: pointKey,
                             isCustomPoint: true,
+                            
+                            // 💡【關鍵屬性設定】：標記為已清查，並帶入已清查色彩 (粉色/黃色)
                             isAudited: true,
                             auditStatus: rec.deviceStatus || "新增",
                             auditNote: rec.note || "",
                             photos: rec.photos || [],
-                            fillColor: "#FCD770",
+                            fillColor: "#FCD770", // 已清查色塊顏色 (對齊攔截器樣式)
                             color: "#ffffff",
                             radius: 8,
                             fillOpacity: 0.85
@@ -486,6 +422,17 @@
             }
         });
     
+        // 預設樣式 (若 properties 沒提供時使用)
+        const defaultStyle = {
+            radius: 8,
+            fillColor: "#e74c3c", // 預設紅色
+            fillOpacity: 1,
+            color: "#ffffff",     // 白色外框
+            weight: 2,
+            opacity: 1,
+            interactive: true
+        };
+    
         const canvasRenderer = L.canvas({ padding: 0.1 });
     
         geojsonFeatures.forEach(feature => {
@@ -493,11 +440,13 @@
             const coords = feature?.geometry?.coordinates;
             if (!type || !coords) return;
     
+            // 處理點位 (Point)
             if (type === 'Point') {
                 const latlng = L.latLng(coords[1], coords[0]);
                 const name = feature.properties?.name || '未命名';
                 const labelId = `label-${String(coords[1])}-${String(coords[0])}`.replace(/\./g, '_');
     
+                // --- 合併樣式，優先使用 properties 內的顏色 (已清查粉點/未清查藍點) ---
                 const featureStyle = {
                     ...defaultStyle,
                     radius: feature.properties?.radius || defaultStyle.radius,
@@ -513,16 +462,23 @@
     
                 dot.feature = feature;
     
-                // 點擊圓點事件 (v2.03 原版點擊風格)
                 dot.on('click', (e) => {
                     L.DomEvent.stopPropagation(e);
                     
                     window.currentSelectedPoint = feature; 
     
                     // 重置所有點的顏色
-                    resetAllMarkerStyles();
+                    ns.markers.eachLayer(layer => {
+                        if (layer instanceof L.CircleMarker && layer.feature) {
+                            const style = {
+                                ...defaultStyle,
+                                fillColor: layer.feature.properties?.fillColor || defaultStyle.fillColor
+                            };
+                            layer.setStyle(style);
+                        }
+                    });
     
-                    // 高亮當前點
+                    // 高亮當前點 (加黃框)
                     dot.setStyle({ weight: 4, color: '#ffff00' });
     
                     document.querySelectorAll('.marker-label span').forEach(s => s.classList.remove('label-active'));
@@ -532,9 +488,6 @@
                     if (typeof window.createNavButton === 'function') {
                         window.createNavButton(latlng, name);
                     }
-
-                    // 觸發標籤重新比對 (確保選取的點位文字優先顯示)
-                    ns.updateLabelCollisions?.();
                 });
     
                 ns.markers.addLayer(dot);
@@ -572,76 +525,87 @@
             }
         });
     
-        // 地圖空白處點擊重置 (維持 v2.03 原版 + 清除 UI)
+        // 點擊空白處重置
         ns.map.off('click').on('click', () => {
-            const searchResults = document.getElementById('searchResults');
-            const searchContainer = document.getElementById('searchContainer');
-            if (searchResults) searchResults.style.display = 'none';
-            if (searchContainer) searchContainer.classList.remove('search-active');
-            
-            const searchBox = document.getElementById('searchBox');
-            if (searchBox) searchBox.value = '';
-
             window.currentSelectedPoint = null;
-            resetAllMarkerStyles();
-            
+            ns.markers.eachLayer(layer => {
+                if (layer instanceof L.CircleMarker && layer.feature) {
+                    layer.setStyle({
+                        ...defaultStyle,
+                        fillColor: layer.feature.properties?.fillColor || defaultStyle.fillColor
+                    });
+                }
+            });
             document.querySelectorAll('.marker-label span').forEach(s => s.classList.remove('label-active'));
             ns.navButtons.clearLayers();
-
-            // 重新計算標籤隱藏
-            ns.updateLabelCollisions?.();
         });
     
+        // 保存合併後的點位清單
         ns.allKmlFeatures = geojsonFeatures;
-
-        // 圖層繪製完成後執行第一次碰撞檢測
-        setTimeout(() => ns.updateLabelCollisions?.(), 100);
     };
        
-    // ---------- 公開方法：建立導航按鈕 (v2.03 原版) ----------
+    // ---------- 公開方法：建立導航按鈕（v2.02 Canvas 相容版） ----------
     window.createNavButton = function (latlng, name) {
-        if (!ns.map) return;
+        if (!ns.map) {
+            console.error("地圖尚未初始化。");
+            return;
+        }
 
+        // 1. 清除現有的導航按鈕（確保畫面上同時只有一個導航目標）
         ns.navButtons.clearLayers();
 
+        // 2. 修正 Google Maps URL 格式（修正原本 0{latlng...} 的錯誤）
         const googleMapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${latlng.lat},${latlng.lng}`;
         
+        // 3. 建立按鈕 HTML
         const buttonHtml = `
            <div class="nav-button-content">
                <img src="https://i0.wp.com/canadasafetycouncil.org/wp-content/uploads/2018/08/offroad.png" alt="導航" />
            </div>
         `;
 
+        // 4. 定義圖標
         const buttonIcon = L.divIcon({
             className: 'nav-button-icon',
             html: buttonHtml,
             iconSize: [50, 50],
-            iconAnchor: [25, 25]
+            iconAnchor: [25, 25] // 居中對齊紅點
         });
 
+        // 5. 建立 Marker
+        // 注意：導航按鈕必須使用 L.marker (DOM)，不可使用 CircleMarker，否則圖示無法顯示
         const navMarker = L.marker(latlng, {
             icon: buttonIcon,
-            zIndexOffset: 5000,
+            zIndexOffset: 5000, // 確保在所有紅點之上
             interactive: true
         }).addTo(ns.navButtons);
 
+        // 6. 導航跳轉事件
         navMarker.on('click', function (e) {
             L.DomEvent.stopPropagation(e);
             window.open(googleMapsUrl, '_blank');
         });
 
+        // 7. 地圖自動對焦到該位置
         try {
             ns.map.panTo(latlng, { animate: true, duration: 0.5 });
         } catch (e) {
             ns.map.setView(latlng);
         }
+
+        console.info(`已為 ${name} 創建導航圖示 (${latlng.lat}, ${latlng.lng})`);
     };
     
-    // ---------- 輔助函式：多邊形質心 (v2.03 原版) ----------
+    // ---------- 輔助函式：多邊形質心（面積加權） ----------
+    // 備註：輸入為 polygon 的外環點陣列（[ [lon,lat], ... ]），回傳 [lon, lat]
+    // 若計算失敗則回傳座標平均值作為 fallback
     window.getPolygonCentroid = function (coords) {
         if (!Array.isArray(coords) || coords.length === 0) return null;
 
-        let area = 0, cx = 0, cy = 0;
+        // 使用面積加權質心公式（多邊形非自交）
+        let area = 0;
+        let cx = 0;
+        let cy = 0;
         const n = coords.length;
 
         for (let i = 0; i < n; i++) {
@@ -654,6 +618,7 @@
         }
 
         if (Math.abs(area) < 1e-12) {
+            // 面積接近零 -> fallback 為平均值
             let sx = 0, sy = 0;
             coords.forEach(p => { sx += p[0]; sy += p[1]; });
             return [sx / n, sy / n];
@@ -665,13 +630,15 @@
         return [cx, cy];
     };
 
-    // ---------- 輔助函式：LineString 中點 (v2.03 原版) ----------
+    // ---------- 輔助函式：LineString 中點（依長度計算） ----------
+    // 備註：輸入 coords 為 [ [lon,lat], ... ]，回傳 [lon,lat]（實作會沿線段找長度的一半位置）
     window.getLineStringMidpoint = function (coords) {
         if (!Array.isArray(coords) || coords.length === 0) return null;
         if (coords.length === 1) return coords[0];
 
+        // 計算每段長度（Haversine 或簡單歐氏差距均可；此處採簡化的地面距離估算）
         const toRad = deg => deg * Math.PI / 180;
-        const R = 6371000;
+        const R = 6371000; // 地球半徑 (m)
         function dist(a, b) {
             const lat1 = toRad(a[1]), lon1 = toRad(a[0]);
             const lat2 = toRad(b[1]), lon2 = toRad(b[0]);
@@ -694,6 +661,7 @@
         let acc = 0;
         for (let i = 0; i < segLengths.length; i++) {
             if (acc + segLengths[i] >= half) {
+                // mid point is on segment i, compute interpolation ratio
                 const remain = half - acc;
                 const ratio = segLengths[i] === 0 ? 0 : remain / segLengths[i];
                 const a = coords[i], b = coords[i+1];
@@ -704,11 +672,12 @@
             acc += segLengths[i];
         }
 
+        // fallback: 回傳中間索引
         const mid = Math.floor(coords.length / 2);
         return coords[mid];
     };
 
-    // ---------- 清除所有 KML 圖層 ----------
+    // ---------- 清除所有 KML/GeoJSON 圖層、標記、導航按鈕 ----------
     window.clearAllKmlLayers = function () {
         ns.markers.clearLayers();
         ns.navButtons.clearLayers();
@@ -716,46 +685,75 @@
         window.allKmlFeatures = [];
         ns.allKmlFeatures = [];
         ns.currentKmlLayerId = null;
+        console.info('所有 KML 圖層和相關數據已清除。');
     };
 
-    // ---------- 從 Firestore 載入特定的 KML 圖層資料 ----------
+    /**
+     * 從 Firestore 載入特定的 KML 圖層資料 (GeoJSON 格式)
+     * 路徑對應：artifacts / kmldata-d22fb / public / data / kmlLayers / {kmlId}
+     */
     window.loadKmlLayerFromFirestore = async function(kmlId) {
-        const ns = window.mapNamespace;
-        const APP_ID = 'kmldata-d22fb';
+        const ns = window.mapNamespace; // 取得 map-logic.js 定義的命名空間
+        const APP_ID = 'kmldata-d22fb'; // 根據 Firebase 控制台確定的路徑 ID
         
+        // 1. 防呆與狀態檢查
         if (!kmlId) return;
-        if (ns.isLoadingKml) return;
-        ns.isLoadingKml = true;
+        if (ns.isLoadingKml) {
+            console.log("⏳ 圖層正在載入中，請稍候...");
+            return;
+        }
+        ns.isLoadingKml = true; // 上鎖，防止連點重複觸發
     
         const CONTENT_CACHE_KEY = `kml_data_${kmlId}`;
     
         try {
+            // 2. 數據層優化：嘗試從本地 LocalStorage 讀取
             const cachedContent = localStorage.getItem(CONTENT_CACHE_KEY);
+            
             if (cachedContent) {
+                console.log(`%c[數據快取命中] 載入圖層: ${kmlId}`, "color: #2196F3; font-weight: bold;");
                 const kmlData = JSON.parse(cachedContent);
+                
+                // 直接執行清理與渲染流程
                 if (typeof clearExistingLayers === 'function') clearExistingLayers(ns);
                 if (typeof renderKmlData === 'function') renderKmlData(kmlData, kmlId);
                 return;
             }
     
+            // 3. 快取失效：從正確的嵌套路徑下載圖層
+            console.log(`%c[網路讀取] 開始下載圖層資料: ${kmlId}`, "color: #f44336;");
+            
+            // ✨ 關鍵修正：依照 artifacts 嵌套結構進行路徑定位
             const doc = await db.collection('artifacts').doc(APP_ID)
                                 .collection('public').doc('data')
                                 .collection('kmlLayers').doc(kmlId).get();
             
+            console.log(`%c🔥 [Firestore Read] 成功下載特定圖層內容`, "color: white; background: red; padding: 2px 5px;");
+    
             if (!doc.exists) {
+                // 提供完整錯誤路徑以便 Debug
+                console.error("❌ 找不到文件於路徑: ", `artifacts/${APP_ID}/public/data/kmlLayers/${kmlId}`);
                 throw new Error('資料庫中找不到該圖層，可能已被刪除。');
             }
     
             const kmlData = doc.data();
     
+            // 4. 更新本地快取 (供下次使用)
             try {
                 localStorage.setItem(CONTENT_CACHE_KEY, JSON.stringify(kmlData));
-            } catch (e) {}
+            } catch (e) {
+                // 若 GeoJSON 超過 LocalStorage 5MB 限制
+                console.warn("⚠️ LocalStorage 空間不足，無法快取此圖層內容。");
+            }
     
+            // 5. 執行渲染
             if (typeof clearExistingLayers === 'function') clearExistingLayers(ns);
             if (typeof renderKmlData === 'function') renderKmlData(kmlData, kmlId);
     
         } catch (error) {
+            console.error("❌ 載入圖層失敗:", error);
+            
+            // 顯示自訂訊息視窗
             if (window.showMessageCustom) {
                 window.showMessageCustom({ 
                     title: '載入失敗', 
@@ -764,15 +762,19 @@
                 });
             }
         } finally {
-            ns.isLoadingKml = false;
+            ns.isLoadingKml = false; // 解鎖狀態
         }
     };
     
+    /**
+     * 輔助函式：清理地圖上現有的所有圖層與標記
+     */
     function clearExistingLayers(ns) {
         if (ns.geoJsonLayers) ns.geoJsonLayers.clearLayers();
         if (ns.markers) ns.markers.clearLayers();
     }
 
+    // 抽離出的渲染邏輯（確保快取與網路共用同一套顯示流程）
     function renderKmlData(kmlData, kmlId) {
         let geojson = kmlData.geojson;
 
@@ -780,6 +782,7 @@
             try {
                 geojson = JSON.parse(geojson);
             } catch (e) {
+                console.error('解析 GeoJSON 失敗', e);
                 return;
             }
         }
@@ -792,8 +795,10 @@
         window.allKmlFeatures = loadedFeatures;
         ns.currentKmlLayerId = kmlId;
 
+        // 繪製地圖
         window.addGeoJsonLayers(loadedFeatures);
 
+        // 自動縮放至圖層範圍
         const allLayers = L.featureGroup([ns.geoJsonLayers, ns.markers]);
         const bounds = allLayers.getBounds();
         if (bounds && bounds.isValid()) {
@@ -801,6 +806,7 @@
         }
     }
     
+    // 如果需要外部存取命名空間，也可透過 window.mapLogic 取得（非必要）
     window.mapLogic = window.mapLogic || {};
     window.mapLogic._internal = ns;
 })();
