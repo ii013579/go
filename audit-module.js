@@ -1,5 +1,5 @@
 ﻿/**
- * audit-module.js - 清查與修改覆蓋整合優化版 (v3.06 批次 ZIP 照片下載與效能增強版)
+ * audit-module.js - 清查與修改覆蓋整合優化版 (v3.11 批次 ZIP 照片下載與效能增強版)
  */
 (function() {
     'use strict';
@@ -129,6 +129,13 @@
         const ns = window.mapNamespace;
         const kmlId = ns?.currentKmlLayerId;
         if (!ns?.map || !kmlId) return;
+
+        // 💡 新增：強制重新計算 Leaflet 地圖容器尺寸，解決手機破圖
+        setTimeout(() => {
+            if (ns.map && typeof ns.map.invalidateSize === 'function') {
+                ns.map.invalidateSize({ animate: false });
+            }
+        }, 100);
 
         const records = window.auditLayersState[kmlId] || {};
         const showAuditMode = window.globalAuditConfigs[kmlId]?.isAuditing && canSeeAuditColors();
@@ -1799,28 +1806,43 @@ window.openAuditEditor = async function(isModifyMode = false) {
         if (window.mapNamespace?.map && typeof L !== 'undefined') {
             clearInterval(checkMapInterval);
             
+            const map = window.mapNamespace.map;
+
+            // 💡 新增 1：監聽拖曳結束與縮放，自動校正與重新補圖
+            map.on('moveend zoomend resize', function() {
+                setTimeout(() => {
+                    map.invalidateSize({ animate: false });
+                }, 100);
+            });
+
+            // 💡 新增 2：優化 TileLayer 緩衝，設定拖曳時即時載入，減少空白
+            map.eachLayer(function(layer) {
+                if (layer instanceof L.TileLayer) {
+                    layer.options.keepBuffer = 4;        // 邊界外多保留 4 排瓦片
+                    layer.options.updateWhenIdle = false;// 拖曳時立即請求圖資，不等待停止
+                }
+            });
+
             const AuditMenu = L.Control.extend({
                 onAdd: function() {
                     this._container = L.DomUtil.create('div', 'audit-bottom-menu');
                     this._container.style.display = 'none';
                     this._container.style.position = 'fixed';
-                    this._container.style.bottom = '35px'; // 統一底端高度
+                    this._container.style.bottom = '35px';
                     this._container.style.left = '50%';
                     this._container.style.transform = 'translateX(-50%)';
                     this._container.style.zIndex = '5000'; 
-                    this._container.style.pointerEvents = 'none'; // 容器不擋地圖，僅按鈕可點擊
-                    
-                    // 💡 關鍵：去除原本黑色的外框背景與邊框Padding
+                    this._container.style.pointerEvents = 'none';
                     this._container.style.background = 'transparent';
                     this._container.style.padding = '0';
                     this._container.style.boxShadow = 'none';
-                    this._container.style.gap = '12px'; // 按鈕之間的間距
+                    this._container.style.gap = '12px';
     
                     return this._container;
                 }
             });
             bottomControl = new AuditMenu();
-            bottomControl.addTo(window.mapNamespace.map);
+            bottomControl.addTo(map);
             
             if (typeof initGlobalConfigListener === 'function') {
                 initGlobalConfigListener();
