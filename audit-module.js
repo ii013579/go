@@ -1057,6 +1057,10 @@
     // =========================================================
     // 5-5. Firebase Storage 照片上傳處理 (通用工具函式 & UI 選單)
     // =========================================================
+    
+    /**
+     * 通用照片上傳至 Firebase Storage 函式
+     */
     window.uploadPhotosToStorage = async function(photos, kmlId, pointKey, kmlLayerName) {
         if (!photos || !Array.isArray(photos) || photos.length === 0) return [];
     
@@ -1116,6 +1120,9 @@
         }
     };
     
+    /**
+     * 建立統一風格的清查 UI 按鈕
+     */
     window.createUnifiedAuditButton = function(text, bgColor, onClickHandler) {
         const btn = document.createElement('button');
         btn.innerHTML = text;
@@ -1141,6 +1148,9 @@
         return btn;
     };
     
+    /**
+     * 刪除自訂點位（含 Storage 照片與 Firestore 紀錄）
+     */
     window.deleteCustomPoint = async function(kmlId, pointKey, kmlLayerName) {
         if (!kmlId || !pointKey) {
             Swal.fire('錯誤', '無效的點位資訊，無法刪除', 'error');
@@ -1178,17 +1188,19 @@
             const safePointKey = String(pointKey).replace(/[/\\?%*:|"<>]/g, '_');
             const storageRef = firebase.storage().ref();
     
+            // 清理 Storage 照片 (支援最多 3 張)
             const deletePhotoPromises = [1, 2, 3].map(async (i) => {
                 const photoIndexStr = String(i).padStart(2, '0');
                 const customStoragePath = `${rootPath}/${targetLayerName}/${safePointKey}_${photoIndexStr}.jpg`;
                 try {
                     await storageRef.child(customStoragePath).delete();
                 } catch (err) {
-                    // 忽略不存在照片的錯誤
+                    // 忽略檔案不存在的錯誤
                 }
             });
             await Promise.all(deletePhotoPromises);
     
+            // 刪除 Firestore 紀錄
             const appPath = typeof APP_PATH !== 'undefined' ? APP_PATH : 'kmlData';
             await firebase.firestore()
                 .collection(appPath)
@@ -1197,6 +1209,7 @@
                 .doc(pointKey)
                 .delete();
     
+            // 清理記憶體狀態
             if (window.auditLayersState && window.auditLayersState[kmlId]) {
                 delete window.auditLayersState[kmlId][pointKey];
             }
@@ -1230,6 +1243,9 @@
         }
     };
     
+    /**
+     * 動態更新底部清查選單與獨立新增按鈕顯示狀態
+     */
     window.updateAuditBottomMenuUI = function(mode, extraData) {
         if (typeof bottomControl === 'undefined' || !bottomControl || !bottomControl._container) return;
     
@@ -1244,7 +1260,7 @@
     
         const isAuditingEnabled = !!(window.globalAuditConfigs?.[currentKmlId]?.isAuditing);
         
-        // 💡 關鍵新增：若當前彈窗（SweetAlert2）正開啟中，強制維持隱藏狀態
+        // 若 SweetAlert2 彈窗開啟中，自動維持隱藏，避免按鈕突發被重繪顯示
         const isModalOpen = typeof Swal !== 'undefined' && Swal.isVisible();
     
         if (!currentKmlId || !hasPermission || !isAuditingEnabled || isModalOpen) {
@@ -1260,7 +1276,7 @@
     
         const standaloneAddBtn = document.getElementById('btn-standalone-add-point');
         if (standaloneAddBtn) standaloneAddBtn.style.display = 'inline-flex';
-        
+    
         const props = extraData?.feature?.properties || extraData?.properties || extraData || {};
         const isCustom = !!(props.isCustomPoint || extraData?.isCustomPoint);
     
