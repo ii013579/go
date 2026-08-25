@@ -430,7 +430,7 @@
         listHtml += '</div>';
         
         Swal.fire({ 
-            title: '圖層清查管理 (v3.06)', 
+            title: '圖層清查管理', 
             html: listHtml, 
             showConfirmButton: false, 
             showCloseButton: true 
@@ -694,9 +694,6 @@
         const config = window.globalAuditConfigs?.[kmlId] || {};
         const maxPhotos = config.targetPhotos || 2; 
         
-        // 1. 動態取得設定的設備狀態選項，若無設定則提供標準預設選單
-        const statusOptions = config.statusOptions || ['新增', '正常', '遺失', '毀損'];
-    
         let photoHtml = '';
         for (let i = 0; i < maxPhotos; i++) {
             photoHtml += `
@@ -716,11 +713,6 @@
         const rawLayerName = selectEl?.options[selectEl.selectedIndex]?.getAttribute('data-basename') || kmlId;
         const kmlLayerName = rawLayerName.replace(/\.kml$/i, '').trim();
     
-        // 2. 生成設備狀態下拉選單 HTML
-        const statusSelectOptionsHtml = statusOptions
-            .map(opt => `<option value="${opt}" ${opt === '新增' ? 'selected' : ''}>${opt}</option>`)
-            .join('');
-    
         const modalHtml = `
         <div style="text-align: left; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #333; padding: 0 5px;">
             <div style="text-align: center; font-size: 20px; font-weight: bold; color: #4a4a4a; margin-bottom: 20px; display: flex; align-items: center; justify-content: center; gap: 8px;">
@@ -733,10 +725,11 @@
                 </label>
                 <input type="text" id="add-point-name" placeholder="例如：新設電桿-01" style="width: 100%; padding: 10px 14px; font-size: 15px; border: 1px solid #dcdfe6; border-radius: 8px; outline: none; box-sizing: border-box; color: #333; background-color: #fff;">
             </div>
+            <!-- 設備狀態：固定「新增」、單一選項、灰底且不可選 -->
             <div style="margin-bottom: 16px;">
                 <label style="display: block; font-size: 15px; font-weight: bold; color: #4a4a4a; margin-bottom: 8px;">設備狀態</label>
-                <select id="add-device-status" style="width: 100%; padding: 10px 14px; font-size: 15px; font-weight: bold; color: #2c3e50; background-color: #f8f9fa; border: 1px solid #dcdfe6; border-radius: 8px; outline: none; box-sizing: border-box;">
-                    ${statusSelectOptionsHtml}
+                <select id="add-device-status" disabled style="width: 100%; padding: 10px 14px; font-size: 15px; font-weight: bold; color: #6c757d; background-color: #e9ecef; border: 1px solid #dcdfe6; border-radius: 8px; outline: none; box-sizing: border-box; cursor: not-allowed;">
+                    <option value="新增" selected>新增</option>
                 </select>
             </div>
             <div style="margin-bottom: 16px;">
@@ -769,7 +762,7 @@
             focusConfirm: false,
             preConfirm: () => {
                 const name = document.getElementById('add-point-name').value.trim();
-                const deviceStatus = document.getElementById('add-device-status').value;
+                const deviceStatus = "新增";
                 const remark = document.getElementById('add-point-remark').value.trim();
                 
                 const photosArray = [];
@@ -796,8 +789,8 @@
                     lng: lng,
                     pointKey: name,
                     name: name,
-                    status: deviceStatus,        // 同步選擇的設備狀態
-                    deviceStatus: deviceStatus,  // 明確記錄設備狀態
+                    status: deviceStatus,
+                    deviceStatus: deviceStatus,
                     remark: remark,
                     photos: photosArray 
                 };
@@ -829,7 +822,7 @@
             reader.readAsDataURL(file);
         }
     };
-    
+        
     // =========================================================
     // 5-4. 新增/修改自訂點位送出邏輯 (儲存至 APP_PATH 並立即渲染地圖)
     // =========================================================
