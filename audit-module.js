@@ -1260,10 +1260,7 @@
     
         const standaloneAddBtn = document.getElementById('btn-standalone-add-point');
         if (standaloneAddBtn) standaloneAddBtn.style.display = 'inline-flex';
-    
-        // ... 下方銜接 mode === 'VIEW_EDIT' / 'AUDIT_MAIN' 等按鈕生成邏輯 ...
-    };
-    
+        
         const props = extraData?.feature?.properties || extraData?.properties || extraData || {};
         const isCustom = !!(props.isCustomPoint || extraData?.isCustomPoint);
     
