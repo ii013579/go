@@ -369,13 +369,27 @@ body {
 #searchResults.columns-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 #searchResults.columns-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
 
-/* ---------- 地圖容器 ---------- */
+/* ---------- 地圖容器完整設定 ---------- */
 #map {
   flex-grow: 1;
+  width: 100%;
+  height: 100%;
   border-radius: 12px;
   overflow: hidden;
-  margin: 15px;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  margin: 0 !important; /* 修正：將外距歸零，消除地圖外框外的空白區域 */
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  outline: none !important;
+}
+
+#map:focus,
+#map:active,
+#map.leaflet-container,
+#map.leaflet-container:focus,
+#map.leaflet-container:active,
+.leaflet-container:focus,
+.leaflet-container:active {
+  outline: none !important;
+  box-shadow: none !important;
 }
 
 /* ---------- Leaflet 控制項（位置/樣式微調） ---------- */
