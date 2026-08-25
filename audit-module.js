@@ -695,7 +695,7 @@
         const maxPhotos = config.targetPhotos || 2; 
         
         // 1. 動態取得設定的設備狀態選項，若無設定則提供標準預設選單
-        const statusOptions = config.statusOptions || ['新增', '正常', '需維修', '遺失', '毀損'];
+        const statusOptions = config.statusOptions || ['新增', '正常', '遺失', '毀損'];
     
         let photoHtml = '';
         for (let i = 0; i < maxPhotos; i++) {
