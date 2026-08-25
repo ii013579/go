@@ -687,142 +687,142 @@
         }
     });
     
-    // =========================================================
-    // 5-3. 彈窗 UI 介面與照片預覽 (動態照片數 & 原生 File Input 機制)
-    // =========================================================
-    window.openAddPointModal = async function(kmlId, lat, lng) {
-        const config = window.globalAuditConfigs?.[kmlId] || {};
-        const maxPhotos = config.targetPhotos || 2; 
-        
-        let photoHtml = '';
-        for (let i = 0; i < maxPhotos; i++) {
-            photoHtml += `
-                <div style="position:relative; margin-bottom:15px; width:80px;">
-                    <div style="border:2px dashed #ccc; height:80px; width:80px; position:relative; display:flex; align-items:center; justify-content:center; background:#fafafa; border-radius:12px; overflow:hidden; cursor:pointer;">
-                        <img id="add-prev-${i}" src="" style="width:100%; height:100%; object-fit:cover; display:none; position:absolute; top:0; left:0; z-index:1;">
-                        <span id="add-icon-${i}" style="font-size:24px; color:#bbb; display:block; z-index:1;">📷</span>
-                        <input type="file" id="add-photo-input-${i}" accept="image/*" capture="environment" onchange="window.handleAddPhotoPreview(this, ${i})" style="position:absolute; width:100%; height:100%; opacity:0; z-index:2; cursor:pointer;" title="現場拍照">
-                    </div>
-                    <label for="add-photo-input-${i}" style="position:absolute; left:50%; transform:translateX(-50%); bottom:-10px; z-index:3; background:#555; color:#fff; font-size:11px; padding:2px 8px; border-radius:12px; cursor:pointer; display:flex; align-items:center; gap:4px; box-shadow:0 2px 4px rgba(0,0,0,0.2); white-space:nowrap; border:1px solid #777;">
-                        <span>🖼️</span> <span id="add-tag-text-${i}">圖庫</span>
-                    </label>
-                </div>`;
-        }
-    
-        const selectEl = document.getElementById('kmlLayerSelect');
-        const rawLayerName = selectEl?.options[selectEl.selectedIndex]?.getAttribute('data-basename') || kmlId;
-        const kmlLayerName = rawLayerName.replace(/\.kml$/i, '').trim();
-    
-        const modalHtml = `
-        <div style="text-align: left; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #333; padding: 0 5px;">
-            <div style="text-align: center; font-size: 20px; font-weight: bold; color: #4a4a4a; margin-bottom: 20px; display: flex; align-items: center; justify-content: center; gap: 8px;">
-                <span style="color: #2ecc71; font-size: 24px; font-weight: 900;">➕</span>
-                <span>新增點位清查紀錄</span>
-            </div>
-            <div style="margin-bottom: 16px;">
-                <label style="display: block; font-size: 15px; font-weight: bold; color: #4a4a4a; margin-bottom: 8px;">
-                    點位名稱 / 點名 <span style="color: #e74c3c;">*必填</span>
-                </label>
-                <input type="text" id="add-point-name" placeholder="例如：新設電桿-01" style="width: 100%; padding: 10px 14px; font-size: 15px; border: 1px solid #dcdfe6; border-radius: 8px; outline: none; box-sizing: border-box; color: #333; background-color: #fff;">
-            </div>
-            <!-- 設備狀態：固定「新增」、單一選項、灰底且不可選 -->
-            <div style="margin-bottom: 16px;">
-                <label style="display: block; font-size: 15px; font-weight: bold; color: #4a4a4a; margin-bottom: 8px;">設備狀態</label>
-                <select id="add-device-status" disabled style="width: 100%; padding: 10px 14px; font-size: 15px; font-weight: bold; color: #6c757d; background-color: #e9ecef; border: 1px solid #dcdfe6; border-radius: 8px; outline: none; box-sizing: border-box; cursor: not-allowed;">
-                    <option value="新增" selected>新增</option>
-                </select>
-            </div>
-            <div style="margin-bottom: 16px;">
-                <label style="display: block; font-size: 15px; font-weight: bold; color: #4a4a4a; margin-bottom: 8px;">
-                    現場照片 (需拍 ${maxPhotos} 張) <span style="color: #e74c3c;">*必填</span>
-                </label>
-                <div style="display: flex; gap: 15px; flex-wrap: wrap;">${photoHtml}</div>
-            </div>
-            <div style="margin-bottom: 0px;">
-                <label style="display: block; font-size: 15px; font-weight: bold; color: #4a4a4a; margin-bottom: 8px;">
-                    備註事項 <span style="color: #909399; font-weight: normal;">(選填)</span>
-                </label>
-                <textarea id="add-point-remark" placeholder="輸入備註事項..." style="width: 100%; height: 80px; padding: 10px 14px; font-size: 15px; border: 1px solid #dcdfe6; border-radius: 8px; outline: none; box-sizing: border-box; resize: vertical; color: #333; font-family: inherit;"></textarea>
-            </div>
-        </div>`;
-    
-        const { value: formValues } = await Swal.fire({
-            html: modalHtml,
-            showCancelButton: true,
-            confirmButtonText: '確認並新增上傳',
-            cancelButtonText: '取消',
-            confirmButtonColor: '#2ecc71',
-            cancelButtonColor: '#707a86',
-            buttonsStyling: true,
-            customClass: {
-                popup: 'custom-audit-modal-popup',
-                confirmButton: 'custom-audit-confirm-btn',
-                cancelButton: 'custom-audit-cancel-btn'
-            },
-            focusConfirm: false,
-            preConfirm: () => {
-                const name = document.getElementById('add-point-name').value.trim();
-                const deviceStatus = "新增";
-                const remark = document.getElementById('add-point-remark').value.trim();
-                
-                const photosArray = [];
-                for (let i = 0; i < maxPhotos; i++) {
-                    const fileInput = document.getElementById(`add-photo-input-${i}`);
-                    if (fileInput && fileInput.files && fileInput.files[0]) {
-                        photosArray.push(fileInput.files[0]);
-                    }
-                }
-    
-                if (!name) {
-                    Swal.showValidationMessage('請填寫點位名稱！');
-                    return false;
-                }
-                if (photosArray.length < maxPhotos) {
-                    Swal.showValidationMessage(`請上傳完整 ${maxPhotos} 張現場照片！`);
-                    return false;
-                }
-    
-                return {
-                    kmlId: kmlId,
-                    kmlLayerName: kmlLayerName,
-                    lat: lat,
-                    lng: lng,
-                    pointKey: name,
-                    name: name,
-                    status: deviceStatus,
-                    deviceStatus: deviceStatus,
-                    remark: remark,
-                    photos: photosArray 
-                };
-            }
-        });
-    
-        if (formValues && typeof window.submitNewCustomPoint === 'function') {
-            await window.submitNewCustomPoint(formValues);
-        }
-    };
-    
-    // 預覽輔助函式
-    window.handleAddPhotoPreview = function(input, index) {
-        if (input.files && input.files[0]) {
-            const file = input.files[0];
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                const img = document.getElementById(`add-prev-${index}`);
-                const icon = document.getElementById(`add-icon-${index}`);
-                const tagText = document.getElementById(`add-tag-text-${index}`);
-    
-                if (img) {
-                    img.src = e.target.result;
-                    img.style.display = 'block';
-                }
-                if (icon) icon.style.display = 'none';
-                if (tagText) tagText.innerText = '已選取';
-            };
-            reader.readAsDataURL(file);
-        }
-    };
-        
+   // =========================================================
+   // 5-3. 彈窗 UI 介面與照片預覽 (動態照片數 & 原生 File Input 機制)
+   // =========================================================
+   window.openAddPointModal = async function(kmlId, lat, lng) {
+       const config = window.globalAuditConfigs?.[kmlId] || {};
+       const maxPhotos = config.targetPhotos || 2; 
+       
+       let photoHtml = '';
+       for (let i = 0; i < maxPhotos; i++) {
+           photoHtml += `
+               <div style="position:relative; margin-bottom:15px; width:80px;">
+                   <div style="border:2px dashed #ccc; height:80px; width:80px; position:relative; display:flex; align-items:center; justify-content:center; background:#fafafa; border-radius:12px; overflow:hidden; cursor:pointer;">
+                       <img id="add-prev-${i}" src="" style="width:100%; height:100%; object-fit:cover; display:none; position:absolute; top:0; left:0; z-index:1;">
+                       <span id="add-icon-${i}" style="font-size:24px; color:#bbb; display:block; z-index:1;">📷</span>
+                       <input type="file" id="add-photo-input-${i}" accept="image/*" capture="environment" onchange="window.handleAddPhotoPreview(this, ${i})" style="position:absolute; width:100%; height:100%; opacity:0; z-index:2; cursor:pointer;" title="現場拍照">
+                   </div>
+                   <label for="add-photo-input-${i}" style="position:absolute; left:50%; transform:translateX(-50%); bottom:-10px; z-index:3; background:#555; color:#fff; font-size:11px; padding:2px 8px; border-radius:12px; cursor:pointer; display:flex; align-items:center; gap:4px; box-shadow:0 2px 4px rgba(0,0,0,0.2); white-space:nowrap; border:1px solid #777;">
+                       <span>🖼️</span> <span id="add-tag-text-${i}">圖庫</span>
+                   </label>
+               </div>`;
+       }
+   
+       const selectEl = document.getElementById('kmlLayerSelect');
+       const rawLayerName = selectEl?.options[selectEl.selectedIndex]?.getAttribute('data-basename') || kmlId;
+       const kmlLayerName = rawLayerName.replace(/\.kml$/i, '').trim();
+   
+       const modalHtml = `
+       <div style="text-align: left; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #333; padding: 0 5px;">
+           <div style="text-align: center; font-size: 20px; font-weight: bold; color: #4a4a4a; margin-bottom: 20px; display: flex; align-items: center; justify-content: center; gap: 8px;">
+               <span style="color: #2ecc71; font-size: 24px; font-weight: 900;">➕</span>
+               <span>新增點位清查紀錄</span>
+           </div>
+           <div style="margin-bottom: 16px;">
+               <label style="display: block; font-size: 15px; font-weight: bold; color: #4a4a4a; margin-bottom: 8px;">
+                   點位名稱 / 點名 <span style="color: #e74c3c;">*必填</span>
+               </label>
+               <input type="text" id="add-point-name" placeholder="例如：新設電桿-01" style="width: 100%; padding: 10px 14px; font-size: 15px; border: 1px solid #dcdfe6; border-radius: 8px; outline: none; box-sizing: border-box; color: #333; background-color: #fff;">
+           </div>
+           <!-- 設備狀態：固定「新增」、單一選項、灰底且不可選 -->
+           <div style="margin-bottom: 16px;">
+               <label style="display: block; font-size: 15px; font-weight: bold; color: #4a4a4a; margin-bottom: 8px;">設備狀態</label>
+               <select id="add-device-status" disabled style="width: 100%; padding: 10px 14px; font-size: 15px; font-weight: bold; color: #6c757d; background-color: #e9ecef; border: 1px solid #dcdfe6; border-radius: 8px; outline: none; box-sizing: border-box; cursor: not-allowed;">
+                   <option value="新增" selected>新增</option>
+               </select>
+           </div>
+           <div style="margin-bottom: 16px;">
+               <label style="display: block; font-size: 15px; font-weight: bold; color: #4a4a4a; margin-bottom: 8px;">
+                   現場照片 (需拍 ${maxPhotos} 張) <span style="color: #e74c3c;">*必填</span>
+               </label>
+               <div style="display: flex; gap: 15px; flex-wrap: wrap;">${photoHtml}</div>
+           </div>
+           <div style="margin-bottom: 0px;">
+               <label style="display: block; font-size: 15px; font-weight: bold; color: #4a4a4a; margin-bottom: 8px;">
+                   備註事項 <span style="color: #909399; font-weight: normal;">(選填)</span>
+               </label>
+               <textarea id="add-point-remark" placeholder="輸入備註事項..." style="width: 100%; height: 80px; padding: 10px 14px; font-size: 15px; border: 1px solid #dcdfe6; border-radius: 8px; outline: none; box-sizing: border-box; resize: vertical; color: #333; font-family: inherit;"></textarea>
+           </div>
+       </div>`;
+   
+       const { value: formValues } = await Swal.fire({
+           html: modalHtml,
+           showCancelButton: true,
+           confirmButtonText: '確認並新增上傳',
+           cancelButtonText: '取消',
+           confirmButtonColor: '#2ecc71',
+           cancelButtonColor: '#707a86',
+           buttonsStyling: true,
+           customClass: {
+               popup: 'custom-audit-modal-popup',
+               confirmButton: 'custom-audit-confirm-btn',
+               cancelButton: 'custom-audit-cancel-btn'
+           },
+           focusConfirm: false,
+           preConfirm: () => {
+               const name = document.getElementById('add-point-name').value.trim();
+               const deviceStatus = "新增";
+               const remark = document.getElementById('add-point-remark').value.trim();
+               
+               const photosArray = [];
+               for (let i = 0; i < maxPhotos; i++) {
+                   const fileInput = document.getElementById(`add-photo-input-${i}`);
+                   if (fileInput && fileInput.files && fileInput.files[0]) {
+                       photosArray.push(fileInput.files[0]);
+                   }
+               }
+   
+               if (!name) {
+                   Swal.showValidationMessage('請填寫點位名稱！');
+                   return false;
+               }
+               if (photosArray.length < maxPhotos) {
+                   Swal.showValidationMessage(`請上傳完整 ${maxPhotos} 張現場照片！`);
+                   return false;
+               }
+   
+               return {
+                   kmlId: kmlId,
+                   kmlLayerName: kmlLayerName,
+                   lat: lat,
+                   lng: lng,
+                   pointKey: name,
+                   name: name,
+                   status: deviceStatus,
+                   deviceStatus: deviceStatus,
+                   remark: remark,
+                   photos: photosArray 
+               };
+           }
+       });
+   
+       if (formValues && typeof window.submitNewCustomPoint === 'function') {
+           await window.submitNewCustomPoint(formValues);
+       }
+   };
+   
+   // 預覽輔助函式
+   window.handleAddPhotoPreview = function(input, index) {
+       if (input.files && input.files[0]) {
+           const file = input.files[0];
+           const reader = new FileReader();
+           reader.onload = function(e) {
+               const img = document.getElementById(`add-prev-${index}`);
+               const icon = document.getElementById(`add-icon-${index}`);
+               const tagText = document.getElementById(`add-tag-text-${index}`);
+   
+               if (img) {
+                   img.src = e.target.result;
+                   img.style.display = 'block';
+               }
+               if (icon) icon.style.display = 'none';
+               if (tagText) tagText.innerText = '已選取';
+           };
+           reader.readAsDataURL(file);
+       }
+   };
+       
     // =========================================================
     // 5-4. 新增/修改自訂點位送出邏輯 (儲存至 APP_PATH 並立即渲染地圖)
     // =========================================================
@@ -1283,7 +1283,7 @@
         }
     };
     
-    // =========================================================
+// =========================================================
     // 5-6. 清查資料編輯、修改與刪除紀錄邏輯
     // =========================================================
     window.openAuditEditor = async function(isModifyMode = false) {
@@ -1324,21 +1324,21 @@
         const currentNote = historyRecord.note || '';
     
         const layerConfig = window.globalAuditConfigs?.[kmlId] || {};
-        let statusOptions = layerConfig.statusOptions || 
-                              (localStorage.getItem('audit_status_options') ? JSON.parse(localStorage.getItem('audit_status_options')) : ['正常','損壞','遺失']);
-    
-        if (!statusOptions.includes('新增')) {
-            statusOptions = ['新增', ...statusOptions];
-        }
+        const baseStatusOptions = layerConfig.statusOptions || 
+                                  (localStorage.getItem('audit_status_options') ? JSON.parse(localStorage.getItem('audit_status_options')) : ['正常','損壞','遺失']);
     
         let statusSelectHtml = '';
         if (isUserCreatedPoint) {
+            // 使用者自訂點位：鎖定為「新增」且不可修改
             statusSelectHtml = `
                 <select id="swal-status" class="swal2-input" disabled style="width:100%; margin:6px 0 16px 0; background-color:#e9ecef; color:#495057; cursor:not-allowed;">
                     <option value="新增" selected>新增</option>
                 </select>`;
         } else {
-            const statusOptionsHtml = statusOptions.map(opt => 
+            // 既有點位：剔除「新增」選項
+            const existingStatusOptions = baseStatusOptions.filter(opt => opt !== '新增');
+            
+            const statusOptionsHtml = existingStatusOptions.map(opt => 
                 `<option value="${opt}" ${currentStatus === opt ? 'selected' : ''}>${opt}</option>`
             ).join('');
             
@@ -1562,7 +1562,7 @@
             }
         }
     };
-
+    
     // ---------------------------------------------------------
     // 7. 查看詳細紀錄彈窗
     // ---------------------------------------------------------
