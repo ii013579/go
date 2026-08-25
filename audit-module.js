@@ -1243,8 +1243,11 @@
             : (userRole !== 'guest' && userRole !== 'unapproved');
     
         const isAuditingEnabled = !!(window.globalAuditConfigs?.[currentKmlId]?.isAuditing);
+        
+        // 💡 關鍵新增：若當前彈窗（SweetAlert2）正開啟中，強制維持隱藏狀態
+        const isModalOpen = typeof Swal !== 'undefined' && Swal.isVisible();
     
-        if (!currentKmlId || !hasPermission || !isAuditingEnabled) {
+        if (!currentKmlId || !hasPermission || !isAuditingEnabled || isModalOpen) {
             container.style.display = 'none';
             const standaloneAddBtn = document.getElementById('btn-standalone-add-point');
             if (standaloneAddBtn) standaloneAddBtn.style.display = 'none';
@@ -1257,6 +1260,9 @@
     
         const standaloneAddBtn = document.getElementById('btn-standalone-add-point');
         if (standaloneAddBtn) standaloneAddBtn.style.display = 'inline-flex';
+    
+        // ... 下方銜接 mode === 'VIEW_EDIT' / 'AUDIT_MAIN' 等按鈕生成邏輯 ...
+    };
     
         const props = extraData?.feature?.properties || extraData?.properties || extraData || {};
         const isCustom = !!(props.isCustomPoint || extraData?.isCustomPoint);
