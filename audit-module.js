@@ -1283,7 +1283,7 @@
         }
     };
     
-// =========================================================
+    // =========================================================
     // 5-6. 清查資料編輯、修改與刪除紀錄邏輯
     // =========================================================
     window.openAuditEditor = async function(isModifyMode = false) {
@@ -1329,15 +1329,12 @@
     
         let statusSelectHtml = '';
         if (isUserCreatedPoint) {
-            // 使用者自訂點位：鎖定為「新增」且不可修改
             statusSelectHtml = `
                 <select id="swal-status" class="swal2-input" disabled style="width:100%; margin:6px 0 16px 0; background-color:#e9ecef; color:#495057; cursor:not-allowed;">
                     <option value="新增" selected>新增</option>
                 </select>`;
         } else {
-            // 既有點位：剔除「新增」選項
             const existingStatusOptions = baseStatusOptions.filter(opt => opt !== '新增');
-            
             const statusOptionsHtml = existingStatusOptions.map(opt => 
                 `<option value="${opt}" ${currentStatus === opt ? 'selected' : ''}>${opt}</option>`
             ).join('');
@@ -1387,14 +1384,20 @@
             
             photoHtml += `
                 <div style="position:relative; margin-bottom:18px;">
+                    <!-- 大相機區域：觸發相機直接拍照 -->
                     <div style="border:2px dashed #ccc; height:85px; position:relative; display:flex; align-items:center; justify-content:center; background:#fafafa; border-radius:8px; overflow:hidden;">
                         <img id="audit-prev-${i}" src="${photoData}" style="width:100%; height:100%; object-fit:cover; display:${photoData ? 'block' : 'none'}; position:absolute; top:0; left:0; z-index:1;">
                         <span id="audit-icon-${i}" style="font-size:24px; color:#bbb; display:${photoData ? 'none' : 'block'}; z-index:1;">📷</span>
-                        <input type="file" id="audit-file-input-${i}" accept="image/*" capture="environment" onchange="window._tempPreview(this, ${i})" style="position:absolute; width:100%; height:100%; opacity:0; z-index:2; cursor:pointer;" title="點擊拍攝或更換照片">
+                        <input type="file" id="audit-file-input-${i}" accept="image/*" capture="environment" onchange="window._tempPreview(this, ${i})" style="position:absolute; width:100%; height:100%; opacity:0; z-index:2; cursor:pointer;" title="直接拍照">
                     </div>
-                    <div id="audit-tag-${i}" style="position:absolute; left:50%; transform:translateX(-50%); bottom:-10px; z-index:3; background:#444; color:#fff; font-size:11px; padding:2px 8px; border-radius:10px; display:flex; align-items:center; gap:3px; white-space:nowrap;">
-                        ${isUrl ? '<span>🖼️</span> 舊照片' : (photoData ? '<span>🖼️</span> 新選擇' : '<span>📷</span> 拍攝/上傳')}
-                    </div>
+
+                    <!-- 獨立檔案選擇器：用於開啟相簿舊檔 -->
+                    <input type="file" id="audit-gallery-input-${i}" accept="image/*" onchange="window._tempPreview(this, ${i})" style="display:none;">
+
+                    <!-- 下方標籤：改為「開啟舊檔」觸發相簿 -->
+                    <label for="audit-gallery-input-${i}" id="audit-tag-${i}" style="position:absolute; left:50%; transform:translateX(-50%); bottom:-10px; z-index:3; background:#444; color:#fff; font-size:11px; padding:2px 8px; border-radius:10px; display:flex; align-items:center; gap:3px; white-space:nowrap; cursor:pointer; box-shadow:0 2px 4px rgba(0,0,0,0.2);">
+                        ${isUrl ? '<span>🖼️</span> 舊照片' : (photoData ? '<span>🖼️</span> 新選擇' : '<span>📁</span> 開啟舊檔')}
+                    </label>
                 </div>`;
         }
     
@@ -1418,6 +1421,20 @@
             denyButtonColor: '#e74c3c',
             confirmButtonText: isModifyMode ? '覆蓋更新' : '確認並上傳',
             cancelButtonText: '取消',
+            didOpen: () => {
+                // 開啟彈窗時隱藏右下角「新增點位」按鈕
+                const addBtn = document.getElementById('add-point-btn') || document.getElementById('addPointBtn') || document.querySelector('.add-point-btn');
+                if (addBtn) addBtn.style.display = 'none';
+            },
+            willClose: () => {
+                // 關閉彈窗時復原按鈕狀態
+                if (typeof updateBottomBtnState === 'function') {
+                    updateBottomBtnState();
+                } else {
+                    const addBtn = document.getElementById('add-point-btn') || document.getElementById('addPointBtn') || document.querySelector('.add-point-btn');
+                    if (addBtn) addBtn.style.display = 'block';
+                }
+            },
             preConfirm: () => {
                 const statusValue = document.getElementById('swal-status').value;
                 if (!statusValue) { 
@@ -1561,8 +1578,7 @@
                 Swal.fire('錯誤', e.message || '儲存失敗', 'error'); 
             }
         }
-    };
-    
+    };    
     // ---------------------------------------------------------
     // 7. 查看詳細紀錄彈窗
     // ---------------------------------------------------------
