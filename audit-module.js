@@ -691,12 +691,13 @@
     // 5-3. 彈窗 UI 介面與照片預覽 (動態照片數 & 原生 File Input 機制)
     // =========================================================
     window.openAddPointModal = async function(kmlId, lat, lng) {
-        // 1. 動態讀取該圖層設定的照片數量，若未設定則預設為 2
         const config = window.globalAuditConfigs?.[kmlId] || {};
         const maxPhotos = config.targetPhotos || 2; 
+        
+        // 1. 動態取得設定的設備狀態選項，若無設定則提供標準預設選單
+        const statusOptions = config.statusOptions || ['新增', '正常', '需維修', '遺失', '毀損'];
     
         let photoHtml = '';
-    
         for (let i = 0; i < maxPhotos; i++) {
             photoHtml += `
                 <div style="position:relative; margin-bottom:15px; width:80px;">
@@ -715,6 +716,11 @@
         const rawLayerName = selectEl?.options[selectEl.selectedIndex]?.getAttribute('data-basename') || kmlId;
         const kmlLayerName = rawLayerName.replace(/\.kml$/i, '').trim();
     
+        // 2. 生成設備狀態下拉選單 HTML
+        const statusSelectOptionsHtml = statusOptions
+            .map(opt => `<option value="${opt}" ${opt === '新增' ? 'selected' : ''}>${opt}</option>`)
+            .join('');
+    
         const modalHtml = `
         <div style="text-align: left; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #333; padding: 0 5px;">
             <div style="text-align: center; font-size: 20px; font-weight: bold; color: #4a4a4a; margin-bottom: 20px; display: flex; align-items: center; justify-content: center; gap: 8px;">
@@ -729,7 +735,9 @@
             </div>
             <div style="margin-bottom: 16px;">
                 <label style="display: block; font-size: 15px; font-weight: bold; color: #4a4a4a; margin-bottom: 8px;">設備狀態</label>
-                <div style="width: 100%; padding: 10px 16px; font-size: 16px; font-weight: bold; color: #27ae60; background-color: #e8f8f5; border: 1px solid #a3e4d7; border-radius: 8px; box-sizing: border-box;">新增</div>
+                <select id="add-device-status" style="width: 100%; padding: 10px 14px; font-size: 15px; font-weight: bold; color: #2c3e50; background-color: #f8f9fa; border: 1px solid #dcdfe6; border-radius: 8px; outline: none; box-sizing: border-box;">
+                    ${statusSelectOptionsHtml}
+                </select>
             </div>
             <div style="margin-bottom: 16px;">
                 <label style="display: block; font-size: 15px; font-weight: bold; color: #4a4a4a; margin-bottom: 8px;">
@@ -761,9 +769,9 @@
             focusConfirm: false,
             preConfirm: () => {
                 const name = document.getElementById('add-point-name').value.trim();
+                const deviceStatus = document.getElementById('add-device-status').value;
                 const remark = document.getElementById('add-point-remark').value.trim();
                 
-                // 動態使用迴圈抓取所有照片檔案
                 const photosArray = [];
                 for (let i = 0; i < maxPhotos; i++) {
                     const fileInput = document.getElementById(`add-photo-input-${i}`);
@@ -788,7 +796,8 @@
                     lng: lng,
                     pointKey: name,
                     name: name,
-                    status: '新增',
+                    status: deviceStatus,        // 同步選擇的設備狀態
+                    deviceStatus: deviceStatus,  // 明確記錄設備狀態
                     remark: remark,
                     photos: photosArray 
                 };
@@ -825,9 +834,10 @@
     // 5-4. 新增/修改自訂點位送出邏輯 (儲存至 APP_PATH 並立即渲染地圖)
     // =========================================================
     window.submitNewCustomPoint = async function(formValues) {
-        const { kmlId, kmlLayerName, lat, lng, pointKey, status, remark, photos, isEditMode, oldPointKey } = formValues;
+        const { kmlId, kmlLayerName, lat, lng, pointKey, status, deviceStatus, remark, photos, isEditMode, oldPointKey } = formValues;
     
         const trimmedPointKey = (pointKey || '').trim();
+        const targetDeviceStatus = deviceStatus || status || "新增";
     
         if (!trimmedPointKey) {
             Swal.fire('提示', '請輸入點位名稱', 'warning');
@@ -846,7 +856,6 @@
             ? window.auditLayersState[kmlId] 
             : {};
     
-        // 名稱防重檢核
         if (!isEditMode || (isEditMode && oldPointKey !== trimmedPointKey)) {
             let isDuplicateInKml = false;
             if (ns && Array.isArray(ns.allKmlFeatures)) {
@@ -861,7 +870,7 @@
                 Swal.fire({
                     icon: 'warning',
                     title: '點位名稱重複',
-                    text: `點名「${trimmedPointKey}」已存在！請直接修改點位名稱後重新送出（剛拍的照片會保留）。`,
+                    text: `點名「${trimmedPointKey}」已存在！請直接修改點名後重新送出。`,
                     confirmButtonText: '返回修改點名'
                 });
                 return;
@@ -879,7 +888,6 @@
             if (typeof window.uploadPhotosToStorage === 'function') {
                 photoUrls = await window.uploadPhotosToStorage(photos, kmlId, trimmedPointKey, kmlLayerName);
             } else {
-                console.warn("⚠️ 找不到 uploadPhotosToStorage，使用原始照片連結");
                 photoUrls = Array.isArray(photos) ? photos.filter(p => typeof p === 'string') : [];
             }
     
@@ -898,10 +906,12 @@
                 await firebase.firestore().collection(appPath).doc(kmlId).collection('auditRecords').doc(oldPointKey).delete();
             }
     
+            // 結構化資料：同時補齊 status 與 deviceStatus 避免跨模組讀取錯位
             const structuredData = {
                 pointName: trimmedPointKey,
-                status: "已完成",
-                deviceStatus: status || "新增",
+                status: "已完成",                 // 清查流程狀態
+                deviceStatus: targetDeviceStatus,  // 設備實體狀態
+                auditStatus: targetDeviceStatus,   // 雙向相容
                 note: remark || "",
                 photos: photoUrls,
                 lat: numLat,
@@ -910,12 +920,11 @@
                 updatedAt: firebase.firestore.FieldValue.serverTimestamp()
             };
     
-            // 先寫入 local state，確保色彩與資訊卡更新
             if (!window.auditLayersState) window.auditLayersState = {};
             if (!window.auditLayersState[kmlId]) window.auditLayersState[kmlId] = {};
             window.auditLayersState[kmlId][trimmedPointKey] = structuredData;
     
-            // 建立點位的 GeoJSON 結構
+            // GeoJSON Feature 屬性同步補齊 deviceStatus 與 auditStatus
             const newGeoJsonFeature = {
                 type: "Feature",
                 geometry: {
@@ -929,7 +938,8 @@
                     auditPointKey: trimmedPointKey,
                     isCustomPoint: true,
                     isAudited: true,
-                    auditStatus: status || "新增",
+                    deviceStatus: targetDeviceStatus,
+                    auditStatus: targetDeviceStatus,
                     auditNote: remark || "",
                     photos: photoUrls,
                     fillColor: "#FCD770",
@@ -952,7 +962,7 @@
                 }
             }
     
-            // 寫入 Firestore (使用指定路徑 APP_PATH)
+            // 寫入 Firestore
             await firebase.firestore()
                 .collection(appPath)
                 .doc(kmlId)
@@ -960,7 +970,7 @@
                 .doc(trimmedPointKey)
                 .set(structuredData, { merge: true });
     
-            // 🚀 【新增後立即渲染在地圖上】
+            // 地圖即時繪製
             if (typeof window.addGeoJsonLayers === 'function') {
                 window.addGeoJsonLayers([newGeoJsonFeature]);
             } else if (ns && ns.map && typeof L !== 'undefined') {
@@ -971,7 +981,7 @@
                     weight: 2,
                     opacity: 1,
                     fillOpacity: 0.85
-                }).bindPopup(`<b>${trimmedPointKey}</b><br>狀態：${status || '新增'}`);
+                }).bindPopup(`<b>${trimmedPointKey}</b><br>狀態：${targetDeviceStatus}`);
     
                 marker.addTo(ns.map);
             }
