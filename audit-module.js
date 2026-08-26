@@ -1486,15 +1486,15 @@
             confirmButtonText: isModifyMode ? '覆蓋更新' : '確認並上傳',
             cancelButtonText: '取消',
             didOpen: () => {
-                const addBtn = document.getElementById('add-point-btn') || document.getElementById('addPointBtn') || document.querySelector('.add-point-btn');
-                if (addBtn) addBtn.style.display = 'none';
+                const addBtn = document.getElementById('btn-standalone-add-point');
+                if (addBtn) addBtn.style.setProperty('display', 'none', 'important');
             },
             willClose: () => {
-                if (typeof updateBottomBtnState === 'function') {
-                    updateBottomBtnState();
+                if (typeof syncAuditButtonVisibility === 'function') {
+                    syncAuditButtonVisibility();
                 } else {
-                    const addBtn = document.getElementById('add-point-btn') || document.getElementById('addPointBtn') || document.querySelector('.add-point-btn');
-                    if (addBtn) addBtn.style.display = 'block';
+                    const addBtn = document.getElementById('btn-standalone-add-point');
+                    if (addBtn) addBtn.style.setProperty('display', 'inline-flex', 'important');
                 }
             },
             preConfirm: () => {
