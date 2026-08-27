@@ -55,12 +55,12 @@
     window.escapeHtml = safeEscape;
 
     // ---------------------------------------------------------
-    // 1. 樣式攔截與強力重繪機制
+    // 1. 樣式攔截與強力重繪機制 (藍/黃點修正版)
     // ---------------------------------------------------------
     const AUDIT_STYLES = {
-        audited: { fillColor: "#ff85c0", color: "#ffffff", weight: 2, fillOpacity: 0.9, radius: 9 },
-        unaudited: { fillColor: "#3498db", color: "#ffffff", weight: 2, fillOpacity: 0.85, radius: 8 },
-        default: { fillColor: "#e74c3c", color: "#ffffff", weight: 1.5, fillOpacity: 0.85, radius: 8 }
+        audited: { fillColor: "#f1c40f", color: "#ffffff", weight: 2, fillOpacity: 0.9, radius: 9 },   // 黃點：已清查
+        unaudited: { fillColor: "#3498db", color: "#ffffff", weight: 2, fillOpacity: 0.85, radius: 8 }, // 藍點：未清查
+        default: { fillColor: "#3498db", color: "#ffffff", weight: 1.5, fillOpacity: 0.85, radius: 8 }   // 藍點：預設/未開啟清查
     };
 
     const originalAddLayers = window.addGeoJsonLayers;
@@ -81,6 +81,7 @@
 
                 if (config && config.isAuditing === true && canSeeAuditColors()) {
                     const record = records[pointKey];
+                    // 已清查設為黃點，未清查設為藍點
                     const style = record ? AUDIT_STYLES.audited : AUDIT_STYLES.unaudited;
                     
                     f.properties.isAudited = !!record;
@@ -119,6 +120,7 @@
                 
                 if (showAuditMode) {
                     const record = records[pointKey];
+                    // 已清查 => 黃點，未清查 => 藍點
                     const style = record ? AUDIT_STYLES.audited : AUDIT_STYLES.unaudited;
                     
                     props.isAudited = !!record;
