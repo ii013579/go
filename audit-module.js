@@ -58,8 +58,8 @@
     // 1. 樣式攔截與強力重繪機制 (藍/黃點修正版)
     // ---------------------------------------------------------
     const AUDIT_STYLES = {
-        audited: { fillColor: "#f1c40f", color: "#ffffff", weight: 2, fillOpacity: 0.9, radius: 9 },   // 黃點：已清查
-        unaudited: { fillColor: "#3498db", color: "#ffffff", weight: 2, fillOpacity: 0.85, radius: 8 }, // 藍點：未清查
+        audited: { fillColor: "#FCD770", color: "#ffffff", weight: 2, fillOpacity: 0.9, radius: 9 },   // 黃點：已清查
+        unaudited: { fillColor: "#2A00D2", color: "#ffffff", weight: 2, fillOpacity: 0.85, radius: 8 }, // 藍點：未清查
         default: { fillColor: "#3498db", color: "#ffffff", weight: 1.5, fillOpacity: 0.85, radius: 8 }   // 藍點：預設/未開啟清查
     };
 
