@@ -808,14 +808,14 @@
             focusConfirm: false,
             didOpen: () => {
                 const addBtn = document.getElementById('btn-standalone-add-point');
-                if (addBtn) addBtn.style.display = 'none';
+                if (addBtn) addBtn.style.setProperty('display', 'none', 'important');
             },
             willClose: () => {
-                if (typeof updateBottomBtnState === 'function') {
-                    updateBottomBtnState();
+                if (typeof syncAuditButtonVisibility === 'function') {
+                    syncAuditButtonVisibility();
                 } else {
                     const addBtn = document.getElementById('btn-standalone-add-point');
-                    if (addBtn) addBtn.style.display = 'block';
+                    if (addBtn) addBtn.style.setProperty('display', 'inline-flex', 'important');
                 }
             },
             preConfirm: () => {
@@ -866,6 +866,9 @@
             
             if (typeof forceMapRefresh === 'function') {
                 forceMapRefresh();
+            }
+            if (typeof syncAuditButtonVisibility === 'function') {
+                syncAuditButtonVisibility();
             }
             if (typeof updateBottomBtnState === 'function') {
                 setTimeout(updateBottomBtnState, 300);
