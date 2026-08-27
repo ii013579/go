@@ -1019,9 +1019,11 @@
                 .doc(trimmedPointKey)
                 .set(structuredData, { merge: true });
     
-            // 地圖即時繪製
-            if (typeof window.addGeoJsonLayers === 'function') {
-                window.addGeoJsonLayers([newGeoJsonFeature]);
+            // 地圖即時繪製：改傳入全量 ns.allKmlFeatures 陣列，避免傳入單點陣列導致既有 KML 被清空
+            if (ns && Array.isArray(ns.allKmlFeatures) && typeof window.addGeoJsonLayers === 'function') {
+                window.addGeoJsonLayers(ns.allKmlFeatures);
+            } else if (typeof forceMapRefresh === 'function') {
+                forceMapRefresh();
             } else if (ns && ns.map && typeof L !== 'undefined') {
                 const marker = L.circleMarker([numLat, numLng], {
                     radius: 8,
