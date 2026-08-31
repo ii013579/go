@@ -1,5 +1,5 @@
 ﻿/**
- * audit-module.js - 清查與修改覆蓋整合優化版 (v4.0.0 重構整合版)
+ * audit-module.js - 清查與修改覆蓋整合優化版 (v4.0.0 修正圖層消失版)
  */
 (function() {
     'use strict';
@@ -55,30 +55,13 @@
     window.escapeHtml = safeEscape;
 
     // ---------------------------------------------------------
-    // 1. 樣式攔截與強力重繪機制 (黃/藍點 + 既有與新增點位快取)
+    // 1. 樣式攔截與樣式更新 (藍/黃點控制)
     // ---------------------------------------------------------
     const AUDIT_STYLES = {
         audited: { fillColor: "#FCD770", color: "#ffffff", weight: 2, fillOpacity: 0.9, radius: 9 },   // 黃點：已清查
         unaudited: { fillColor: "#2A00D2", color: "#ffffff", weight: 2, fillOpacity: 0.85, radius: 8 }, // 藍點：未清查
         default: { fillColor: "#3498db", color: "#ffffff", weight: 1.5, fillOpacity: 0.85, radius: 8 }   // 藍點：預設/未開啟清查
     };
-
-    // 輔助函式：確保完整收集地圖上所有既有點位 (包含原 KML 與自訂點位)
-    function ensureAllKmlFeaturesLoaded() {
-        const ns = window.mapNamespace;
-        if (!ns) return [];
-        if (!Array.isArray(ns.allKmlFeatures)) ns.allKmlFeatures = [];
-        
-        // 若全量快取為空，嘗試從 Leaflet 實體圖層中撈回既有點位
-        if (ns.allKmlFeatures.length === 0 && ns.map) {
-            ns.map.eachLayer(layer => {
-                if (layer.feature && layer.feature.properties) {
-                    ns.allKmlFeatures.push(layer.feature);
-                }
-            });
-        }
-        return ns.allKmlFeatures;
-    }
 
     const originalAddLayers = window.addGeoJsonLayers;
     window.addGeoJsonLayers = function(features) {
@@ -98,7 +81,6 @@
 
                 if (config && config.isAuditing === true && canSeeAuditColors()) {
                     const record = records[pointKey];
-                    // 已清查 => 黃點，未清查 => 藍點
                     const style = record ? AUDIT_STYLES.audited : AUDIT_STYLES.unaudited;
                     
                     f.properties.isAudited = !!record;
@@ -130,6 +112,7 @@
         const records = window.auditLayersState[kmlId] || {};
         const showAuditMode = window.globalAuditConfigs[kmlId]?.isAuditing && canSeeAuditColors();
 
+        // 僅更新現有圖層樣式，絕不清空或重新清空渲染
         ns.map.eachLayer(function(layer) {
             if (layer.feature && layer.feature.properties) {
                 const props = layer.feature.properties;
@@ -150,10 +133,6 @@
                 }
             }
         });
-
-        if (window.addGeoJsonLayers && ns.allKmlFeatures) {
-            window.addGeoJsonLayers(ns.allKmlFeatures);
-        }
 
         syncAuditUIState();
     }
@@ -241,7 +220,7 @@
     });
 
     // ---------------------------------------------------------
-    // 3. 新增 / 修改與全量渲染同步邏輯
+    // 3. 新增 / 修改點位 (獨立增量疊加，保護既有 KML 點位)
     // ---------------------------------------------------------
     window.submitNewCustomPoint = async function(formValues) {
         const { kmlId, kmlLayerName, lat, lng, pointKey, deviceStatus, remark, photos, isEditMode, oldPointKey } = formValues;
@@ -253,7 +232,7 @@
         try {
             const photoUrls = await window.uploadPhotosToStorage(photos, kmlId, trimmedPointKey, kmlLayerName);
 
-            // 編輯模式且更名時刪除舊紀錄
+            // 編輯模式且變更名稱時刪除舊 Firestore 紀錄
             if (isEditMode && oldPointKey && oldPointKey !== trimmedPointKey) {
                 delete window.auditLayersState?.[kmlId]?.[oldPointKey];
                 await firebase.firestore().collection(APP_PATH).doc(kmlId).collection('auditRecords').doc(oldPointKey).delete();
@@ -266,14 +245,13 @@
                 updatedAt: firebase.firestore.FieldValue.serverTimestamp()
             };
 
-            // 1. 本地狀態快取更新
+            // 1. 本地快取與 Firestore 更新
             if (!window.auditLayersState[kmlId]) window.auditLayersState[kmlId] = {};
             window.auditLayersState[kmlId][trimmedPointKey] = structuredData;
 
-            // 2. 寫入 Firestore
             await firebase.firestore().collection(APP_PATH).doc(kmlId).collection('auditRecords').doc(trimmedPointKey).set(structuredData, { merge: true });
 
-            // 3. 建立 Feature
+            // 2. 建立 GeoJSON Feature
             const newFeature = {
                 type: "Feature",
                 geometry: { type: "Point", coordinates: [numLng, numLat] },
@@ -286,31 +264,28 @@
                 }
             };
 
-            // 4. 同步快取陣列 (備份既有 + 合併新增)
             const ns = window.mapNamespace;
-            if (ns) {
-                let allFeatures = ensureAllKmlFeaturesLoaded();
-
+            if (ns && ns.map) {
+                // 編輯模式下，先移除舊 Marker
                 if (isEditMode && oldPointKey) {
-                    allFeatures = allFeatures.filter(f => 
-                        (f.properties?.name || f.properties?.title || f.properties?.auditPointKey) !== oldPointKey
-                    );
+                    ns.map.eachLayer(layer => {
+                        const pk = layer.feature?.properties?.auditPointKey || layer.feature?.properties?.name;
+                        if (pk === oldPointKey) {
+                            ns.map.removeLayer(layer);
+                        }
+                    });
                 }
 
-                const existsIndex = allFeatures.findIndex(f => 
-                    (f.properties?.name || f.properties?.title || f.properties?.auditPointKey) === trimmedPointKey
-                );
-                if (existsIndex !== -1) {
-                    allFeatures[existsIndex] = newFeature;
-                } else {
-                    allFeatures.push(newFeature);
-                }
-
-                ns.allKmlFeatures = allFeatures;
-
-                // 5. 全量重繪圖層
-                if (typeof window.addGeoJsonLayers === 'function') {
-                    window.addGeoJsonLayers(ns.allKmlFeatures);
+                // 3. 獨立疊加新點位至地圖，完全不干擾既有 KML 點位
+                if (typeof L !== 'undefined' && L.geoJSON) {
+                    L.geoJSON(newFeature, {
+                        pointToLayer: function(feature, latlng) {
+                            return L.circleMarker(latlng, AUDIT_STYLES.audited);
+                        },
+                        onEachFeature: function(feature, layer) {
+                            layer.feature = feature;
+                        }
+                    }).addTo(ns.map);
                 }
             }
 
