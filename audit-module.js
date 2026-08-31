@@ -55,13 +55,30 @@
     window.escapeHtml = safeEscape;
 
     // ---------------------------------------------------------
-    // 1. 樣式攔截與強力重繪機制 (藍/黃點修正版)
+    // 1. 樣式攔截與強力重繪機制 (黃/藍點 + 既有與新增點位快取)
     // ---------------------------------------------------------
     const AUDIT_STYLES = {
         audited: { fillColor: "#FCD770", color: "#ffffff", weight: 2, fillOpacity: 0.9, radius: 9 },   // 黃點：已清查
         unaudited: { fillColor: "#2A00D2", color: "#ffffff", weight: 2, fillOpacity: 0.85, radius: 8 }, // 藍點：未清查
         default: { fillColor: "#3498db", color: "#ffffff", weight: 1.5, fillOpacity: 0.85, radius: 8 }   // 藍點：預設/未開啟清查
     };
+
+    // 輔助函式：確保完整收集地圖上所有既有點位 (包含原 KML 與自訂點位)
+    function ensureAllKmlFeaturesLoaded() {
+        const ns = window.mapNamespace;
+        if (!ns) return [];
+        if (!Array.isArray(ns.allKmlFeatures)) ns.allKmlFeatures = [];
+        
+        // 若全量快取為空，嘗試從 Leaflet 實體圖層中撈回既有點位
+        if (ns.allKmlFeatures.length === 0 && ns.map) {
+            ns.map.eachLayer(layer => {
+                if (layer.feature && layer.feature.properties) {
+                    ns.allKmlFeatures.push(layer.feature);
+                }
+            });
+        }
+        return ns.allKmlFeatures;
+    }
 
     const originalAddLayers = window.addGeoJsonLayers;
     window.addGeoJsonLayers = function(features) {
@@ -81,7 +98,7 @@
 
                 if (config && config.isAuditing === true && canSeeAuditColors()) {
                     const record = records[pointKey];
-                    // 已清查設為黃點，未清查設為藍點
+                    // 已清查 => 黃點，未清查 => 藍點
                     const style = record ? AUDIT_STYLES.audited : AUDIT_STYLES.unaudited;
                     
                     f.properties.isAudited = !!record;
@@ -120,7 +137,6 @@
                 
                 if (showAuditMode) {
                     const record = records[pointKey];
-                    // 已清查 => 黃點，未清查 => 藍點
                     const style = record ? AUDIT_STYLES.audited : AUDIT_STYLES.unaudited;
                     
                     props.isAudited = !!record;
@@ -222,6 +238,106 @@
     window.addEventListener('click', () => { 
         clearTimeout(clickDebounceTimer);
         clickDebounceTimer = setTimeout(updateAuditBottomMenuUI, 150); 
+    });
+
+    // ---------------------------------------------------------
+    // 3. 新增 / 修改與全量渲染同步邏輯
+    // ---------------------------------------------------------
+    window.submitNewCustomPoint = async function(formValues) {
+        const { kmlId, kmlLayerName, lat, lng, pointKey, deviceStatus, remark, photos, isEditMode, oldPointKey } = formValues;
+        const trimmedPointKey = (pointKey || '').trim();
+        const numLat = parseFloat(lat), numLng = parseFloat(lng);
+
+        Swal.fire({ title: '正在處理並儲存資料...', didOpen: () => Swal.showLoading(), allowOutsideClick: false });
+
+        try {
+            const photoUrls = await window.uploadPhotosToStorage(photos, kmlId, trimmedPointKey, kmlLayerName);
+
+            // 編輯模式且更名時刪除舊紀錄
+            if (isEditMode && oldPointKey && oldPointKey !== trimmedPointKey) {
+                delete window.auditLayersState?.[kmlId]?.[oldPointKey];
+                await firebase.firestore().collection(APP_PATH).doc(kmlId).collection('auditRecords').doc(oldPointKey).delete();
+            }
+
+            const structuredData = {
+                pointName: trimmedPointKey,
+                status: "已完成", deviceStatus: deviceStatus || "新增", auditStatus: deviceStatus || "新增",
+                note: remark || "", photos: photoUrls, lat: numLat, lng: numLng, isCustomPoint: true,
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            };
+
+            // 1. 本地狀態快取更新
+            if (!window.auditLayersState[kmlId]) window.auditLayersState[kmlId] = {};
+            window.auditLayersState[kmlId][trimmedPointKey] = structuredData;
+
+            // 2. 寫入 Firestore
+            await firebase.firestore().collection(APP_PATH).doc(kmlId).collection('auditRecords').doc(trimmedPointKey).set(structuredData, { merge: true });
+
+            // 3. 建立 Feature
+            const newFeature = {
+                type: "Feature",
+                geometry: { type: "Point", coordinates: [numLng, numLat] },
+                properties: {
+                    name: trimmedPointKey,
+                    title: trimmedPointKey,
+                    kmlId: kmlId,
+                    isCustomPoint: true,
+                    auditPointKey: trimmedPointKey
+                }
+            };
+
+            // 4. 同步快取陣列 (備份既有 + 合併新增)
+            const ns = window.mapNamespace;
+            if (ns) {
+                let allFeatures = ensureAllKmlFeaturesLoaded();
+
+                if (isEditMode && oldPointKey) {
+                    allFeatures = allFeatures.filter(f => 
+                        (f.properties?.name || f.properties?.title || f.properties?.auditPointKey) !== oldPointKey
+                    );
+                }
+
+                const existsIndex = allFeatures.findIndex(f => 
+                    (f.properties?.name || f.properties?.title || f.properties?.auditPointKey) === trimmedPointKey
+                );
+                if (existsIndex !== -1) {
+                    allFeatures[existsIndex] = newFeature;
+                } else {
+                    allFeatures.push(newFeature);
+                }
+
+                ns.allKmlFeatures = allFeatures;
+
+                // 5. 全量重繪圖層
+                if (typeof window.addGeoJsonLayers === 'function') {
+                    window.addGeoJsonLayers(ns.allKmlFeatures);
+                }
+            }
+
+            Swal.fire({ icon: 'success', title: isEditMode ? '修改點位成功' : '新增點位成功', timer: 1200, showConfirmButton: false });
+            forceMapRefresh();
+        } catch (e) {
+            Swal.fire('錯誤', e.message || '儲存失敗', 'error');
+        }
+    };
+
+    // ---------------------------------------------------------
+    // 4. 初始化底欄控制項與 Event 監聽
+    // ---------------------------------------------------------
+    document.addEventListener('DOMContentLoaded', () => {
+        const ns = window.mapNamespace;
+        if (ns && ns.map && typeof L !== 'undefined') {
+            const BottomControl = L.Control.extend({
+                options: { position: 'bottomright' },
+                onAdd: function() {
+                    const div = L.DomUtil.create('div', 'leaflet-audit-bottom-control');
+                    div.style.cssText = 'margin-bottom: 25px; margin-right: 15px; display: none; z-index: 1000;';
+                    return div;
+                }
+            });
+            bottomControl = new BottomControl();
+            bottomControl.addTo(ns.map);
+        }
     });
 
     // ---------------------------------------------------------
