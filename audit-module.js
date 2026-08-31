@@ -1,5 +1,5 @@
 ﻿/**
- * audit-module.js - 清查與修改覆蓋整合優化版 (v3.07 Storage 路徑與圖層名稱精準修正版)
+ * audit-module.js - 清查與修改覆蓋整合優化版 (v3.08 路徑與按鈕補齊完整版)
  */
 (function() {
     'use strict';
@@ -11,9 +11,8 @@
     let clickDebounceTimer = null;
 
     const APP_PATH = 'artifacts/kmldata-d22fb/public/data/kmlLayers';
-    // 修正：移除過深的 kmldata-d22fb/storage 前綴，直接存放在 kmlLayers/圖層名稱/... 下
-    // 若希望直接存放在 Storage 根目錄，可改為 const STORAGE_ROOT = '';
-    const STORAGE_ROOT = 'kmlLayers';
+    // 還原為 Firebase Storage Security Rules 設定的完整根路徑
+    const STORAGE_ROOT = 'kmldata-d22fb/storage';
 
     // ---------------------------------------------------------
     // 0. 輔助函式與安全機制
@@ -47,7 +46,7 @@
     }
 
     /**
-     * 依據 kmlId 精準取得圖層名稱，避免抓錯選單 index
+     * 依據 kmlId 精準取得圖層名稱
      */
     function getLayerNameByKmlId(kmlId) {
         if (!kmlId) return '預設區域';
@@ -172,7 +171,7 @@
     }
 
     // ---------------------------------------------------------
-    // 2. 底部控制按鈕面板
+    // 2. 底部控制按鈕面板 (完整補回 新增 / 修改 / 查看 按鈕)
     // ---------------------------------------------------------
     function updateBottomBtnState() {
         if (!bottomControl || !bottomControl._container) return;
@@ -198,26 +197,30 @@
             if (isAudited) {
                 btnHtml = `
                     <button onclick="window.viewAuditDetailOnly('${safePointKey}')" 
-                            style="background: #e91e63; color: white; border: 2px solid #ffffff; padding: 10px 22px; border-radius: 50px; font-weight: bold; font-size: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); cursor: pointer;">
+                            style="background: #e91e63; color: white; border: 2px solid #ffffff; padding: 10px 18px; border-radius: 50px; font-weight: bold; font-size: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); cursor: pointer;">
                         🔍 查看
                     </button>
+                    <button onclick="window.openAuditEditor(false)" 
+                            style="background: #2ecc71; color: white; border: 2px solid #ffffff; padding: 10px 18px; border-radius: 50px; font-weight: bold; font-size: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); cursor: pointer;">
+                        ➕ 新增
+                    </button>
                     <button onclick="window.openAuditEditor(true)" 
-                            style="background: #f39c12; color: white; border: 2px solid #ffffff; padding: 10px 22px; border-radius: 50px; font-weight: bold; font-size: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); cursor: pointer;">
+                            style="background: #f39c12; color: white; border: 2px solid #ffffff; padding: 10px 18px; border-radius: 50px; font-weight: bold; font-size: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); cursor: pointer;">
                         ✏️ 修改
                     </button>
                 `;
             } else {
                 btnHtml = `
                     <button onclick="window.openAuditEditor(false)" 
-                            style="background: #2ecc71; color: white; border: 2px solid #ffffff; padding: 12px 35px; border-radius: 50px; font-weight: bold; font-size: 16px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); cursor: pointer;">
-                        📋 清查點位
+                            style="background: #2ecc71; color: white; border: 2px solid #ffffff; padding: 12px 30px; border-radius: 50px; font-weight: bold; font-size: 16px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); cursor: pointer;">
+                        ➕ 新增清查
                     </button>
                 `;
             }
 
             bottomControl._container.style.display = 'block';
             bottomControl._container.innerHTML = `
-                <div style="text-align: center; pointer-events: auto; display: flex; gap: 10px; justify-content: center; background: rgba(0,0,0,0.6); padding: 8px 18px; border-radius: 50px; backdrop-filter: blur(5px);">
+                <div style="text-align: center; pointer-events: auto; display: flex; gap: 8px; justify-content: center; background: rgba(0,0,0,0.6); padding: 8px 16px; border-radius: 50px; backdrop-filter: blur(5px);">
                     ${btnHtml}
                 </div>`;
         } else {
@@ -231,7 +234,7 @@
     });
 
     // ---------------------------------------------------------
-    // 3. 專屬 CSV 總表生成 (路徑同步修復)
+    // 3. 專屬 CSV 總表生成 (路徑同步)
     // ---------------------------------------------------------
     async function generateLayerCsvReport(kmlId, kmlLayerName, maxPhotos) {
         const records = window.auditLayersState[kmlId] || {};
@@ -320,7 +323,7 @@
         listHtml += '</div>';
         
         Swal.fire({ 
-            title: '圖層清查管理 (v3.07)', 
+            title: '圖層清查管理 (v3.08)', 
             html: listHtml, 
             showConfirmButton: false, 
             showCloseButton: true 
@@ -377,7 +380,7 @@
     };
     
     // ---------------------------------------------------------
-    // 5. 清查資料編輯與上傳邏輯 (精準圖層與 Storage 路徑)
+    // 5. 清查資料編輯與上傳邏輯 (精準圖層與完整路徑)
     // ---------------------------------------------------------
     window.openAuditEditor = async function(isModifyMode = false) {
         if (!checkHasAuditPermission()) return;
@@ -390,7 +393,6 @@
         const config = (window.globalAuditConfigs && window.globalAuditConfigs[kmlId]) || { targetPhotos: 2 };
         const maxPhotos = config.targetPhotos || 2;
 
-        // 改用反查函式，確保取到對應 kmlId 的真正圖層名稱
         const kmlLayerName = getLayerNameByKmlId(kmlId);
 
         const historyRecord = isModifyMode ? (window.auditLayersState?.[kmlId]?.[pointKey] || {}) : {};
@@ -398,7 +400,7 @@
         const currentStatus = historyRecord.deviceStatus || '';
         const currentNote = historyRecord.note || '';
 
-        // 圖片預覽縮圖生成
+        // 圖片預覽與原尺寸壓縮
         window._tempPreview = function(input, index) {
             if (input.files && input.files[0]) {
                 const reader = new FileReader();
@@ -426,7 +428,6 @@
             }
         };
 
-        // UI 渲染
         let photoHtml = '';
         for (let i = 0; i < maxPhotos; i++) {
             const photoData = currentPhotos[i] || '';
@@ -482,10 +483,8 @@
                     if (data && data.startsWith('data:image')) {
                         const photoIndexStr = String(i + 1).padStart(2, '0');
                         
-                        // 修正後的動態 Storage 上傳路徑
-                        const customStoragePath = STORAGE_ROOT 
-                            ? `${STORAGE_ROOT}/${kmlLayerName}/${safePointKey}_${photoIndexStr}.jpg`
-                            : `${kmlLayerName}/${safePointKey}_${photoIndexStr}.jpg`;
+                        // 組合 Storage 上傳路徑：kmldata-d22fb/storage/圖層名稱/點位名稱_01.jpg
+                        const customStoragePath = `${STORAGE_ROOT}/${kmlLayerName}/${safePointKey}_${photoIndexStr}.jpg`;
 
                         const ref = firebase.storage().ref().child(customStoragePath);
                         const blob = await (await fetch(data)).blob();
@@ -559,9 +558,9 @@
     };
 
     // ---------------------------------------------------------
-    // 7. 打包 Firebase Storage 照片 (直連原生 CORS 下載)
+    // 7. 打包 Firebase Storage 照片 (路徑對應修復)
     // ---------------------------------------------------------
-    window.downloadAuditPhotosZip = async function(kmlId, appId = 'default') {
+    window.downloadAuditPhotosZip = async function(kmlId) {
         if (typeof JSZip === 'undefined' || typeof saveAs === 'undefined') {
             Swal.fire('套件缺失', '請確保 HTML 已引入 JSZip 與 FileSaver 套件！', 'error');
             return;
@@ -590,11 +589,7 @@
 
         try {
             const storage = firebase.storage();
-            // 修正 Storage 下載對應路徑
-            const storageFolderPath = STORAGE_ROOT 
-                ? `${STORAGE_ROOT}/${cleanLayerName}`
-                : cleanLayerName;
-
+            const storageFolderPath = `${STORAGE_ROOT}/${cleanLayerName}`;
             const folderRef = storage.ref(storageFolderPath);
 
             const listResult = await folderRef.listAll();
