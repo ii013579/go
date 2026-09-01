@@ -1,5 +1,5 @@
 ﻿/**
- * audit-module.js - 清查紀錄面板優化與獨立模組版 (V4.04 - 完整整合藍黃點即時同步與 Storage 路徑優化版)
+ * audit-module.js - 清查紀錄面板優化與獨立模組版 (V4.04 - 完整整合藍黃點即時同步、Storage 路徑優化與上傳後自動返回主畫面)
  */
 (function() {
     'use strict';
@@ -993,11 +993,23 @@
                     await generateLayerCsvReport(kmlId, kmlLayerName, maxPhotos);
                 }
 
-                Swal.fire({ icon: 'success', title: '更新成功', timer: 1000, showConfirmButton: false, didClose: () => syncAuditButtonVisibility() });
+                // 💡 [關閉地圖 Popup 視窗與重置選取點位，回到原本畫面]
+                if (window.mapNamespace?.map) {
+                    window.mapNamespace.map.closePopup();
+                }
+                window.currentSelectedPoint = null;
+
+                Swal.fire({ 
+                    icon: 'success', 
+                    title: '更新成功', 
+                    timer: 1000, 
+                    showConfirmButton: false, 
+                    didClose: () => syncAuditButtonVisibility() 
+                });
                 
-                // 💡 [即時同步觸發]：重繪地圖轉為黃點
+                // 💡 [即時同步觸發]：重繪地圖轉為黃點與重置底部按鈕
                 if (typeof forceMapRefresh === 'function') forceMapRefresh();
-                if (typeof updateBottomBtnState === 'function') setTimeout(updateBottomBtnState, 300);
+                if (typeof updateBottomBtnState === 'function') updateBottomBtnState();
             } catch (e) { 
                 console.error("儲存清查資料失敗:", e);
                 Swal.fire('錯誤', e.message || '儲存失敗', 'error', { didClose: () => syncAuditButtonVisibility() }); 
@@ -1146,6 +1158,12 @@
                 await generateLayerCsvReport(kmlId, layerFolderName, targetPhotosCount);
             }
 
+            // 💡 [關閉地圖 Popup 視窗與重置選取點位，回到原本畫面]
+            if (window.mapNamespace?.map) {
+                window.mapNamespace.map.closePopup();
+            }
+            window.currentSelectedPoint = null;
+
             Swal.fire({
                 icon: 'success',
                 title: isEditMode ? '修改點位成功' : '新增清查點位成功',
@@ -1154,9 +1172,9 @@
                 didClose: () => syncAuditButtonVisibility()
             });
 
-            // 💡 [即時同步觸發]：強制重繪地圖
+            // 💡 [即時同步觸發]：強制重繪地圖與重置底部按鈕
             if (typeof forceMapRefresh === 'function') forceMapRefresh();
-            if (typeof updateBottomBtnState === 'function') setTimeout(updateBottomBtnState, 300);
+            if (typeof updateBottomBtnState === 'function') updateBottomBtnState();
 
         } catch (e) {
             console.error("❌ 儲存點位失敗:", e);
@@ -1221,7 +1239,7 @@
 
         const confirmRes = await Swal.fire({
             title: '確定要刪除此點位？',
-            text: `將永久刪除點位「${pointKey}」及其上傳的照片，此動作無法復原！`,
+            text: `將永久刪除點位「${pointKey}」及其上傳的照片，此動作無法復設！`,
             icon: 'warning',
             showCancelButton: true,
             confirmButtonColor: '#d33',
@@ -1284,6 +1302,7 @@
                         ns.map.removeLayer(layer);
                     }
                 });
+                ns.map.closePopup();
             }
 
             window.currentSelectedPoint = null;
@@ -1295,7 +1314,7 @@
 
             // 💡 [即時同步觸發]：刷新狀態面板與地圖
             if (typeof forceMapRefresh === 'function') forceMapRefresh();
-            if (typeof updateBottomBtnState === 'function') setTimeout(updateBottomBtnState, 300);
+            if (typeof updateBottomBtnState === 'function') updateBottomBtnState();
 
         } catch (e) {
             console.error("❌ 刪除點位失敗:", e);
