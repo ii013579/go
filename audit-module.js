@@ -1,5 +1,5 @@
 ﻿/**
- * audit-module.js - 清查紀錄面板優化與獨立模組版 (V4.02 - 手機端無 ESC 與點號重複停留優化版)
+ * audit-module.js - 清查紀錄面板優化與獨立模組版 (V4.03 - 整合點位重整同步與 Storage 路徑優化版)
  */
 (function() {
     'use strict';
@@ -14,7 +14,7 @@
     const STORAGE_ROOT = 'kmldata-d22fb/storage';
 
     // ---------------------------------------------------------
-    // 0. 權限防護與安全轉義機制
+    // 0. 權限防護、安全轉義與路徑字元清理機制
     // ---------------------------------------------------------
     function getUserRole() {
         return window.currentUserRole || 
@@ -46,6 +46,12 @@
             .replace(/>/g, "&gt;")
             .replace(/"/g, "&quot;")
             .replace(/'/g, "&#039;");
+    }
+
+    // 清理 Storage 與檔案系統不合規特徵字元（如斜線 / 防止誤建階層）
+    function sanitizePathName(name) {
+        if (!name) return 'default';
+        return String(name).replace(/[\/\\#?%*:|"<>]/g, '_').trim();
     }
 
     const escapeHtml = safeEscape;
@@ -268,7 +274,7 @@
     });
 
     // ---------------------------------------------------------
-    // 3. CSV 總表生成
+    // 3. CSV 總表生成 (優化檔案名稱與安全路徑)
     // ---------------------------------------------------------
     async function generateLayerCsvReport(kmlId, kmlLayerName, maxPhotos) {
         const activeKmlId = kmlId || window.currentActiveKmlId || window.mapNamespace?.currentKmlLayerId;
@@ -356,7 +362,7 @@
             let rootPath = (typeof STORAGE_ROOT !== 'undefined' && STORAGE_ROOT) ? STORAGE_ROOT : 'kmldata-d22fb/storage';
             rootPath = rootPath.replace(/^\/+|\/+$/g, ''); 
             
-            const safeLayerName = kmlLayerName || 'default_layer';
+            const safeLayerName = sanitizePathName(kmlLayerName);
             const csvStoragePath = `${rootPath}/${safeLayerName}/${safeLayerName}_清查總表.csv`;
 
             if (typeof firebase === 'undefined' || !firebase.storage) {
@@ -370,7 +376,7 @@
         } catch (err) {
             console.error("❌ [CSV 失敗] 上傳失敗原因：", err);
             if (typeof window.downloadCsvFallback === 'function') {
-                window.downloadCsvFallback(csvContent, `${kmlLayerName || '清查'}_總表.csv`);
+                window.downloadCsvFallback(csvContent, `${sanitizePathName(kmlLayerName)}_總表.csv`);
             }
         }
     }
@@ -534,7 +540,7 @@
     };
 
     // =========================================================
-    // 5. 獨立區塊：清查紀錄面板與點位維護 (V4.02 增強版)
+    // 5. 獨立區塊：清查紀錄面板與點位維護 (V4.03 增強版)
     // =========================================================
 
     // ---------------------------------------------------------
@@ -700,7 +706,7 @@
             confirmButtonText: '確認並新增上傳',
             cancelButtonText: '取消新增',
             confirmButtonColor: '#2ecc71',
-            cancelButtonColor: '#dc3545', // 紅底取消新增按鈕
+            cancelButtonColor: '#dc3545',
             focusConfirm: false,
             didOpen: () => syncAuditButtonVisibility(),
             didClose: () => syncAuditButtonVisibility(),
@@ -723,7 +729,6 @@
                     return false;
                 }
 
-                // 重複點號攔截邏輯：畫面停留供使用者直接修改點號
                 const ns = window.mapNamespace;
                 const currentRecords = (window.auditLayersState && window.auditLayersState[kmlId]) ? window.auditLayersState[kmlId] : {};
                 let isDuplicateInKml = false;
@@ -740,9 +745,9 @@
                     if (nameInput) {
                         nameInput.style.border = '2px solid #dc3545';
                         nameInput.focus();
-                        nameInput.select(); // 自動反白點號方便替換
+                        nameInput.select();
                     }
-                    return false; // 停留畫面不關閉視窗
+                    return false;
                 }
 
                 if (photosArr.length < maxPhotos) {
@@ -951,11 +956,14 @@
             Swal.fire({ title: '正在上傳與更新資料...', didOpen: () => Swal.showLoading(), allowOutsideClick: false });
             try {
                 const rootPath = typeof STORAGE_ROOT !== 'undefined' ? STORAGE_ROOT : 'audit_photos';
+                const safeLayerName = sanitizePathName(kmlLayerName);
+                const safePointKey = sanitizePathName(pointKey);
                 
                 const uploadPromises = res.photos.map(async (photoData, i) => {
                     if (photoData && photoData.startsWith('data:image')) {
                         const photoIndexStr = String(i + 1).padStart(2, '0');
-                        const customStoragePath = `${rootPath}/${kmlLayerName}/${pointKey}_${photoIndexStr}.jpg`;
+                        // 💡【Storage 路徑優化】：獨立 photos 資料夾與字元過濾
+                        const customStoragePath = `${rootPath}/${safeLayerName}/photos/${safePointKey}_${photoIndexStr}.jpg`;
                         const ref = firebase.storage().ref().child(customStoragePath);
                         const blob = await (await fetch(photoData)).blob();
                         await ref.put(blob);
@@ -1175,7 +1183,8 @@
         }
 
         const storageRef = firebase.storage().ref();
-        const safePointKey = String(pointKey).replace(/[/\\?%*:|"<>]/g, '_');
+        const safeLayerName = sanitizePathName(targetLayerName);
+        const safePointKey = sanitizePathName(pointKey);
 
         const uploadPromises = photos.map(async (photoData, index) => {
             if (!photoData) return '';
@@ -1184,7 +1193,8 @@
             }
 
             const photoIndexStr = String(index + 1).padStart(2, '0');
-            const customStoragePath = `${rootPath}/${targetLayerName}/${safePointKey}_${photoIndexStr}.jpg`;
+            // 💡【Storage 路徑優化】：分類收納至 photos/ 子資料夾
+            const customStoragePath = `${rootPath}/${safeLayerName}/photos/${safePointKey}_${photoIndexStr}.jpg`;
             const ref = storageRef.child(customStoragePath);
 
             try {
@@ -1240,14 +1250,20 @@
                 targetLayerName = rawLayerName.replace(/\.kml$/i, '').trim();
             }
 
-            const safePointKey = String(pointKey).replace(/[/\\?%*:|"<>]/g, '_');
+            const safeLayerName = sanitizePathName(targetLayerName);
+            const safePointKey = sanitizePathName(pointKey);
             const storageRef = firebase.storage().ref();
 
-            const deletePhotoPromises = [1, 2, 3, 4, 5, 6].map(async (i) => {
+            // 💡【相容清理】：同步清理新版 photos/ 資料夾與舊版根目錄照片
+            const deletePhotoPromises = [];
+            for (let i = 1; i <= 12; i++) {
                 const photoIndexStr = String(i).padStart(2, '0');
-                const customStoragePath = `${rootPath}/${targetLayerName}/${safePointKey}_${photoIndexStr}.jpg`;
-                try { await storageRef.child(customStoragePath).delete(); } catch (err) {}
-            });
+                const newPath = `${rootPath}/${safeLayerName}/photos/${safePointKey}_${photoIndexStr}.jpg`;
+                const oldPath = `${rootPath}/${safeLayerName}/${safePointKey}_${photoIndexStr}.jpg`;
+                
+                deletePhotoPromises.push(storageRef.child(newPath).delete().catch(() => {}));
+                deletePhotoPromises.push(storageRef.child(oldPath).delete().catch(() => {}));
+            }
             await Promise.all(deletePhotoPromises);
 
             const appPath = typeof APP_PATH !== 'undefined' ? APP_PATH : 'kmlData';
@@ -1333,7 +1349,7 @@
     });
 
     // ---------------------------------------------------------
-    // 6. 打包 Firebase Storage 照片 (直連 CORS 下載)
+    // 6. 打包 Firebase Storage 照片 (跨資料夾相容掃描)
     // ---------------------------------------------------------
     window.downloadAuditPhotosZip = async function(kmlId) {
         if (typeof JSZip === 'undefined' || typeof saveAs === 'undefined') {
@@ -1358,7 +1374,7 @@
                 kmlLayerName = rawName.trim();
             }
         }
-        const cleanLayerName = (kmlLayerName || kmlId).replace(/\.kml$/i, '');
+        const cleanLayerName = sanitizePathName((kmlLayerName || kmlId).replace(/\.kml$/i, ''));
 
         Swal.fire({
             title: '正在搜尋 Storage 照片...',
@@ -1375,13 +1391,19 @@
 
         try {
             const storage = firebase.storage();
-            const storageFolderPath = `${STORAGE_ROOT}/${cleanLayerName}`;
-            const folderRef = storage.ref(storageFolderPath);
-
-            const listResult = await folderRef.listAll();
+            const photoFolderPath = `${STORAGE_ROOT}/${cleanLayerName}/photos`;
+            let folderRef = storage.ref(photoFolderPath);
+            
+            let listResult = await folderRef.listAll().catch(() => ({ items: [] }));
+            
+            // 若 photos/ 下無檔案，嘗試搜尋舊版根目錄
+            if (listResult.items.length === 0) {
+                folderRef = storage.ref(`${STORAGE_ROOT}/${cleanLayerName}`);
+                listResult = await folderRef.listAll();
+            }
 
             if (listResult.items.length === 0) {
-                Swal.fire('提示', `Storage 路徑 [${storageFolderPath}] 下找不到任何檔案。`, 'info', { didClose: () => syncAuditButtonVisibility() });
+                Swal.fire('提示', `Storage 路徑 [${STORAGE_ROOT}/${cleanLayerName}] 下找不到任何檔案。`, 'info', { didClose: () => syncAuditButtonVisibility() });
                 return;
             }
 
@@ -1443,7 +1465,7 @@
     };
 
     // ---------------------------------------------------------
-    // 7. 資料動態監聽與安全退場機制
+    // 7. 資料動態監聽與安全退場機制 (重點：重整頁面自訂點位回補)
     // ---------------------------------------------------------
     const initGlobalConfigListener = () => {
         if (typeof firebase === 'undefined' || !firebase.apps.length) {
@@ -1472,6 +1494,50 @@
                     updates[doc.id] = doc.data();
                 });
                 window.auditLayersState[kmlId] = updates;
+
+                // 💡【核心整合】：頁面重整後自動將 Firestore 的自訂點位回補至 GeoJSON 陣列
+                const ns = window.mapNamespace;
+                if (ns) {
+                    if (!Array.isArray(ns.allKmlFeatures)) ns.allKmlFeatures = [];
+
+                    Object.values(updates).forEach(record => {
+                        if (record.isCustomPoint && record.lat && record.lng) {
+                            const pointName = record.pointName || record.name;
+                            
+                            const existingIdx = ns.allKmlFeatures.findIndex(f => {
+                                const name = f.properties?.name || f.properties?.title || f.properties?.auditPointKey;
+                                return name === pointName;
+                            });
+
+                            const customFeature = {
+                                type: "Feature",
+                                geometry: { type: "Point", coordinates: [record.lng, record.lat] },
+                                properties: {
+                                    name: pointName,
+                                    title: pointName,
+                                    kmlId: kmlId,
+                                    auditPointKey: pointName,
+                                    isCustomPoint: true,
+                                    isAudited: true,
+                                    auditStatus: record.deviceStatus || "新增",
+                                    auditNote: record.note || "",
+                                    photos: record.photos || [],
+                                    fillColor: "#FCD770",
+                                    color: "#ffffff",
+                                    radius: 8,
+                                    fillOpacity: 0.85
+                                }
+                            };
+
+                            if (existingIdx >= 0) {
+                                ns.allKmlFeatures[existingIdx] = customFeature;
+                            } else {
+                                ns.allKmlFeatures.push(customFeature);
+                            }
+                        }
+                    });
+                }
+
                 forceMapRefresh(); 
             }, err => {
                 console.warn(`監聽子圖層 ${kmlId} 紀錄失敗:`, err.message);
