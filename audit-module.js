@@ -1,5 +1,5 @@
 ﻿/**
- * audit-module.js - 清查紀錄面板優化與獨立模組版 (V4.01)
+ * audit-module.js - 清查紀錄面板優化與獨立模組版 (V4.02 - 手機端無 ESC 與點號重複停留優化版)
  */
 (function() {
     'use strict';
@@ -52,13 +52,12 @@
     window.escapeHtml = safeEscape;
 
     // ---------------------------------------------------------
-    // 0.1 懸浮按鈕顯隱狀態同步 (新增彈窗開啟狀態檢核)
+    // 0.1 懸浮按鈕顯隱狀態同步
     // ---------------------------------------------------------
     function syncAuditButtonVisibility() {
         const btn = document.getElementById('btn-standalone-add-point');
         if (!btn) return;
 
-        // 若目前有任何 SweetAlert2 彈窗開啟中，強制隱藏新增點位按鈕
         if (typeof Swal !== 'undefined' && Swal.isVisible && Swal.isVisible()) {
             btn.style.setProperty('display', 'none', 'important');
             return;
@@ -535,11 +534,11 @@
     };
 
     // =========================================================
-    // 5. 獨立區塊：清查紀錄面板與點位維護 (V4.01 整合優化)
+    // 5. 獨立區塊：清查紀錄面板與點位維護 (V4.02 增強版)
     // =========================================================
 
     // ---------------------------------------------------------
-    // 5.1 手動新增點位起手式 (地圖拾取)
+    // 5.1 手動新增點位起手式 (地圖拾取 + 手機紅底取消按鈕)
     // ---------------------------------------------------------
     let activeAddPointCleanup = null;
 
@@ -565,6 +564,31 @@
         const container = map.getContainer();
         container.style.cursor = 'crosshair';
 
+        // 渲染手機端專用的「紅底取消新增」頂部按鈕
+        let cancelBtn = document.getElementById('btn-cancel-map-click-add');
+        if (!cancelBtn) {
+            cancelBtn = document.createElement('button');
+            cancelBtn.id = 'btn-cancel-map-click-add';
+            cancelBtn.innerHTML = '❌ 取消新增';
+            cancelBtn.setAttribute('style', `
+                position: fixed !important;
+                top: 25px !important;
+                left: 50% !important;
+                transform: translateX(-50%) !important;
+                z-index: 9999 !important;
+                background-color: #dc3545 !important;
+                color: #ffffff !important;
+                border: none !important;
+                padding: 10px 22px !important;
+                border-radius: 25px !important;
+                font-weight: bold !important;
+                font-size: 15px !important;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.35) !important;
+                cursor: pointer !important;
+            `);
+            document.body.appendChild(cancelBtn);
+        }
+
         Swal.mixin({
             toast: true,
             position: 'top',
@@ -573,7 +597,7 @@
             timerProgressBar: true
         }).fire({ 
             icon: 'info', 
-            title: '📍 請在地圖上點擊要新增點位的實體位置 (按 ESC 取消)' 
+            title: '📍 請在地圖上點擊要新增點位的實體位置' 
         });
 
         const handleMapClick = async function(e) {
@@ -591,9 +615,19 @@
             }
         };
 
+        const handleCancelClick = function(e) {
+            e.stopPropagation();
+            cleanup();
+            Swal.fire({ icon: 'info', title: '已取消新增點位', timer: 1000, showConfirmButton: false });
+        };
+
+        cancelBtn.onclick = handleCancelClick;
+
         const cleanup = () => {
             map.off('click', handleMapClick);
             document.removeEventListener('keydown', handleKeydown);
+            const btn = document.getElementById('btn-cancel-map-click-add');
+            if (btn) btn.remove();
             container.style.cursor = '';
             activeAddPointCleanup = null;
         };
@@ -605,10 +639,9 @@
     };
 
     // ---------------------------------------------------------
-    // 5.2 手動新增點位清查面板 (照片張數動態同既有點位設定)
+    // 5.2 手動新增點位清查面板 (點號重複攔截與紅底取消按鈕)
     // ---------------------------------------------------------
     window.openAddPointModal = async function(kmlId, lat, lng) {
-        // 同步既有點位目標照片數
         const config = (window.globalAuditConfigs && window.globalAuditConfigs[kmlId]) || {};
         const maxPhotos = config.targetPhotos || 2;
 
@@ -639,7 +672,7 @@
             </div>
             <div style="margin-bottom: 16px;">
                 <label style="display: block; font-size: 15px; font-weight: bold; color: #4a4a4a; margin-bottom: 8px;">
-                    點位名稱 / 點名 <span style="color: #e74c3c;">*必填</span>
+                    點位名稱 / 點號 <span style="color: #e74c3c;">*必填</span>
                 </label>
                 <input type="text" id="add-point-name" placeholder="例如：新設電桿-01" style="width: 100%; padding: 10px 14px; font-size: 15px; border: 1px solid #dcdfe6; border-radius: 8px; outline: none; box-sizing: border-box; color: #333; background-color: #fff;">
             </div>
@@ -665,14 +698,15 @@
             html: modalHtml,
             showCancelButton: true,
             confirmButtonText: '確認並新增上傳',
-            cancelButtonText: '取消',
+            cancelButtonText: '取消新增',
             confirmButtonColor: '#2ecc71',
-            cancelButtonColor: '#707a86',
+            cancelButtonColor: '#dc3545', // 紅底取消新增按鈕
             focusConfirm: false,
             didOpen: () => syncAuditButtonVisibility(),
             didClose: () => syncAuditButtonVisibility(),
             preConfirm: () => {
-                const name = document.getElementById('add-point-name').value.trim();
+                const nameInput = document.getElementById('add-point-name');
+                const name = nameInput ? nameInput.value.trim() : '';
                 const remark = document.getElementById('add-point-remark').value.trim();
                 
                 const photosArr = [];
@@ -684,9 +718,33 @@
                 }
 
                 if (!name) {
-                    Swal.showValidationMessage('請填寫點位名稱！');
+                    Swal.showValidationMessage('請填寫點位名稱/點號！');
+                    if (nameInput) nameInput.focus();
                     return false;
                 }
+
+                // 重複點號攔截邏輯：畫面停留供使用者直接修改點號
+                const ns = window.mapNamespace;
+                const currentRecords = (window.auditLayersState && window.auditLayersState[kmlId]) ? window.auditLayersState[kmlId] : {};
+                let isDuplicateInKml = false;
+                if (ns && Array.isArray(ns.allKmlFeatures)) {
+                    isDuplicateInKml = ns.allKmlFeatures.some(f => {
+                        const pName = f.properties?.name || f.properties?.title || f.properties?.auditPointKey;
+                        return pName === name;
+                    });
+                }
+                const isDuplicateInState = !!currentRecords[name];
+
+                if (isDuplicateInKml || isDuplicateInState) {
+                    Swal.showValidationMessage(`⚠️ 警告：點號「${name}」已存在！請修改點號。`);
+                    if (nameInput) {
+                        nameInput.style.border = '2px solid #dc3545';
+                        nameInput.focus();
+                        nameInput.select(); // 自動反白點號方便替換
+                    }
+                    return false; // 停留畫面不關閉視窗
+                }
+
                 if (photosArr.length < maxPhotos) {
                     Swal.showValidationMessage(`請完整填滿 ${maxPhotos} 張現場照片！(目前 ${photosArr.length}/${maxPhotos})`);
                     return false;
@@ -732,7 +790,7 @@
     };
 
     // ---------------------------------------------------------
-    // 5.3 既有點位巡檢 / 修改清查紀錄面板 (選單自動過濾「新增」)
+    // 5.3 既有點位巡檢 / 修改清查紀錄面板
     // ---------------------------------------------------------
     window.openAuditEditor = async function(isModifyMode = false) {
         if (typeof checkHasAuditPermission === 'function' && !checkHasAuditPermission()) return;
@@ -775,13 +833,11 @@
 
         let statusSelectHtml = '';
         if (isUserCreatedPoint) {
-            // 自訂點位狀態固定顯示「新增」
             statusSelectHtml = `
                 <select id="swal-status" class="swal2-input" disabled style="width:100%; margin:6px 0 16px 0; background-color:#e9ecef; color:#495057; cursor:not-allowed;">
                     <option value="新增" selected>新增</option>
                 </select>`;
         } else {
-            // 既有點位巡檢：過濾掉「新增」選項
             const filteredOptions = rawStatusOptions.filter(opt => opt !== '新增');
             const statusOptionsHtml = filteredOptions.map(opt => 
                 `<option value="${opt}" ${currentStatus === opt ? 'selected' : ''}>${opt}</option>`
@@ -995,31 +1051,6 @@
         }
 
         const ns = window.mapNamespace;
-        const currentRecords = (window.auditLayersState && window.auditLayersState[kmlId]) 
-            ? window.auditLayersState[kmlId] 
-            : {};
-
-        if (!isEditMode || (isEditMode && oldPointKey !== trimmedPointKey)) {
-            let isDuplicateInKml = false;
-            if (ns && Array.isArray(ns.allKmlFeatures)) {
-                isDuplicateInKml = ns.allKmlFeatures.some(f => {
-                    const name = f.properties?.name || f.properties?.title || f.properties?.auditPointKey;
-                    return name === trimmedPointKey;
-                });
-            }
-            const isDuplicateInState = !!currentRecords[trimmedPointKey];
-
-            if (isDuplicateInKml || isDuplicateInState) {
-                Swal.fire({
-                    icon: 'warning',
-                    title: '點位名稱重複',
-                    text: `點名「${trimmedPointKey}」已存在！請直接修改點位名稱後重新送出。`,
-                    confirmButtonText: '返回修改點名',
-                    didClose: () => syncAuditButtonVisibility()
-                });
-                return;
-            }
-        }
 
         Swal.fire({
             title: '正在處理並儲存資料...',
