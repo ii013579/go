@@ -1,5 +1,5 @@
 ﻿/**
- * audit-module.js - 清查與修改覆蓋整合優化版 (v3.08 路徑與按鈕補齊完整版)
+ * audit-module.js - 清查與修改覆蓋整合優化版 (v3.10 動作回復與按鈕分流隱藏版)
  */
 (function() {
     'use strict';
@@ -11,7 +11,6 @@
     let clickDebounceTimer = null;
 
     const APP_PATH = 'artifacts/kmldata-d22fb/public/data/kmlLayers';
-    // 還原為 Firebase Storage Security Rules 設定的完整根路徑
     const STORAGE_ROOT = 'kmldata-d22fb/storage';
 
     // ---------------------------------------------------------
@@ -45,9 +44,6 @@
             .replace(/'/g, '&#39;');
     }
 
-    /**
-     * 依據 kmlId 精準取得圖層名稱
-     */
     function getLayerNameByKmlId(kmlId) {
         if (!kmlId) return '預設區域';
         const selectEl = document.getElementById('kmlLayerSelect');
@@ -171,7 +167,72 @@
     }
 
     // ---------------------------------------------------------
-    // 2. 底部控制按鈕面板 (完整補回 新增 / 修改 / 查看 按鈕)
+    // 2. 獨立新增點位功能
+    // ---------------------------------------------------------
+    window.addNewPoint = async function() {
+        if (!checkHasAuditPermission()) return;
+        const ns = window.mapNamespace;
+        const kmlId = ns?.currentKmlLayerId;
+        
+        if (!kmlId) {
+            Swal.fire('提示', '請先於上方選單選取一個圖層！', 'warning');
+            return;
+        }
+
+        const { value: pointName } = await Swal.fire({
+            title: '➕ 新增自訂點位',
+            input: 'text',
+            inputLabel: '請輸入新點位名稱或編號',
+            placeholder: '例如：NVA-NEW-01',
+            showCancelButton: true,
+            confirmButtonText: '確定建立',
+            cancelButtonText: '取消',
+            inputValidator: (value) => {
+                if (!value || !value.trim()) {
+                    return '點位名稱不能為空！';
+                }
+            }
+        });
+
+        if (pointName) {
+            const cleanName = pointName.trim();
+            const map = ns.map;
+            const center = map ? map.getCenter() : { lat: 23.5, lng: 121.0 };
+
+            const newFeature = {
+                type: "Feature",
+                geometry: {
+                    type: "Point",
+                    coordinates: [center.lng, center.lat]
+                },
+                properties: {
+                    name: cleanName,
+                    kmlId: kmlId,
+                    auditPointKey: cleanName,
+                    isCustomPoint: true
+                }
+            };
+
+            if (!ns.allKmlFeatures) ns.allKmlFeatures = [];
+            const existIndex = ns.allKmlFeatures.findIndex(f => (f.properties?.name || f.properties?.title) === cleanName);
+            if (existIndex >= 0) {
+                ns.allKmlFeatures[existIndex] = newFeature;
+            } else {
+                ns.allKmlFeatures.push(newFeature);
+            }
+
+            window.currentSelectedPoint = {
+                feature: newFeature,
+                properties: newFeature.properties
+            };
+
+            forceMapRefresh();
+            window.openAuditEditor(false);
+        }
+    };
+
+    // ---------------------------------------------------------
+    // 3. 底部控制按鈕面板 (恢復 3.09 既有動作 / 填寫清查時隱藏新增點位)
     // ---------------------------------------------------------
     function updateBottomBtnState() {
         if (!bottomControl || !bottomControl._container) return;
@@ -185,44 +246,58 @@
         const kmlId = window.mapNamespace?.currentKmlLayerId;
         const config = window.globalAuditConfigs[kmlId];
 
-        if (active && config && config.isAuditing === true) {
-            const layerProps = active.feature?.properties || active.properties || {};
-            const pointKey = layerProps.name || layerProps.title || layerProps.id || "未知點位";
-            const safePointKey = escapeHtml(pointKey);
-            
-            const currentRecords = window.auditLayersState[kmlId] || {};
-            const isAudited = currentRecords[pointKey] !== undefined;
-
-            let btnHtml = '';
-            if (isAudited) {
-                btnHtml = `
-                    <button onclick="window.viewAuditDetailOnly('${safePointKey}')" 
-                            style="background: #e91e63; color: white; border: 2px solid #ffffff; padding: 10px 18px; border-radius: 50px; font-weight: bold; font-size: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); cursor: pointer;">
-                        🔍 查看
-                    </button>
-                    <button onclick="window.openAuditEditor(false)" 
-                            style="background: #2ecc71; color: white; border: 2px solid #ffffff; padding: 10px 18px; border-radius: 50px; font-weight: bold; font-size: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); cursor: pointer;">
-                        ➕ 新增
-                    </button>
-                    <button onclick="window.openAuditEditor(true)" 
-                            style="background: #f39c12; color: white; border: 2px solid #ffffff; padding: 10px 18px; border-radius: 50px; font-weight: bold; font-size: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); cursor: pointer;">
-                        ✏️ 修改
-                    </button>
-                `;
-            } else {
-                btnHtml = `
-                    <button onclick="window.openAuditEditor(false)" 
-                            style="background: #2ecc71; color: white; border: 2px solid #ffffff; padding: 12px 30px; border-radius: 50px; font-weight: bold; font-size: 16px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); cursor: pointer;">
-                        ➕ 新增清查
-                    </button>
-                `;
-            }
-
+        if (config && config.isAuditing === true) {
             bottomControl._container.style.display = 'block';
-            bottomControl._container.innerHTML = `
-                <div style="text-align: center; pointer-events: auto; display: flex; gap: 8px; justify-content: center; background: rgba(0,0,0,0.6); padding: 8px 16px; border-radius: 50px; backdrop-filter: blur(5px);">
-                    ${btnHtml}
-                </div>`;
+
+            if (active) {
+                const layerProps = active.feature?.properties || active.properties || {};
+                const pointKey = layerProps.name || layerProps.title || layerProps.id || "未知點位";
+                const safePointKey = escapeHtml(pointKey);
+                
+                const currentRecords = window.auditLayersState[kmlId] || {};
+                const isAudited = currentRecords[pointKey] !== undefined;
+
+                let btnHtml = '';
+                if (isAudited) {
+                    // 既有點位 (已清查)：回復 3.09 版動作 (查看 / 新增 / 修改)
+                    btnHtml = `
+                        <button onclick="window.viewAuditDetailOnly('${safePointKey}')" 
+                                style="background: #e91e63; color: white; border: 2px solid #ffffff; padding: 10px 18px; border-radius: 50px; font-weight: bold; font-size: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); cursor: pointer;">
+                            🔍 查看
+                        </button>
+                        <button onclick="window.openAuditEditor(false)" 
+                                style="background: #2ecc71; color: white; border: 2px solid #ffffff; padding: 10px 18px; border-radius: 50px; font-weight: bold; font-size: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); cursor: pointer;">
+                            ➕ 新增
+                        </button>
+                        <button onclick="window.openAuditEditor(true)" 
+                                style="background: #f39c12; color: white; border: 2px solid #ffffff; padding: 10px 18px; border-radius: 50px; font-weight: bold; font-size: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); cursor: pointer;">
+                            ✏️ 修改
+                        </button>
+                    `;
+                } else {
+                    // 未清查點位：回復 3.09 版動作 (新增清查)
+                    btnHtml = `
+                        <button onclick="window.openAuditEditor(false)" 
+                                style="background: #2ecc71; color: white; border: 2px solid #ffffff; padding: 12px 30px; border-radius: 50px; font-weight: bold; font-size: 16px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); cursor: pointer;">
+                            ➕ 新增清查
+                        </button>
+                    `;
+                }
+
+                bottomControl._container.innerHTML = `
+                    <div style="text-align: center; pointer-events: auto; display: flex; gap: 8px; justify-content: center; background: rgba(0,0,0,0.6); padding: 8px 16px; border-radius: 50px; backdrop-filter: blur(5px);">
+                        ${btnHtml}
+                    </div>`;
+            } else {
+                // 未選擇任何點位時，才顯示「➕ 新增點位」按鈕
+                bottomControl._container.innerHTML = `
+                    <div style="text-align: center; pointer-events: auto; display: flex; gap: 8px; justify-content: center; background: rgba(0,0,0,0.6); padding: 8px 16px; border-radius: 50px; backdrop-filter: blur(5px);">
+                        <button onclick="window.addNewPoint()" 
+                                style="background: #27ae60; color: white; border: 2px solid #ffffff; padding: 12px 30px; border-radius: 50px; font-weight: bold; font-size: 16px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); cursor: pointer;">
+                            ➕ 新增點位
+                        </button>
+                    </div>`;
+            }
         } else {
             bottomControl._container.style.display = 'none';
         }
@@ -234,7 +309,7 @@
     });
 
     // ---------------------------------------------------------
-    // 3. 專屬 CSV 總表生成 (路徑同步)
+    // 4. 專屬 CSV 總表生成
     // ---------------------------------------------------------
     async function generateLayerCsvReport(kmlId, kmlLayerName, maxPhotos) {
         const records = window.auditLayersState[kmlId] || {};
@@ -272,9 +347,7 @@
         try {
             const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
             const safeLayerName = kmlLayerName || getLayerNameByKmlId(kmlId);
-            const csvStoragePath = STORAGE_ROOT 
-                ? `${STORAGE_ROOT}/${safeLayerName}/${safeLayerName}_清查總表.csv`
-                : `${safeLayerName}/${safeLayerName}_清查總表.csv`;
+            const csvStoragePath = `${STORAGE_ROOT}/${safeLayerName}/${safeLayerName}_清查總表.csv`;
 
             await firebase.storage().ref().child(csvStoragePath).put(blob);
         } catch (err) {
@@ -283,7 +356,7 @@
     }
 
     // ---------------------------------------------------------
-    // 4. 清查管理對話框
+    // 5. 清查管理對話框
     // ---------------------------------------------------------
     window.showAuditActionModal = async function() {
         if (!checkHasAuditPermission()) {
@@ -323,7 +396,7 @@
         listHtml += '</div>';
         
         Swal.fire({ 
-            title: '圖層清查管理 (v3.08)', 
+            title: '圖層清查管理 (v3.10)', 
             html: listHtml, 
             showConfirmButton: false, 
             showCloseButton: true 
@@ -380,12 +453,17 @@
     };
     
     // ---------------------------------------------------------
-    // 5. 清查資料編輯與上傳邏輯 (精準圖層與完整路徑)
+    // 6. 清查資料編輯與上傳邏輯
     // ---------------------------------------------------------
     window.openAuditEditor = async function(isModifyMode = false) {
         if (!checkHasAuditPermission()) return;
         const activePoint = window.currentSelectedPoint;
         if (!activePoint) return;
+
+        // 開啟編輯器時隱藏底欄
+        if (bottomControl && bottomControl._container) {
+            bottomControl._container.style.display = 'none';
+        }
 
         const layerProps = activePoint.feature?.properties || activePoint.properties || {};
         const pointKey = layerProps.name || layerProps.title || layerProps.id || "未知點位"; 
@@ -400,7 +478,6 @@
         const currentStatus = historyRecord.deviceStatus || '';
         const currentNote = historyRecord.note || '';
 
-        // 圖片預覽與原尺寸壓縮
         window._tempPreview = function(input, index) {
             if (input.files && input.files[0]) {
                 const reader = new FileReader();
@@ -482,8 +559,6 @@
                 const uploadPromises = res.photos.map(async (data, i) => {
                     if (data && data.startsWith('data:image')) {
                         const photoIndexStr = String(i + 1).padStart(2, '0');
-                        
-                        // 組合 Storage 上傳路徑：kmldata-d22fb/storage/圖層名稱/點位名稱_01.jpg
                         const customStoragePath = `${STORAGE_ROOT}/${kmlLayerName}/${safePointKey}_${photoIndexStr}.jpg`;
 
                         const ref = firebase.storage().ref().child(customStoragePath);
@@ -522,16 +597,16 @@
                 Swal.fire({ icon: 'success', title: '儲存成功', timer: 1000, showConfirmButton: false });
                 
                 if (typeof forceMapRefresh === 'function') forceMapRefresh();
-                if (typeof updateBottomBtnState === 'function') setTimeout(updateBottomBtnState, 300);
             } catch (e) { 
                 console.error("儲存清查資料失敗:", e);
                 Swal.fire('錯誤', e.message || '儲存失敗', 'error'); 
             }
         }
+        if (typeof updateBottomBtnState === 'function') setTimeout(updateBottomBtnState, 300);
     };
 
     // ---------------------------------------------------------
-    // 6. 查看詳細紀錄彈窗
+    // 7. 查看詳細紀錄彈窗
     // ---------------------------------------------------------
     window.viewAuditDetailOnly = function(pointKey) {
         const kmlId = window.mapNamespace?.currentKmlLayerId;
@@ -558,7 +633,7 @@
     };
 
     // ---------------------------------------------------------
-    // 7. 打包 Firebase Storage 照片 (路徑對應修復)
+    // 8. 打包 Firebase Storage 照片
     // ---------------------------------------------------------
     window.downloadAuditPhotosZip = async function(kmlId) {
         if (typeof JSZip === 'undefined' || typeof saveAs === 'undefined') {
@@ -674,7 +749,7 @@
     };
         
     // ---------------------------------------------------------
-    // 8. 資料動態監聽與安全退場機制
+    // 9. 資料動態監聽與安全退場機制
     // ---------------------------------------------------------
     const initGlobalConfigListener = () => {
         if (typeof firebase === 'undefined' || !firebase.apps.length) {
@@ -731,7 +806,7 @@
     }
 
     // ---------------------------------------------------------
-    // 9. Leaflet 地圖初始化掛載 (輪詢檢查)
+    // 10. Leaflet 地圖初始化掛載
     // ---------------------------------------------------------
     let checkAttempts = 0;
     const maxAttempts = 30; 
