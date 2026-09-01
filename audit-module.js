@@ -1,5 +1,5 @@
 ﻿/**
- * audit-module.js - 清查紀錄面板優化與獨立模組版 (V4.05 - 修復上傳後點位即時轉色免拖曳地圖)
+ * audit-module.js - 清查紀錄面板優化與獨立模組版 (V4.04 - 完整整合藍黃點即時同步與 Storage 路徑優化版)
  */
 (function() {
     'use strict';
@@ -53,6 +53,7 @@
             .replace(/'/g, "&#039;");
     }
 
+    // 清理 Storage 與檔案系統不合規特徵字元（如斜線 / 防止誤建階層）
     function sanitizePathName(name) {
         if (!name) return 'default';
         return String(name).replace(/[\/\\#?%*:|"<>]/g, '_').trim();
@@ -88,7 +89,7 @@
     window.syncAuditButtonVisibility = syncAuditButtonVisibility;
 
     // ---------------------------------------------------------
-    // 1. 樣式攔截器與強力即時重繪機制 (即時轉色修復重點)
+    // 1. 樣式攔截器與強力即時重繪機制 (藍黃點顏色統一)
     // ---------------------------------------------------------
     const originalAddLayers = window.addGeoJsonLayers;
     window.addGeoJsonLayers = function(features) {
@@ -140,22 +141,26 @@
         const kmlId = ns?.currentKmlLayerId;
         if (!ns?.map || !kmlId) return;
 
-        // 修正地圖容器尺寸
-        ns.map.invalidateSize({ animate: false });
+        setTimeout(() => {
+            if (ns.map && typeof ns.map.invalidateSize === 'function') {
+                ns.map.invalidateSize({ animate: false });
+            }
+        }, 100);
 
         const records = window.auditLayersState[kmlId] || {};
         const showAuditMode = window.globalAuditConfigs[kmlId]?.isAuditing && canSeeAuditColors();
 
+        // 收集現存合法點位 Key
         const validPointKeys = new Set(
             (ns.allKmlFeatures || []).map(f => f.properties?.name || f.properties?.title || f.properties?.auditPointKey)
         );
 
-        // 1. 遍歷既有 Leaflet Layer，立即更新樣式並強制重繪 (layer.redraw)
         ns.map.eachLayer(function(layer) {
             if (layer.feature && layer.feature.properties) {
                 const props = layer.feature.properties;
                 const pointKey = props.name || props.title || props.id || props.auditPointKey || "未知點位";
                 
+                // 💡 [即時刪除清理]：若點位已不在合法清單中，直接自 Leaflet 地圖移除
                 if (!validPointKeys.has(pointKey)) {
                     ns.map.removeLayer(layer);
                     return;
@@ -171,25 +176,23 @@
 
                         if (typeof layer.setStyle === 'function') {
                             layer.setStyle({
-                                fillColor: COLOR_AUDITED, // 黃點
+                                fillColor: COLOR_AUDITED, // 即時同步黃點
                                 color: "#ffffff",
                                 weight: 2,
                                 fillOpacity: 0.9,
                                 radius: 9
                             });
-                            if (typeof layer.redraw === 'function') layer.redraw(); // 🔥 強制渲染器繪製
                         }
                     } else {
                         props.isAudited = false;
                         if (typeof layer.setStyle === 'function') {
                             layer.setStyle({
-                                fillColor: COLOR_UNAUDITED, // 藍點
+                                fillColor: COLOR_UNAUDITED, // 即時同步藍點
                                 color: "#ffffff",
                                 weight: 2,
                                 fillOpacity: 0.85,
                                 radius: 8
                             });
-                            if (typeof layer.redraw === 'function') layer.redraw(); // 🔥 強制渲染器繪製
                         }
                     }
                 } else {
@@ -201,51 +204,15 @@
                             fillOpacity: 0.85,
                             radius: 8
                         });
-                        if (typeof layer.redraw === 'function') layer.redraw();
                     }
                 }
             }
         });
 
-        // 2. 針對「全新新增點位」，若地圖尚無此 Layer 實體，立即建立 L.circleMarker 掛載至地圖
-        if (showAuditMode && Array.isArray(ns.allKmlFeatures) && typeof L !== 'undefined') {
-            const existingLayerKeys = new Set();
-            ns.map.eachLayer(l => {
-                const k = l.feature?.properties?.name || l.feature?.properties?.auditPointKey;
-                if (k) existingLayerKeys.add(k);
-            });
-
-            ns.allKmlFeatures.forEach(f => {
-                const k = f.properties?.name || f.properties?.auditPointKey;
-                if (k && !existingLayerKeys.has(k) && f.geometry?.coordinates) {
-                    const [lng, lat] = f.geometry.coordinates;
-                    const record = records[k];
-                    const isAudited = !!record;
-                    const markerColor = isAudited ? COLOR_AUDITED : COLOR_UNAUDITED;
-
-                    const newMarker = L.circleMarker([lat, lng], {
-                        fillColor: markerColor,
-                        color: "#ffffff",
-                        weight: 2,
-                        fillOpacity: 0.85,
-                        radius: 8
-                    });
-
-                    newMarker.feature = f;
-
-                    newMarker.on('click', function(e) {
-                        L.DomEvent.stopPropagation(e);
-                        window.currentSelectedPoint = newMarker;
-                        if (typeof updateBottomBtnState === 'function') updateBottomBtnState();
-                    });
-
-                    newMarker.addTo(ns.map);
-                }
-            });
+        // 💡 [即時繪製補齊]：觸發 addGeoJsonLayers 補充繪製尚未掛載的新標記
+        if (window.addGeoJsonLayers && ns.allKmlFeatures) {
+            window.addGeoJsonLayers(ns.allKmlFeatures);
         }
-
-        // 3. 🔥 觸發 moveend 畫面刷新事件，徹底解決「需要拖曳地圖才顯示」的問題
-        ns.map.fire('moveend');
 
         syncAuditButtonVisibility();
     }
@@ -303,7 +270,7 @@
     });
 
     // ---------------------------------------------------------
-    // 3. CSV 總表生成
+    // 3. CSV 總表生成 (優化檔案名稱與安全路徑)
     // ---------------------------------------------------------
     async function generateLayerCsvReport(kmlId, kmlLayerName, maxPhotos) {
         const activeKmlId = kmlId || window.currentActiveKmlId || window.mapNamespace?.currentKmlLayerId;
@@ -568,11 +535,13 @@
         }
     };
 
-    // ---------------------------------------------------------
-    // 5. 清查紀錄面板與點位維護
-    // ---------------------------------------------------------
+    // =========================================================
+    // 5. 清查紀錄面板與點位維護 (藍黃點即時動態更新增強版)
+    // =========================================================
 
-    // 5.1 手動新增點位起手式
+    // ---------------------------------------------------------
+    // 5.1 手動新增點位起手式 (地圖拾取 + 手機紅底取消按鈕)
+    // ---------------------------------------------------------
     let activeAddPointCleanup = null;
 
     window.startAddCustomPoint = function(kmlId) {
@@ -670,7 +639,9 @@
         document.addEventListener('keydown', handleKeydown);
     };
 
+    // ---------------------------------------------------------
     // 5.2 手動新增點位清查面板
+    // ---------------------------------------------------------
     window.openAddPointModal = async function(kmlId, lat, lng) {
         const config = (window.globalAuditConfigs && window.globalAuditConfigs[kmlId]) || {};
         const maxPhotos = config.targetPhotos || 2;
@@ -818,7 +789,9 @@
         }
     };
 
+    // ---------------------------------------------------------
     // 5.3 既有點位巡檢 / 修改清查紀錄面板
+    // ---------------------------------------------------------
     window.openAuditEditor = async function(isModifyMode = false) {
         if (typeof checkHasAuditPermission === 'function' && !checkHasAuditPermission()) return;
         const activePoint = window.currentSelectedPoint;
@@ -1020,23 +993,11 @@
                     await generateLayerCsvReport(kmlId, kmlLayerName, maxPhotos);
                 }
 
-                // 關閉點位視窗與重置點位選取狀態
-                if (window.mapNamespace?.map) {
-                    window.mapNamespace.map.closePopup();
-                }
-                window.currentSelectedPoint = null;
-
-                // 💡 [即時轉色關鍵點]：立即調用地圖點位樣式強行繪製機制
+                Swal.fire({ icon: 'success', title: '更新成功', timer: 1000, showConfirmButton: false, didClose: () => syncAuditButtonVisibility() });
+                
+                // 💡 [即時同步觸發]：重繪地圖轉為黃點
                 if (typeof forceMapRefresh === 'function') forceMapRefresh();
-                if (typeof updateBottomBtnState === 'function') updateBottomBtnState();
-
-                Swal.fire({ 
-                    icon: 'success', 
-                    title: '更新成功', 
-                    timer: 1000, 
-                    showConfirmButton: false, 
-                    didClose: () => syncAuditButtonVisibility() 
-                });
+                if (typeof updateBottomBtnState === 'function') setTimeout(updateBottomBtnState, 300);
             } catch (e) { 
                 console.error("儲存清查資料失敗:", e);
                 Swal.fire('錯誤', e.message || '儲存失敗', 'error', { didClose: () => syncAuditButtonVisibility() }); 
@@ -1044,7 +1005,9 @@
         }
     };
 
+    // ---------------------------------------------------------
     // 5.4 查看詳細紀錄彈窗
+    // ---------------------------------------------------------
     window.viewAuditDetailOnly = function(pointKey) {
         const kmlId = window.mapNamespace?.currentKmlLayerId;
         const record = window.auditLayersState[kmlId]?.[pointKey];
@@ -1071,7 +1034,9 @@
         });
     };
 
-    // 5.5 送出與清理自訂點位後端資料
+    // ---------------------------------------------------------
+    // 5.5 送出與清理自訂點位後端資料 (即時更新黃點)
+    // ---------------------------------------------------------
     window.submitNewCustomPoint = async function(formValues) {
         const { kmlId, kmlLayerName, lat, lng, pointKey, status, remark, photos, isEditMode, oldPointKey } = formValues;
 
@@ -1147,7 +1112,7 @@
                     auditStatus: status || "新增",
                     auditNote: remark || "",
                     photos: photoUrls,
-                    fillColor: COLOR_AUDITED, // 新增後以黃點呈現
+                    fillColor: COLOR_AUDITED, // 新增後立刻以黃點呈現
                     color: "#ffffff",
                     radius: 8,
                     fillOpacity: 0.85
@@ -1181,16 +1146,6 @@
                 await generateLayerCsvReport(kmlId, layerFolderName, targetPhotosCount);
             }
 
-            // 關閉點位視窗與重置點位選取狀態
-            if (window.mapNamespace?.map) {
-                window.mapNamespace.map.closePopup();
-            }
-            window.currentSelectedPoint = null;
-
-            // 💡 [即時轉色關鍵點]：調用 forceMapRefresh() 重畫地圖並觸發視圖事件
-            if (typeof forceMapRefresh === 'function') forceMapRefresh();
-            if (typeof updateBottomBtnState === 'function') updateBottomBtnState();
-
             Swal.fire({
                 icon: 'success',
                 title: isEditMode ? '修改點位成功' : '新增清查點位成功',
@@ -1198,6 +1153,10 @@
                 showConfirmButton: false,
                 didClose: () => syncAuditButtonVisibility()
             });
+
+            // 💡 [即時同步觸發]：強制重繪地圖
+            if (typeof forceMapRefresh === 'function') forceMapRefresh();
+            if (typeof updateBottomBtnState === 'function') setTimeout(updateBottomBtnState, 300);
 
         } catch (e) {
             console.error("❌ 儲存點位失敗:", e);
@@ -1262,7 +1221,7 @@
 
         const confirmRes = await Swal.fire({
             title: '確定要刪除此點位？',
-            text: `將永久刪除點位「${pointKey}」及其上傳的照片，此動作無法復設！`,
+            text: `將永久刪除點位「${pointKey}」及其上傳的照片，此動作無法復原！`,
             icon: 'warning',
             showCancelButton: true,
             confirmButtonColor: '#d33',
@@ -1290,6 +1249,7 @@
             const safePointKey = sanitizePathName(pointKey);
             const storageRef = firebase.storage().ref();
 
+            // 相容清理新舊 Storage 照片
             const deletePhotoPromises = [];
             for (let i = 1; i <= 12; i++) {
                 const photoIndexStr = String(i).padStart(2, '0');
@@ -1316,6 +1276,7 @@
                 });
             }
 
+            // 💡 [即時圖層擦除]：直接自 Leaflet 圖層實體抹除
             if (ns?.map) {
                 ns.map.eachLayer(layer => {
                     const pKey = layer.feature?.properties?.auditPointKey || layer.feature?.properties?.name;
@@ -1323,7 +1284,6 @@
                         ns.map.removeLayer(layer);
                     }
                 });
-                ns.map.closePopup();
             }
 
             window.currentSelectedPoint = null;
@@ -1331,11 +1291,11 @@
                 await generateLayerCsvReport(kmlId, targetLayerName, 2);
             }
 
-            // 💡 [即時同步]：調用 forceMapRefresh 刷新圖層狀態
-            if (typeof forceMapRefresh === 'function') forceMapRefresh();
-            if (typeof updateBottomBtnState === 'function') updateBottomBtnState();
-
             Swal.fire({ icon: 'success', title: '已順利刪除點位', timer: 1200, showConfirmButton: false, didClose: () => syncAuditButtonVisibility() });
+
+            // 💡 [即時同步觸發]：刷新狀態面板與地圖
+            if (typeof forceMapRefresh === 'function') forceMapRefresh();
+            if (typeof updateBottomBtnState === 'function') setTimeout(updateBottomBtnState, 300);
 
         } catch (e) {
             console.error("❌ 刪除點位失敗:", e);
@@ -1344,7 +1304,7 @@
     };
 
     // ---------------------------------------------------------
-    // 5.6 獨立「➕ 新增點位」按鈕
+    // 5.6 獨立「➕ 新增點位」膠囊按鈕渲染 (固定右下角)
     // ---------------------------------------------------------
     (function renderStandaloneAddButton() {
         let btn = document.getElementById('btn-standalone-add-point');
@@ -1395,7 +1355,7 @@
     });
 
     // ---------------------------------------------------------
-    // 6. 打包 Firebase Storage 照片
+    // 6. 打包 Firebase Storage 照片 (跨資料夾相容掃描)
     // ---------------------------------------------------------
     window.downloadAuditPhotosZip = async function(kmlId) {
         if (typeof JSZip === 'undefined' || typeof saveAs === 'undefined') {
@@ -1510,7 +1470,7 @@
     };
 
     // ---------------------------------------------------------
-    // 7. 資料動態監聽與安全退場機制
+    // 7. 資料動態監聽與安全退場機制 (頁面重整自訂點位回補)
     // ---------------------------------------------------------
     const initGlobalConfigListener = () => {
         if (typeof firebase === 'undefined' || !firebase.apps.length) {
@@ -1540,6 +1500,7 @@
                 });
                 window.auditLayersState[kmlId] = updates;
 
+                // 頁面重整後自動將 Firestore 自訂點位補全至 GeoJSON 特徵陣列
                 const ns = window.mapNamespace;
                 if (ns) {
                     if (!Array.isArray(ns.allKmlFeatures)) ns.allKmlFeatures = [];
@@ -1566,7 +1527,7 @@
                                     auditStatus: record.deviceStatus || "新增",
                                     auditNote: record.note || "",
                                     photos: record.photos || [],
-                                    fillColor: COLOR_AUDITED,
+                                    fillColor: COLOR_AUDITED, // 設定黃點色碼
                                     color: "#ffffff",
                                     radius: 8,
                                     fillOpacity: 0.85
@@ -1610,7 +1571,7 @@
     }
 
     // ---------------------------------------------------------
-    // 8. Leaflet 地圖初始化掛載
+    // 8. Leaflet 地圖初始化掛載 (輪詢與自動校正)
     // ---------------------------------------------------------
     let checkAttempts = 0;
     const maxAttempts = 30; 
