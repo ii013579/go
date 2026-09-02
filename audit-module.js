@@ -1,5 +1,6 @@
 ﻿/**
- * audit-module.js - 清查與修改覆蓋整合優化版 (v3.16 新增點位即時疊加與視角鎖定版)
+ * audit-module.js - 清查與修改覆蓋整合優化版 (v3.16 完整功能版)
+ * 包含：V3.15 藍/黃點樣式與底部控制面板 + V3.16 視角鎖定與新增點位即時疊加
  */
 (function() {
     'use strict';
@@ -68,7 +69,6 @@
         const hasPermission = checkHasAuditPermission();
         const isAuditing = !!(config && config.isAuditing === true);
 
-        // 權限符合且該圖層開啟清查時顯示懸浮按鈕
         if (hasPermission && isAuditing) {
             btn.style.setProperty('display', 'inline-flex', 'important');
         } else {
@@ -78,7 +78,7 @@
     window.syncAuditButtonVisibility = syncAuditButtonVisibility;
 
     // ---------------------------------------------------------
-    // 1. 樣式攔截器與強力重繪機制 (V3.16 新增視角鎖定)
+    // 1. 樣式攔截器與強力重繪機制 (已清查: #FCD770, 未清查: #2A00D2)
     // ---------------------------------------------------------
     const originalAddLayers = window.addGeoJsonLayers;
     window.addGeoJsonLayers = function(features) {
@@ -103,12 +103,12 @@
                         f.properties.auditNote = record.note;
                         f.properties.photos = record.photos || [];
                         f.properties.isAudited = true;
-                        f.properties.fillColor = "#FCD770"; // 已清查
+                        f.properties.fillColor = "#FCD770"; // 已清查：黃色 (V3.15)
                         f.properties.radius = 8;
                     } else {
                         f.properties.isAudited = false;
                         f.properties.auditStatus = null;
-                        f.properties.fillColor = "#2A00D2"; // 未清查
+                        f.properties.fillColor = "#2A00D2"; // 未清查：藍色 (V3.15)
                         f.properties.radius = 8;
                     }
                     f.properties.color = "#ffffff";
@@ -130,14 +130,13 @@
         const kmlId = ns?.currentKmlLayerId;
         if (!ns?.map || !kmlId) return;
 
-        // 【V3.16 新增】記住當前畫面位置與縮放級別
+        // V3.16 核心：鎖定當前畫面位置與縮放級別
         let currentCenter = null, currentZoom = null;
         if (ns.map) {
             currentCenter = ns.map.getCenter();
             currentZoom = ns.map.getZoom();
         }
 
-        // 強制重新計算 Leaflet 地圖容器尺寸，解決手機移動破圖
         setTimeout(() => {
             if (ns.map && typeof ns.map.invalidateSize === 'function') {
                 ns.map.invalidateSize({ animate: false });
@@ -162,7 +161,7 @@
 
                         if (typeof layer.setStyle === 'function') {
                             layer.setStyle({
-                                fillColor: "#ff85c0",
+                                fillColor: "#FCD770", // 已清查：黃色 (V3.15)
                                 color: "#ffffff",
                                 weight: 2,
                                 fillOpacity: 0.9,
@@ -173,7 +172,7 @@
                         props.isAudited = false;
                         if (typeof layer.setStyle === 'function') {
                             layer.setStyle({
-                                fillColor: "#3498db",
+                                fillColor: "#2A00D2", // 未清查：藍色 (V3.15)
                                 color: "#ffffff",
                                 weight: 2,
                                 fillOpacity: 0.9,
@@ -199,10 +198,9 @@
             window.addGeoJsonLayers(ns.allKmlFeatures);
         }
 
-        // 【V3.16 新增】聚焦回原本畫面位置，避免刷新後地圖跑掉
+        // V3.16 核心：精準聚焦回原本位置
         if (ns.map && currentCenter && currentZoom !== null) {
             ns.map.setView(currentCenter, currentZoom, { animate: false });
-            // 延遲再觸發一次，避免 addGeoJsonLayers 內部的非同步渲染搶焦
             setTimeout(() => {
                 if (ns.map) ns.map.setView(currentCenter, currentZoom, { animate: false });
             }, 50);
@@ -213,7 +211,7 @@
     window.forceMapRefresh = forceMapRefresh;
 
     // ---------------------------------------------------------
-    // 2. 底部控制按鈕面板 (僅針對選取的點位)
+    // 2. 底部控制按鈕面板 (V3.15 佈局)
     // ---------------------------------------------------------
     function updateBottomBtnState() {
         if (!bottomControl || !bottomControl._container) return;
@@ -285,7 +283,7 @@
     });
 
     // ---------------------------------------------------------
-    // 3. CSV 總表生成 (鎖定 Storage 路徑)
+    // 3. CSV 總表生成 (路徑嚴格鎖定)
     // ---------------------------------------------------------
     async function generateLayerCsvReport(kmlId, kmlLayerName, maxPhotos) {
         console.log(`[CSV] 開始生成總表 - KML ID: ${kmlId}, LayerName: ${kmlLayerName}`);
@@ -376,7 +374,7 @@
             rootPath = rootPath.replace(/^\/+|\/+$/g, ''); 
             
             const safeLayerName = kmlLayerName || 'default_layer';
-            // 【路徑鎖定】
+            // 【路徑嚴格鎖定】
             const csvStoragePath = `${rootPath}/${safeLayerName}/${safeLayerName}_清查總表.csv`;
 
             if (typeof firebase === 'undefined' || !firebase.storage) {
@@ -427,7 +425,7 @@
             const safeValue = escapeHtml(opt.value);
 
             listHtml += `
-                <div style="display:flex; align-items:center; justify-content:space-between; padding:12px; border-bottom:1px solid #eee;">
+                <div style="display:flex; align-items:center; justify-space-between; padding:12px; border-bottom:1px solid #eee;">
                     <div>
                         <div style="font-weight:bold; font-size:14px;">${escapeHtml(baseName)}</div>
                         ${isAuditing ? `<div style="color: #e67e22; font-size:12px;">清查中：需照片 ${targetPhotos} 張</div>` : `<div style="color: #999; font-size: 12px;">未開啟清查</div>`}
@@ -561,12 +559,11 @@
         }
     };
         
-    // =========================================================
-    // 5-1. 獨立區段：手動新增點位功能 & 地圖點擊拾取 (切換狀態支援)
-    // =========================================================
+    // ---------------------------------------------------------
+    // 5-1. 手動新增點位功能 & 地圖點擊拾取
+    // ---------------------------------------------------------
     let activeAddPointCleanup = null;
     
-    // 按鈕 UI 狀態切換更新輔助函式
     function setAddButtonActiveState(isActive) {
         const btn = document.getElementById('btn-standalone-add-point');
         if (!btn) return;
@@ -644,10 +641,9 @@
         map.on('click', handleMapClick);
     };
     
-    
-    // =========================================================
-    // 5-2. 動態渲染獨立「新增點位」膠囊按鈕（固定於右下角）
-    // =========================================================
+    // ---------------------------------------------------------
+    // 5-2. 動態渲染獨立「新增點位」膠囊按鈕
+    // ---------------------------------------------------------
     (function renderStandaloneAddButton() {
         let btn = document.getElementById('btn-standalone-add-point');
         if (!btn) {
@@ -692,9 +688,9 @@
         });
     })();
         
-    // =========================================================
+    // ---------------------------------------------------------
     // 5-3. 提交新增點位 (V3.16 新增即時繪製與視角鎖定)
-    // =========================================================
+    // ---------------------------------------------------------
     window.submitNewCustomPoint = async function(kmlId, pointKey, lat, lng, deviceStatus, remark) {
         if (!kmlId) return;
         
@@ -723,12 +719,11 @@
             
             const timestamp = firebase.firestore.FieldValue.serverTimestamp();
             
-            // 建立 GeoJSON 格式特徵
             const newGeoJsonFeature = {
                 type: "Feature",
                 geometry: {
                     type: "Point",
-                    coordinates: [numLng, numLat] // 注意順序是 lng, lat
+                    coordinates: [numLng, numLat]
                 },
                 properties: {
                     name: trimmedPointKey,
@@ -738,11 +733,10 @@
                 }
             };
             
-            // 建立寫入清查紀錄的結構
             const structuredData = {
                 deviceStatus: targetDeviceStatus,
                 remark: targetRemark,
-                photos: [], // 剛新增預設無照片
+                photos: [],
                 updatedAt: timestamp,
                 updatedBy: getUserRole(),
                 lat: numLat,
@@ -756,7 +750,6 @@
                 ns.allKmlFeatures.push(newGeoJsonFeature);
             }
             
-            // 寫入 Firestore
             await firebase.firestore()
                 .collection(appPath)
                 .doc(kmlId)
@@ -764,7 +757,7 @@
                 .doc(trimmedPointKey)
                 .set(structuredData, { merge: true });
                 
-            // 【V3.16 新增】地圖即時繪製與聚焦：立即將新點位掛載到地圖上，並觸發視角鎖定的刷新
+            // V3.16 即時繪製：立即掛載 CircleMarker (已清查黃色 #FCD770)
             if (ns && ns.map && typeof L !== 'undefined') {
                 const isAuditing = window.globalAuditConfigs?.[kmlId]?.isAuditing && canSeeAuditColors();
                 const marker = L.circleMarker([numLat, numLng], {
@@ -821,9 +814,9 @@
         }
     };
     
-    // =========================================================
+    // ---------------------------------------------------------
     // 5-4. 自訂點位表單 Modal
-    // =========================================================
+    // ---------------------------------------------------------
     window.openCustomPointModal = function(options = {}) {
         const {
             isEditMode = false,
@@ -920,7 +913,7 @@
     };
 
     // ---------------------------------------------------------
-    // 6. 監聽 Firestore 即時快照 (監聽清查紀錄更新並聯動總表生成)
+    // 6. 監聽 Firestore 即時快照
     // ---------------------------------------------------------
     function initAuditSnapshotListener(kmlId, kmlLayerName) {
         if (!kmlId) return;
@@ -1086,7 +1079,7 @@
     }
 
     // ---------------------------------------------------------
-    // 9. UI 主面板 - 清查表單與詳細資料
+    // 9. UI 主面板 - 清查表單與詳細資料 (相片路徑嚴格鎖定)
     // ---------------------------------------------------------
     window.openAuditEditor = function(isEditMode) {
         const active = window.currentSelectedPoint;
@@ -1219,7 +1212,7 @@
                             const file = files[i];
                             const photoIndexStr = String(i + 1).padStart(2, '0');
                             
-                            // 【路徑鎖定】
+                            // 【路徑嚴格鎖定】
                             const customStoragePath = `${rootPath}/${targetLayerName}/${safePointKey}_${photoIndexStr}.jpg`;
                             
                             const storageRef = firebase.storage().ref().child(customStoragePath);
@@ -1298,7 +1291,6 @@
 
                     Swal.fire({ icon: 'success', title: '更新成功', timer: 1000, showConfirmButton: false });
 
-                    // 【V3.16 已優化】這裡的 forceMapRefresh 內部會快取視角，所以畫面不會亂飄
                     if (typeof forceMapRefresh === 'function') forceMapRefresh();
                     if (typeof updateBottomBtnState === 'function') setTimeout(updateBottomBtnState, 300);
 
@@ -1404,7 +1396,9 @@
         });
     };
 
-    // 初始化控制面板與事件
+    // ---------------------------------------------------------
+    // 10. 初始化地圖面板與樣式
+    // ---------------------------------------------------------
     document.addEventListener('DOMContentLoaded', () => {
         if (!document.getElementById('mobile-swal-style')) {
             const style = document.createElement('style');
@@ -1429,7 +1423,7 @@
             bottomControl.onAdd = function() {
                 const div = L.DomUtil.create('div', 'audit-bottom-control');
                 div.style.display = 'none';
-                div.style.marginBottom = '60px'; // 避開新增點位按鈕
+                div.style.marginBottom = '60px';
                 div.style.pointerEvents = 'auto';
                 return div;
             };
