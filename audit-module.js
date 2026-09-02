@@ -1,5 +1,5 @@
 ﻿/**
- * audit-module.js - 清查與修改覆蓋整合優化版 (v3.17 版)
+ * audit-module.js - 清查與修改覆蓋整合優化版 (v3.15 按鈕佈局與藍/黃點顯示修復版)
  */
 (function() {
     'use strict';
