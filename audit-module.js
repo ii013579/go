@@ -1,6 +1,6 @@
 ﻿/**
- * audit-module.js - 清查與修改覆蓋整合優化版 (v3.19 完整整合版)
- * 整合：圖層強制更新、遞迴走訪修復、視角防護與 layeradd 動態攔截
+ * audit-module.js - 清查與修改覆蓋整合優化版 (v3.20 自動重整全整合版)
+ * 整合：地圖自動重整、視窗與頁籤變更監聽、圖層強制重繪、遞迴走訪修復、視角防護與 layeradd 動態攔截
  */
 (function() {
     'use strict';
@@ -78,7 +78,7 @@
     window.syncAuditButtonVisibility = syncAuditButtonVisibility;
 
     // ---------------------------------------------------------
-    // 1. 樣式攔截器、強力重繪與即時主動更新 (v3.19 整合版)
+    // 1. 樣式攔截器、強力重繪與自動重整機制 (v3.20 整合版)
     // ---------------------------------------------------------
     
     // 獨立樣式處理函式：遞迴走訪圖層並根據清查狀態設定樣式
@@ -192,11 +192,8 @@
         const center = map.getCenter();
         const zoom = map.getZoom();
 
-        setTimeout(() => {
-            if (typeof map.invalidateSize === 'function') {
-                map.invalidateSize({ animate: false });
-            }
-        }, 100);
+        // 刷新容器尺寸，解決灰色破圖
+        map.invalidateSize({ animate: false });
 
         // 執行圖層深度走訪與重繪
         map.eachLayer(processAndStyleLayer);
@@ -210,6 +207,40 @@
 
         syncAuditButtonVisibility();
     };
+
+    // ---------------------------------------------------------
+    // 1.1 全域自動重整觸發器 (Auto Refresh Observers)
+    // ---------------------------------------------------------
+    
+    // 1. 下拉選單切換 (kmlLayerSelect) 時自動重整
+    document.addEventListener('change', (e) => {
+        if (e.target && e.target.id === 'kmlLayerSelect') {
+            setTimeout(() => {
+                if (typeof syncAuditButtonVisibility === 'function') syncAuditButtonVisibility();
+                if (typeof window.forceMapRefresh === 'function') window.forceMapRefresh();
+            }, 150);
+        }
+    });
+
+    // 2. 視窗尺寸調整 (Resize) 自動重整修復破圖
+    window.addEventListener('resize', () => {
+        const map = window.mapNamespace?.map;
+        if (map) {
+            map.invalidateSize({ animate: false });
+            if (typeof window.forceMapRefresh === 'function') window.forceMapRefresh();
+        }
+    });
+
+    // 3. 切換頁籤 (VisibilityChange) 返回時自動重整地圖
+    document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) {
+            const map = window.mapNamespace?.map;
+            if (map) {
+                map.invalidateSize({ animate: false });
+                if (typeof window.forceMapRefresh === 'function') window.forceMapRefresh();
+            }
+        }
+    });
 
     // ---------------------------------------------------------
     // 2. 底部控制按鈕面板
@@ -376,7 +407,7 @@
             const csvStoragePath = `${rootPath}/${safeLayerName}/${safeLayerName}_清查總表.csv`;
 
             if (typeof firebase === 'undefined' || !firebase.storage) {
-                throw new Error("Firebase Storage SDK 未初始化！");
+                throw new Error("Firebase Storage SDK 未設為全域或未初始化！");
             }
 
             const storageRef = firebase.storage().ref().child(csvStoragePath);
@@ -527,6 +558,7 @@
                     window.globalAuditConfigs[kmlId].isAuditing = true;
 
                     syncAuditButtonVisibility();
+                    if (typeof window.forceMapRefresh === 'function') window.forceMapRefresh();
                     Swal.fire({ icon: 'success', title: '已成功開啟清查模式', timer: 1200, showConfirmButton: false });
                 } else {
                     window.showAuditActionModal();
@@ -542,6 +574,7 @@
                 window.globalAuditConfigs[kmlId].isAuditing = false;
 
                 syncAuditButtonVisibility();
+                if (typeof window.forceMapRefresh === 'function') window.forceMapRefresh();
                 Swal.fire({ icon: 'success', title: '已關閉清查模式', timer: 1000, showConfirmButton: false });
             }
         } catch (error) {
@@ -609,7 +642,7 @@
             timerProgressBar: true
         }).fire({ 
             icon: 'info', 
-            title: '📍 請在地圖上點擊要新增點位的實體位置' 
+            title: '📍 請在地圖上點擊要新增點位的實態位置' 
         });
     
         const handleMapClick = async function(e) {
@@ -677,16 +710,6 @@
             syncAuditButtonVisibility();
         }
     })();
-    
-    document.addEventListener('change', (e) => {
-        if (e.target && e.target.id === 'kmlLayerSelect') {
-            setTimeout(() => {
-                if (typeof syncAuditButtonVisibility === 'function') {
-                    syncAuditButtonVisibility();
-                }
-            }, 100);
-        }
-    });
     
     // =========================================================
     // 5-3. 彈窗 UI 介面與照片預覽
@@ -808,6 +831,7 @@
                     const addBtn = document.getElementById('btn-standalone-add-point');
                     if (addBtn) addBtn.style.setProperty('display', 'inline-flex', 'important');
                 }
+                if (typeof forceMapRefresh === 'function') forceMapRefresh();
             },
             preConfirm: () => {
                 const name = document.getElementById('add-point-name').value.trim();
@@ -1232,6 +1256,7 @@
                     const addBtn = document.getElementById('btn-standalone-add-point');
                     if (addBtn) addBtn.style.setProperty('display', 'inline-flex', 'important');
                 }
+                if (typeof forceMapRefresh === 'function') forceMapRefresh();
             },
             preConfirm: () => {
                 const statusValue = document.getElementById('swal-status').value;
@@ -1518,7 +1543,7 @@
                 if (data.isAuditing) startAuditDataListener(doc.id);
             });
             updateKmlSelectUI();
-            forceMapRefresh();
+            if (typeof window.forceMapRefresh === 'function') window.forceMapRefresh();
         }, err => {
             console.warn("監聽根目錄圖層配置受限或中斷:", err.message);
         });
@@ -1533,7 +1558,7 @@
                     updates[doc.id] = doc.data();
                 });
                 window.auditLayersState[kmlId] = updates;
-                forceMapRefresh(); 
+                if (typeof window.forceMapRefresh === 'function') window.forceMapRefresh(); 
             }, err => {
                 console.warn(`監聽子圖層 ${kmlId} 紀錄失敗:`, err.message);
             });
@@ -1572,13 +1597,14 @@
             
             const map = window.mapNamespace.map;
 
+            // 地圖拖曳/縮放完成時自動刷新
             map.on('moveend zoomend resize', function() {
                 setTimeout(() => {
                     map.invalidateSize({ animate: false });
                 }, 100);
             });
 
-            // v3.19 特性：監聽圖層動態加入事件，即時套用清查樣式
+            // 監聽圖層動態加入事件，即時套用清查樣式
             map.on('layeradd', function(e) {
                 if (typeof processAndStyleLayer === 'function') {
                     processAndStyleLayer(e.layer);
