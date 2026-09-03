@@ -1,5 +1,5 @@
 ﻿/**
- * audit-module.js - 清查與修改覆蓋整合優化版 (v3.15 按鈕佈局與藍/黃點顯示修復版)
+ * audit-module.js - 清查與修改覆蓋整合優化版 (v3.18 圖層強制更新與遞迴走訪修復版)
  */
 (function() {
     'use strict';
@@ -68,7 +68,6 @@
         const hasPermission = checkHasAuditPermission();
         const isAuditing = !!(config && config.isAuditing === true);
 
-        // 權限符合且該圖層開啟清查時顯示懸浮按鈕
         if (hasPermission && isAuditing) {
             btn.style.setProperty('display', 'inline-flex', 'important');
         } else {
@@ -125,12 +124,12 @@
         if (originalAddLayers) return originalAddLayers.apply(this, arguments);
     };
 
+    // 💡 【v3.18 修正】支援遞迴走訪 LayerGroup / GeoJSON 內部點位的強制更新機制
     function forceMapRefresh() {
         const ns = window.mapNamespace;
         const kmlId = ns?.currentKmlLayerId;
         if (!ns?.map || !kmlId) return;
 
-        // 強制重新計算 Leaflet 地圖容器尺寸，解決手機移動破圖
         setTimeout(() => {
             if (ns.map && typeof ns.map.invalidateSize === 'function') {
                 ns.map.invalidateSize({ animate: false });
@@ -140,7 +139,14 @@
         const records = window.auditLayersState[kmlId] || {};
         const showAuditMode = window.globalAuditConfigs[kmlId]?.isAuditing && canSeeAuditColors();
 
-        ns.map.eachLayer(function(layer) {
+        // 遞迴處理圖層函式（可深入 LayerGroup、FeatureGroup 與 GeoJSON 內部）
+        function processLayer(layer) {
+            if (typeof layer.eachLayer === 'function') {
+                layer.eachLayer(subLayer => {
+                    processLayer(subLayer);
+                });
+            }
+
             if (layer.feature && layer.feature.properties) {
                 const props = layer.feature.properties;
                 const pointKey = props.name || props.title || props.id || "未知點位";
@@ -177,7 +183,7 @@
                 } else {
                     if (typeof layer.setStyle === 'function') {
                         layer.setStyle({
-                            fillColor: "#e74c3c",
+                            fillColor: "#e74c3c", // 預設紅點
                             color: "#ffffff",
                             weight: 1.5,
                             fillOpacity: 0.85,
@@ -186,6 +192,10 @@
                     }
                 }
             }
+        }
+
+        ns.map.eachLayer(function(layer) {
+            processLayer(layer);
         });
 
         if (window.addGeoJsonLayers && ns.allKmlFeatures) {
@@ -197,7 +207,7 @@
     window.forceMapRefresh = forceMapRefresh;
 
     // ---------------------------------------------------------
-    // 2. 底部控制按鈕面板 (V3.15 按鈕樣式與切換佈局)
+    // 2. 底部控制按鈕面板
     // ---------------------------------------------------------
     function updateBottomBtnState() {
         if (!bottomControl || !bottomControl._container) return;
@@ -272,8 +282,6 @@
     // 3. CSV 總表生成
     // ---------------------------------------------------------
     async function generateLayerCsvReport(kmlId, kmlLayerName, maxPhotos) {
-        console.log(`[CSV] 開始生成總表 - KML ID: ${kmlId}, LayerName: ${kmlLayerName}`);
-        
         const activeKmlId = kmlId || window.currentActiveKmlId || window.mapNamespace?.currentKmlLayerId;
         const records = (window.auditLayersState && window.auditLayersState[activeKmlId]) ? window.auditLayersState[activeKmlId] : {};
         const ns = window.mapNamespace;
@@ -958,7 +966,7 @@
                     auditStatus: targetDeviceStatus,
                     auditNote: remark || "",
                     photos: photoUrls,
-                    fillColor: "#FCD770", // 新增完成點位設為黃點
+                    fillColor: "#FCD770", 
                     color: "#ffffff",
                     radius: 8,
                     fillOpacity: 0.85
