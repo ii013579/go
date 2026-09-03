@@ -1,5 +1,6 @@
 ﻿/**
- * audit-module.js - 清查與修改覆蓋整合優化版 (v3.18 圖層強制更新與遞迴走訪修復版)
+ * audit-module.js - 清查與修改覆蓋整合優化版 (v3.19 完整整合版)
+ * 整合：圖層強制更新、遞迴走訪修復、視角防護與 layeradd 動態攔截
  */
 (function() {
     'use strict';
@@ -77,8 +78,67 @@
     window.syncAuditButtonVisibility = syncAuditButtonVisibility;
 
     // ---------------------------------------------------------
-    // 1. 樣式攔截器與強力重繪機制 (黃點/藍點 邏輯)
+    // 1. 樣式攔截器、強力重繪與即時主動更新 (v3.19 整合版)
     // ---------------------------------------------------------
+    
+    // 獨立樣式處理函式：遞迴走訪圖層並根據清查狀態設定樣式
+    function processAndStyleLayer(layer) {
+        const ns = window.mapNamespace;
+        const kmlId = ns?.currentKmlLayerId;
+        const records = window.auditLayersState[kmlId] || {};
+        const showAuditMode = window.globalAuditConfigs[kmlId]?.isAuditing && canSeeAuditColors();
+
+        if (typeof layer.eachLayer === 'function') {
+            layer.eachLayer(processAndStyleLayer);
+        }
+
+        if (layer.feature && layer.feature.properties) {
+            const props = layer.feature.properties;
+            const pointKey = props.name || props.title || props.id || "未知點位";
+            
+            if (showAuditMode) {
+                const record = records[pointKey];
+                if (record) {
+                    props.isAudited = true;
+                    props.auditStatus = record.deviceStatus || "正常";
+                    props.photos = record.photos || [];
+                    props.auditNote = record.note;
+
+                    if (typeof layer.setStyle === 'function') {
+                        layer.setStyle({
+                            fillColor: "#FCD770", // 已清查 (黃點)
+                            color: "#000",
+                            weight: 1,
+                            fillOpacity: 0.9,
+                            radius: 9
+                        });
+                    }
+                } else {
+                    props.isAudited = false;
+                    if (typeof layer.setStyle === 'function') {
+                        layer.setStyle({
+                            fillColor: "#2A00D2", // 未清查 (深藍點)
+                            color: "#fff",
+                            weight: 1,
+                            fillOpacity: 0.9,
+                            radius: 8
+                        });
+                    }
+                }
+            } else {
+                if (typeof layer.setStyle === 'function') {
+                    layer.setStyle({
+                        fillColor: "#e74c3c", // 預設紅點
+                        color: "#fff",
+                        weight: 1.5,
+                        fillOpacity: 0.85,
+                        radius: 8
+                    });
+                }
+            }
+        }
+    }
+
     const originalAddLayers = window.addGeoJsonLayers;
     window.addGeoJsonLayers = function(features) {
         const ns = window.mapNamespace;
@@ -87,6 +147,7 @@
         if (kmlId && Array.isArray(features)) {
             const config = window.globalAuditConfigs[kmlId];
             const records = window.auditLayersState[kmlId] || {};
+            const showAuditMode = config && config.isAuditing === true && canSeeAuditColors();
 
             features.forEach(f => {
                 if (!f.properties) f.properties = {};
@@ -95,116 +156,60 @@
                 const pointKey = f.properties.name || f.properties.title || f.properties.id || f.id || "未知點位";
                 f.properties.auditPointKey = pointKey; 
 
-                if (config && config.isAuditing === true && canSeeAuditColors()) {
+                if (showAuditMode) {
                     const record = records[pointKey];
                     if (record) {
                         f.properties.auditStatus = record.deviceStatus || "正常";
                         f.properties.auditNote = record.note;
                         f.properties.photos = record.photos || [];
                         f.properties.isAudited = true;
-                        f.properties.fillColor = "#FCD770"; // 已清查 (黃點)
-                        f.properties.radius = 8;
                     } else {
                         f.properties.isAudited = false;
                         f.properties.auditStatus = null;
-                        f.properties.fillColor = "#3498db"; // 未清查 (藍點)
-                        f.properties.radius = 8;
                     }
-                    f.properties.color = "#ffffff";
-                    f.properties.fillOpacity = 0.85;
                 } else {
-                    f.properties.fillColor = "#e74c3c"; // 預設紅點
-                    f.properties.radius = 8;
                     f.properties.isAudited = false;
-                    f.properties.fillOpacity = 0.85;
                     delete f.properties.auditStatus;
                 }
             });
         }
-        if (originalAddLayers) return originalAddLayers.apply(this, arguments);
+        
+        const result = originalAddLayers ? originalAddLayers.apply(this, arguments) : null;
+        
+        if (window.mapNamespace && window.mapNamespace.map) {
+            window.mapNamespace.map.eachLayer(processAndStyleLayer);
+        }
+        return result;
     };
 
-    // 💡 【v3.18 修正】支援遞迴走訪 LayerGroup / GeoJSON 內部點位的強制更新機制
-    function forceMapRefresh() {
+    // 強力重繪與視角防護機制 (forceMapRefresh)
+    window.forceMapRefresh = function() {
         const ns = window.mapNamespace;
-        const kmlId = ns?.currentKmlLayerId;
-        if (!ns?.map || !kmlId) return;
+        const map = ns?.map;
+        if (!map) return;
+
+        // 鎖定目前地圖視角，防止重繪時畫面自動跳走
+        const center = map.getCenter();
+        const zoom = map.getZoom();
 
         setTimeout(() => {
-            if (ns.map && typeof ns.map.invalidateSize === 'function') {
-                ns.map.invalidateSize({ animate: false });
+            if (typeof map.invalidateSize === 'function') {
+                map.invalidateSize({ animate: false });
             }
         }, 100);
 
-        const records = window.auditLayersState[kmlId] || {};
-        const showAuditMode = window.globalAuditConfigs[kmlId]?.isAuditing && canSeeAuditColors();
-
-        // 遞迴處理圖層函式（可深入 LayerGroup、FeatureGroup 與 GeoJSON 內部）
-        function processLayer(layer) {
-            if (typeof layer.eachLayer === 'function') {
-                layer.eachLayer(subLayer => {
-                    processLayer(subLayer);
-                });
-            }
-
-            if (layer.feature && layer.feature.properties) {
-                const props = layer.feature.properties;
-                const pointKey = props.name || props.title || props.id || "未知點位";
-                
-                if (showAuditMode) {
-                    const record = records[pointKey];
-                    if (record) {
-                        props.isAudited = true;
-                        props.auditStatus = record.deviceStatus || "正常";
-                        props.photos = record.photos || [];
-                        props.auditNote = record.note;
-
-                        if (typeof layer.setStyle === 'function') {
-                            layer.setStyle({
-                                fillColor: "#FCD770", // 已清查 (黃點)
-                                color: "#ffffff",
-                                weight: 2,
-                                fillOpacity: 0.9,
-                                radius: 9
-                            });
-                        }
-                    } else {
-                        props.isAudited = false;
-                        if (typeof layer.setStyle === 'function') {
-                            layer.setStyle({
-                                fillColor: "#3498db", // 未清查 (藍點)
-                                color: "#ffffff",
-                                weight: 2,
-                                fillOpacity: 0.9,
-                                radius: 8
-                            });
-                        }
-                    }
-                } else {
-                    if (typeof layer.setStyle === 'function') {
-                        layer.setStyle({
-                            fillColor: "#e74c3c", // 預設紅點
-                            color: "#ffffff",
-                            weight: 1.5,
-                            fillOpacity: 0.85,
-                            radius: 8
-                        });
-                    }
-                }
-            }
-        }
-
-        ns.map.eachLayer(function(layer) {
-            processLayer(layer);
-        });
+        // 執行圖層深度走訪與重繪
+        map.eachLayer(processAndStyleLayer);
 
         if (window.addGeoJsonLayers && ns.allKmlFeatures) {
             window.addGeoJsonLayers(ns.allKmlFeatures);
         }
 
+        // 還原視角
+        map.setView(center, zoom, { animate: false });
+
         syncAuditButtonVisibility();
-    }
-    window.forceMapRefresh = forceMapRefresh;
+    };
 
     // ---------------------------------------------------------
     // 2. 底部控制按鈕面板
@@ -1556,7 +1561,7 @@
     }
 
     // ---------------------------------------------------------
-    // 10. Leaflet 地圖初始化掛載
+    // 10. Leaflet 地圖初始化掛載與圖層動態監聽
     // ---------------------------------------------------------
     let checkAttempts = 0;
     const maxAttempts = 30; 
@@ -1571,6 +1576,13 @@
                 setTimeout(() => {
                     map.invalidateSize({ animate: false });
                 }, 100);
+            });
+
+            // v3.19 特性：監聽圖層動態加入事件，即時套用清查樣式
+            map.on('layeradd', function(e) {
+                if (typeof processAndStyleLayer === 'function') {
+                    processAndStyleLayer(e.layer);
+                }
             });
 
             map.eachLayer(function(layer) {
