@@ -1,4 +1,4 @@
-﻿// map-logic.js v2.03
+﻿// map-logic.js v3.14
 
 (function () {
     'use strict';
@@ -364,20 +364,20 @@
         });
     });
 
-    // ---------- 公開方法：添加 GeoJSON 圖層（v2.04 修正版） ----------
+// ---------- 公開方法：添加 GeoJSON 圖層（純粹圖層繪製，無清查邏輯） ----------
     window.addGeoJsonLayers = function (geojsonFeatures = []) {
         if (!ns.map) return;
     
-        // 清除舊圖層
+        // 1. 清除舊圖層與標記
         ns.geoJsonLayers.clearLayers();
         ns.markers.clearLayers();
         ns.navButtons.clearLayers();
     
-        // 預設樣式 (若 properties 沒提供時使用)
+        // 2. 預設純粹點位樣式 (僅在 feature.properties 完全未定義色彩時備用)
         const defaultStyle = {
             radius: 8,
-            fillColor: "#e74c3c", // 預設紅色
-            fillOpacity: 1,
+            fillColor: "#3388ff", // 標準藍色
+            fillOpacity: 0.85,
             color: "#ffffff",     // 白色外框
             weight: 2,
             opacity: 1,
@@ -386,63 +386,67 @@
     
         const canvasRenderer = L.canvas({ padding: 0.1 });
     
+        // 3. 逐一繪製 Feature
         geojsonFeatures.forEach(feature => {
             const type = feature?.geometry?.type;
             const coords = feature?.geometry?.coordinates;
             if (!type || !coords) return;
     
-            // 處理點位 (Point)
+            // --- 處理點位 (Point) ---
             if (type === 'Point') {
                 const latlng = L.latLng(coords[1], coords[0]);
-                const name = feature.properties?.name || '未命名';
+                const name = feature.properties?.name || feature.properties?.title || '未命名';
                 const labelId = `label-${String(coords[1])}-${String(coords[0])}`.replace(/\./g, '_');
     
-                // --- 修正重點 1：合併樣式，優先使用 properties 內的設定 (藍/粉點關鍵) ---
+                // 完全依賴傳入 Feature 的屬性渲染，不再主動檢查 auditLayersState
                 const featureStyle = {
                     ...defaultStyle,
                     radius: feature.properties?.radius || defaultStyle.radius,
                     fillColor: feature.properties?.fillColor || defaultStyle.fillColor,
-                    fillOpacity: feature.properties?.fillOpacity || defaultStyle.fillOpacity
+                    fillOpacity: feature.properties?.fillOpacity ?? defaultStyle.fillOpacity,
+                    color: feature.properties?.color || defaultStyle.color
                 };
     
                 const dot = L.circleMarker(latlng, {
                     renderer: canvasRenderer,
-                    ...featureStyle // 使用合併後的樣式
+                    ...featureStyle
                 });
     
-                // 將 feature 綁定到 dot 上，方便點擊時獲取資訊
                 dot.feature = feature;
     
+                // 點擊事件：選取高亮與發送選取點位
                 dot.on('click', (e) => {
                     L.DomEvent.stopPropagation(e);
                     
-                    // --- 修正重點 2：將選中的點存入全域，供 audit-module.js 顯示「清樁」按鈕 ---
                     window.currentSelectedPoint = feature; 
     
-                    // 重置所有點 (注意：這裡不能直接套用 originalStyle，否則藍點會變回紅點)
+                    // 重置所有點位為原始 feature 樣式
                     ns.markers.eachLayer(layer => {
                         if (layer instanceof L.CircleMarker && layer.feature) {
-                            const style = {
+                            layer.setStyle({
                                 ...defaultStyle,
-                                fillColor: layer.feature.properties?.fillColor || defaultStyle.fillColor
-                            };
-                            layer.setStyle(style);
+                                fillColor: layer.feature.properties?.fillColor || defaultStyle.fillColor,
+                                color: layer.feature.properties?.color || defaultStyle.color,
+                                weight: defaultStyle.weight
+                            });
                         }
                     });
     
-                    // 高亮當前點
-                    dot.setStyle({ weight: 4, color: '#ffff00' }); // 選中的點加粗黃框
+                    // 高亮當前點 (套用黃色邊框)
+                    dot.setStyle({ weight: 4, color: '#ffff00' });
     
                     document.querySelectorAll('.marker-label span').forEach(s => s.classList.remove('label-active'));
                     const targetSpan = document.getElementById(labelId);
                     if (targetSpan) targetSpan.classList.add('label-active');
     
-                    window.createNavButton(latlng, name);
+                    if (typeof window.createNavButton === 'function') {
+                        window.createNavButton(latlng, name);
+                    }
                 });
     
                 ns.markers.addLayer(dot);
-    
-                // 標籤處理 (維持原樣)
+
+                // 標籤處理
                 const label = L.marker(latlng, {
                     icon: L.divIcon({
                         className: 'marker-label',
@@ -455,7 +459,7 @@
                 });
                 ns.markers.addLayer(label);
             }
-            // ... (處理線段與多邊形的邏輯維持不變) ...
+            // --- 處理線條與多邊形 (LineString / Polygon) ---
             else if (type === 'LineString' || type === 'Polygon') {
                 const layer = L.geoJSON(feature, {
                     renderer: canvasRenderer,
@@ -464,26 +468,28 @@
     
                 layer.on('click', function (e) {
                     L.DomEvent.stopPropagation(e);
-                    window.currentSelectedPoint = feature; // 線段點擊也紀錄
+                    window.currentSelectedPoint = feature;
                     let centerPoint = (type === 'Polygon') 
                         ? window.getPolygonCentroid(feature.geometry.coordinates[0])
                         : window.getLineStringMidpoint(feature.geometry.coordinates);
-                    
-                    if (centerPoint) {
-                        window.createNavButton(L.latLng(centerPoint[1], centerPoint[0]), feature.properties?.name);
+    
+                    if (centerPoint && typeof window.createNavButton === 'function') {
+                        window.createNavButton(L.latLng(centerPoint[1], centerPoint[0]), feature.properties?.name || feature.properties?.title);
                     }
                 });
             }
         });
     
-        // 點擊空白處重置
+        // 4. 點擊地圖空白處：解除點位選取高亮
         ns.map.off('click').on('click', () => {
-            window.currentSelectedPoint = null; // 清除選中狀態
+            window.currentSelectedPoint = null;
             ns.markers.eachLayer(layer => {
                 if (layer instanceof L.CircleMarker && layer.feature) {
                     layer.setStyle({
                         ...defaultStyle,
-                        fillColor: layer.feature.properties?.fillColor || defaultStyle.fillColor
+                        fillColor: layer.feature.properties?.fillColor || defaultStyle.fillColor,
+                        color: layer.feature.properties?.color || defaultStyle.color,
+                        weight: defaultStyle.weight
                     });
                 }
             });
@@ -491,6 +497,7 @@
             ns.navButtons.clearLayers();
         });
     
+        // 保存傳入的圖層資料
         ns.allKmlFeatures = geojsonFeatures;
     };
        
