@@ -875,80 +875,85 @@
             }
         }
     };
-    
-    
+      
     // =========================================================
-    // 關鍵輔助函式：原位強刷 Marker 樣式與 Leaflet 畫面修正 (立即變色版)
+    // 關鍵輔助函式：原位強刷 Marker 樣式 (強制重繪版)
     // =========================================================
     function applyAuditStyleToLayer(targetPointKey, isAudited = true, shouldSelect = false) {
         const ns = window.mapNamespace;
         if (!ns || !ns.map || !targetPointKey) return;
 
-        // 強制轉字串並去除空白，避免比對失效
         const cleanTargetKey = String(targetPointKey).trim();
+        const targetColor = isAudited ? "#FCD770" : "#3388ff"; // 黃色已清查 / 藍色未清查
 
         // 1. 雙重尺寸修正 (解決灰區)
         requestAnimationFrame(() => ns.map.invalidateSize({ pan: false }));
         setTimeout(() => ns.map.invalidateSize({ pan: false }), 200);
 
-        // 2. 遍歷地圖所有圖層原位改色
-        ns.map.eachLayer(layer => {
+        // 定義單一圖層的強效變色邏輯
+        const updateSingleLayerStyle = (layer) => {
             const p = layer.feature?.properties || layer.properties;
             const rawKey = p?.auditPointKey || p?.name || p?.title || p?.id;
             const pKey = rawKey ? String(rawKey).trim() : '';
 
             if (pKey && pKey === cleanTargetKey) {
-                // 更新 GeoJSON Feature 屬性
-                if (layer.feature) {
-                    if (!layer.feature.properties) layer.feature.properties = {};
-                    layer.feature.properties.isAudited = isAudited;
-                    layer.feature.properties.fillColor = isAudited ? "#FCD770" : "#3388ff";
-                }
+                // A. 更新 GeoJSON 屬性數據
+                if (!layer.feature) layer.feature = { properties: {} };
+                if (!layer.feature.properties) layer.feature.properties = {};
+                layer.feature.properties.isAudited = isAudited;
+                layer.feature.properties.fillColor = targetColor;
 
-                const targetColor = isAudited ? "#FCD770" : "#3388ff";
-
-                // 情況 A: CircleMarker (向量點)
+                // B. CircleMarker (向量圓點) -> 強制覆蓋 Style 並重繪
                 if (typeof layer.setStyle === 'function') {
+                    layer.options.fillColor = targetColor;
                     layer.setStyle({
-                        fillColor: targetColor,  // 黃色已清查 / 藍色未清查
+                        fillColor: targetColor,
                         color: "#ffffff",
                         fillOpacity: 0.9,
                         radius: 8
                     });
 
-                    // 💡【關鍵 1】向量圖層強制重繪，讓顏色瞬間生效
-                    if (typeof layer.redraw === 'function') {
-                        layer.redraw();
+                    // 強制觸發 Canvas/SVG 底層重繪
+                    if (layer._map || layer._renderer) {
+                        if (typeof layer.redraw === 'function') layer.redraw();
                     }
                 } 
-                // 情況 B: 傳統 PNG Icon Marker
+                // C. 傳統 PNG Icon Marker -> 利用 CSS 濾鏡強刷
                 else if (layer._icon) { 
                     layer._icon.style.filter = isAudited ? 'hue-rotate(140deg) brightness(1.2)' : 'none';
                 }
 
-                // 💡【關鍵 2】維護全局 currentSelectedPoint 的屬性，確保系統同步
-                if (window.currentSelectedPoint === layer) {
-                    if (window.currentSelectedPoint.feature?.properties) {
-                        window.currentSelectedPoint.feature.properties.isAudited = isAudited;
-                        window.currentSelectedPoint.feature.properties.fillColor = targetColor;
-                    }
+                // D. 若點位在 Cluster 內，標記該 Cluster 需要刷新
+                if (layer.__parent && typeof layer.__parent.refreshClusters === 'function') {
+                    layer.__parent.refreshClusters(layer);
                 }
 
-                // 💡【關鍵 3】若是 Cluster 聚合點，觸發群集圖層刷新
-                if (layer.__parent) {
-                    if (typeof layer.__parent.refreshClusters === 'function') {
-                        layer.__parent.refreshClusters();
-                    } else if (typeof layer.__parent.redraw === 'function') {
-                        layer.__parent.redraw();
-                    }
-                }
-
-                // 是否保持鎖定選取
                 if (shouldSelect) {
                     window.currentSelectedPoint = layer;
                 }
             }
-        });
+        };
+
+        // 2. 遞迴走訪所有圖層 (包含 ClusterGroup 與 LayerGroup)
+        const traverseLayers = (currentLayer) => {
+            if (!currentLayer) return;
+
+            // 如果是獨立的 Marker / CircleMarker
+            updateSingleLayerStyle(currentLayer);
+
+            // 如果是 LayerGroup, GeoJSON 或 ClusterGroup，繼續往下挖
+            if (typeof currentLayer.eachLayer === 'function') {
+                currentLayer.eachLayer(childLayer => traverseLayers(childLayer));
+            }
+        };
+
+        // 從地圖主體開始深度走訪
+        ns.map.eachLayer(layer => traverseLayers(layer));
+
+        // 3. 全局 Cluster 統一刷新備援
+        if (ns.clusterGroup && typeof ns.clusterGroup.refreshClusters === 'function') {
+            ns.clusterGroup.refreshClusters();
+        }
     }
 
 
