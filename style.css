@@ -950,3 +950,17 @@ canvas {
     border-radius: 3px !important;
     box-shadow: 0 1px 2px rgba(0,0,0,0.2) !important;
 }
+
+/* ---------- 修正 Swal 關閉後地圖灰邊與縮小問題 ---------- */
+#map, .leaflet-container {
+    height: calc(100vh - 120px) !important; /* 請依據你的 Header/TopBar 實際高度微調 120px */
+    min-height: 400px !important;
+    width: 100% !important;
+    position: relative !important;
+}
+
+/* 阻止 SweetAlert2 影響 body 的滾動條與寬度計算 */
+body.swal2-shown {
+    padding-right: 0 !important;
+    overflow-y: auto !important;
+}
