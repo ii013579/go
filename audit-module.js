@@ -878,31 +878,29 @@
     
     
     // =========================================================
-    // 關鍵輔助函式：強制更新 Leaflet Marker 顏色與修正 DOM 尺寸
+    // 關鍵輔助函式：原位強刷 Marker 樣式與 Leaflet 畫面修正 (二合一精簡版)
     // =========================================================
-    function updateMarkerStyleAndInvalideMap(targetPointKey, isAudited = true) {
+    function applyAuditStyleToLayer(targetPointKey, isAudited = true, shouldSelect = false) {
         const ns = window.mapNamespace;
         if (!ns || !ns.map) return;
 
-        // 1. 強制修正 Leaflet 地圖容器尺寸（解決 Swai 關閉後視窗縮小/灰色區域問題）
-        setTimeout(() => {
-            ns.map.invalidateSize({ pan: false });
-        }, 100);
+        // 1. 雙重觸發尺寸修正，徹底解決 Swal 關閉動畫延遲造成的灰色區塊
+        requestAnimationFrame(() => ns.map.invalidateSize({ pan: false }));
+        setTimeout(() => ns.map.invalidateSize({ pan: false }), 200);
 
-        // 2. 遍歷地圖所有圖層，找到對應點位並強制改色/開Popup
+        // 2. 遍歷圖層原位變色
         ns.map.eachLayer(layer => {
-            // 處理 CircleMarker 或 Marker
             const p = layer.feature?.properties || layer.properties;
             const pKey = p?.auditPointKey || p?.name || p?.title;
 
             if (pKey === targetPointKey) {
-                // 更新 Feature 屬性
+                // 更新 Feature GeoJSON 屬性
                 if (layer.feature && layer.feature.properties) {
                     layer.feature.properties.isAudited = isAudited;
                     layer.feature.properties.fillColor = isAudited ? "#FCD770" : "#3388ff";
                 }
 
-                // 直接調用 Leaflet setStyle 改色
+                // 情況 A: CircleMarker (向量點)
                 if (typeof layer.setStyle === 'function') {
                     layer.setStyle({
                         fillColor: isAudited ? "#FCD770" : "#3388ff", // 黃色已清查 / 藍色未清查
@@ -910,70 +908,28 @@
                         fillOpacity: 0.9,
                         radius: 8
                     });
-                }
-
-                // 重新設為當前選取點位
-                window.currentSelectedPoint = layer;
-
-                // 若點位被包裹在 Cluster 中，強制展開並鎖定焦點
-                if (layer.__parent && typeof layer.__parent.zoomToBounds === 'function') {
-                    layer.__parent.zoomToBounds();
-                }
-            }
-        });
-    }
-
-
-// =========================================================
-    // 關鍵輔助函式：原位強刷 Marker 樣式與 Leaflet 畫面修正
-    // =========================================================
-    function applyAuditStyleToLayer(targetPointKey, isAudited = true) {
-        const ns = window.mapNamespace;
-        if (!ns || !ns.map) return;
-
-        // 雙重觸發修正，解決 Swal 關閉動畫延遲造成的灰色區塊
-        requestAnimationFrame(() => {
-            ns.map.invalidateSize({ pan: false });
-        });
-        setTimeout(() => {
-            ns.map.invalidateSize({ pan: false });
-        }, 200);
-
-        // 搜尋目前畫面上已存在的 Layer 原位變色
-        ns.map.eachLayer(layer => {
-            const p = layer.feature?.properties || layer.properties;
-            const pKey = p?.auditPointKey || p?.name || p?.title;
-
-            if (pKey === targetPointKey) {
-                // 更新 Feature 屬性
-                if (layer.feature && layer.feature.properties) {
-                    layer.feature.properties.isAudited = isAudited;
-                    layer.feature.properties.fillColor = isAudited ? "#FCD770" : "#3388ff";
-                }
-
-                // 1. CircleMarker 原生 API 改顏色 (黃點)
-                if (typeof layer.setStyle === 'function') {
-                    layer.setStyle({
-                        fillColor: isAudited ? "#FCD770" : "#3388ff", 
-                        color: "#ffffff",
-                        fillOpacity: 0.9,
-                        radius: 8
-                    });
                 } 
-                // 2. 傳統 PNG Marker 濾鏡變色
+                // 情況 B: 傳統 PNG Icon Marker
                 else if (layer._icon) { 
                     layer._icon.style.filter = isAudited ? 'hue-rotate(140deg) brightness(1.2)' : 'none';
                 }
 
-                // 重新設置目前被選取的物件
-                window.currentSelectedPoint = layer;
+                // 若點位被包裹在 Cluster 群集內，強制展開
+                if (layer.__parent && typeof layer.__parent.zoomToBounds === 'function') {
+                    layer.__parent.zoomToBounds();
+                }
+
+                // 根據需求決定是否設為選取點位 (預設不選取)
+                if (shouldSelect) {
+                    window.currentSelectedPoint = layer;
+                }
             }
         });
     }
 
 
     // =========================================================
-    // 5-4. 新增/修改自訂點位送出邏輯 (徹底解決灰色底區與變色問題)
+    // 5-4. 新增/修改自訂點位送出邏輯
     // =========================================================
     window.submitNewCustomPoint = async function(formValues) {
         const { kmlId, kmlLayerName, lat, lng, pointKey, status, deviceStatus, remark, photos, isEditMode, oldPointKey } = formValues;
@@ -1093,7 +1049,7 @@
                 else ns.allKmlFeatures.push(newGeoJsonFeature);
             }
 
-            // 【核心修正】原地改色＋修正 DOM 高度
+            // 原地改色
             applyAuditStyleToLayer(trimmedPointKey, true);
 
             const layerFolderName = kmlLayerName || kmlId || 'default_layer';
@@ -1102,6 +1058,9 @@
                 await generateLayerCsvReport(kmlId, layerFolderName, config.targetPhotos || 2);
             }
 
+            // 💡【核心新增】取消選取點位並隱藏「查看與修改」按鈕
+            window.currentSelectedPoint = null;
+
             Swal.fire({
                 icon: 'success',
                 title: isEditMode ? '修改點位成功' : '新增清查點位成功',
@@ -1109,7 +1068,12 @@
                 showConfirmButton: false
             });
 
-            if (typeof updateBottomBtnState === 'function') setTimeout(updateBottomBtnState, 200);
+            // 觸發 UI 狀態同步
+            if (typeof updateBottomBtnState === 'function') {
+                setTimeout(updateBottomBtnState, 200);
+            } else if (typeof syncAuditButtonVisibility === 'function') {
+                setTimeout(syncAuditButtonVisibility, 200);
+            }
 
         } catch (e) {
             console.error("❌ 儲存點位失敗:", e);
@@ -1414,7 +1378,7 @@
     };
     
     // =========================================================
-    // 5-6. 清查資料編輯與修改 (原位黃點與不跑圖層的修改邏輯)
+    // 5-6. 清查資料編輯與修改
     // =========================================================
     window.openAuditEditor = async function(isModifyMode = false) {
         if (typeof checkHasAuditPermission === 'function' && !checkHasAuditPermission()) return;
@@ -1637,12 +1601,17 @@
                         window.mapNamespace.map.removeLayer(activePoint);
                     }
 
+                    // 💡【核心新增】刪除點位後取消選取
                     window.currentSelectedPoint = null;
 
                     Swal.fire({ icon: 'success', title: '點位與照片已成功徹底刪除', timer: 1200, showConfirmButton: false });
 
                     if (window.mapNamespace?.map) window.mapNamespace.map.invalidateSize();
-                    if (typeof updateBottomBtnState === 'function') setTimeout(updateBottomBtnState, 200);
+                    if (typeof updateBottomBtnState === 'function') {
+                        setTimeout(updateBottomBtnState, 200);
+                    } else if (typeof syncAuditButtonVisibility === 'function') {
+                        setTimeout(syncAuditButtonVisibility, 200);
+                    }
 
                 } catch (e) {
                     console.error("徹底刪除點位失敗:", e);
@@ -1678,17 +1647,23 @@
                     .doc(pointKey) 
                     .set(structuredData, { merge: true });
 
-                // 【關鍵】原位將點位轉黃，且完全避免清空地圖圖層
+                // 原位變黃點
                 applyAuditStyleToLayer(pointKey, true);
 
                 if (typeof generateLayerCsvReport === 'function') {
                     await generateLayerCsvReport(kmlId, kmlLayerName, maxPhotos);
                 }
 
+                // 💡【核心新增】更新成功後取消選取點位並隱藏「查看與修改」按鈕
+                window.currentSelectedPoint = null;
+
                 Swal.fire({ icon: 'success', title: '更新成功', timer: 1000, showConfirmButton: false });
 
+                // 觸發 UI 狀態同步
                 if (typeof updateBottomBtnState === 'function') {
                     setTimeout(updateBottomBtnState, 200);
+                } else if (typeof syncAuditButtonVisibility === 'function') {
+                    setTimeout(syncAuditButtonVisibility, 200);
                 }
 
             } catch (e) { 
