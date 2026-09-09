@@ -878,29 +878,34 @@
     
     
     // =========================================================
-    // 關鍵輔助函式：原位強刷 Marker 樣式與 Leaflet 畫面修正 (二合一精簡版)
+    // 關鍵輔助函式：原位強刷 Marker 樣式與 Leaflet 畫面修正
     // =========================================================
     function applyAuditStyleToLayer(targetPointKey, isAudited = true, shouldSelect = false) {
         const ns = window.mapNamespace;
-        if (!ns || !ns.map) return;
+        if (!ns || !ns.map || !targetPointKey) return;
 
-        // 1. 雙重觸發尺寸修正，徹底解決 Swal 關閉動畫延遲造成的灰色區塊
+        // 清除前後空白並轉字串，防止型態或空白不一致導致比對失敗
+        const cleanTargetKey = String(targetPointKey).trim();
+
+        // 1. 雙重觸發尺寸修正
         requestAnimationFrame(() => ns.map.invalidateSize({ pan: false }));
         setTimeout(() => ns.map.invalidateSize({ pan: false }), 200);
 
-        // 2. 遍歷圖層原位變色
+        // 2. 遍歷地圖所有圖層，找到對應點位並強制改色
         ns.map.eachLayer(layer => {
             const p = layer.feature?.properties || layer.properties;
-            const pKey = p?.auditPointKey || p?.name || p?.title;
+            const rawKey = p?.auditPointKey || p?.name || p?.title || p?.id;
+            const pKey = rawKey ? String(rawKey).trim() : '';
 
-            if (pKey === targetPointKey) {
-                // 更新 Feature GeoJSON 屬性
-                if (layer.feature && layer.feature.properties) {
+            if (pKey && pKey === cleanTargetKey) {
+                // 更新 Feature 屬性 (確保後續重繪時狀態正確)
+                if (layer.feature) {
+                    if (!layer.feature.properties) layer.feature.properties = {};
                     layer.feature.properties.isAudited = isAudited;
                     layer.feature.properties.fillColor = isAudited ? "#FCD770" : "#3388ff";
                 }
 
-                // 情況 A: CircleMarker (向量點)
+                // A. CircleMarker (向量圓點) -> 呼叫 setStyle 強制變色
                 if (typeof layer.setStyle === 'function') {
                     layer.setStyle({
                         fillColor: isAudited ? "#FCD770" : "#3388ff", // 黃色已清查 / 藍色未清查
@@ -909,17 +914,17 @@
                         radius: 8
                     });
                 } 
-                // 情況 B: 傳統 PNG Icon Marker
+                // B. 傳統 PNG Icon Marker -> 濾鏡變色
                 else if (layer._icon) { 
                     layer._icon.style.filter = isAudited ? 'hue-rotate(140deg) brightness(1.2)' : 'none';
                 }
 
-                // 若點位被包裹在 Cluster 群集內，強制展開
-                if (layer.__parent && typeof layer.__parent.zoomToBounds === 'function') {
-                    layer.__parent.zoomToBounds();
+                // C. 若有使用 MarkerCluster 群集，通知 Cluster 重新渲染內部圖層
+                if (layer.__parent && typeof layer.__parent.refreshClusters === 'function') {
+                    layer.__parent.refreshClusters();
                 }
 
-                // 根據需求決定是否設為選取點位 (預設不選取)
+                // 根據需求決定是否設為選取點位
                 if (shouldSelect) {
                     window.currentSelectedPoint = layer;
                 }
