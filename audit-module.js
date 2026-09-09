@@ -878,7 +878,7 @@
     
     
     // =========================================================
-    // 5-4. 新增/修改自訂點位送出邏輯 (儲存至 APP_PATH 並立即更新地圖與選取狀態)
+    // 5-4. 新增/修改自訂點位送出邏輯 (精準維持視角與即時變色)
     // =========================================================
     window.submitNewCustomPoint = async function(formValues) {
         const { kmlId, kmlLayerName, lat, lng, pointKey, status, deviceStatus, remark, photos, isEditMode, oldPointKey } = formValues;
@@ -903,7 +903,7 @@
             ? window.auditLayersState[kmlId] 
             : {};
 
-        // 檢查點名重複（非編輯模式，或編輯模式下修改了名稱）
+        // 檢查點名重複
         if (!isEditMode || (isEditMode && oldPointKey !== trimmedPointKey)) {
             let isDuplicateInKml = false;
             if (ns && Array.isArray(ns.allKmlFeatures)) {
@@ -932,6 +932,10 @@
         });
 
         try {
+            // 【紀錄最後畫面】記錄目前的中心點與 Zoom，防止畫面跳動
+            const currentCenter = ns?.map ? ns.map.getCenter() : null;
+            const currentZoom = ns?.map ? ns.map.getZoom() : null;
+
             let photoUrls = [];
             if (typeof window.uploadPhotosToStorage === 'function') {
                 photoUrls = await window.uploadPhotosToStorage(photos, kmlId, trimmedPointKey, kmlLayerName);
@@ -941,7 +945,7 @@
 
             const appPath = typeof APP_PATH !== 'undefined' ? APP_PATH : 'kmlData';
 
-            // 若為編輯模式且點名有更換，刪除舊節點
+            // 若點名變更，刪除舊節點
             if (isEditMode && oldPointKey && oldPointKey !== trimmedPointKey) {
                 if (window.auditLayersState && window.auditLayersState[kmlId]) {
                     delete window.auditLayersState[kmlId][oldPointKey];
@@ -955,12 +959,11 @@
                 await firebase.firestore().collection(appPath).doc(kmlId).collection('auditRecords').doc(oldPointKey).delete();
             }
 
-            // 結構化資料：同時補齊 status 與 deviceStatus 避免跨模組讀取錯位
             const structuredData = {
                 pointName: trimmedPointKey,
-                status: "已完成",                  // 清查流程狀態
-                deviceStatus: targetDeviceStatus,  // 設備實體狀態
-                auditStatus: targetDeviceStatus,   // 雙向相容
+                status: "已完成",
+                deviceStatus: targetDeviceStatus,
+                auditStatus: targetDeviceStatus,
                 note: remark || "",
                 photos: photoUrls,
                 lat: numLat,
@@ -973,13 +976,10 @@
             if (!window.auditLayersState[kmlId]) window.auditLayersState[kmlId] = {};
             window.auditLayersState[kmlId][trimmedPointKey] = structuredData;
 
-            // GeoJSON Feature 屬性同步補齊 (設定已清查與黃色標示)
+            // 更新全域 Feature 記憶體屬性
             const newGeoJsonFeature = {
                 type: "Feature",
-                geometry: {
-                    type: "Point",
-                    coordinates: [numLng, numLat]
-                },
+                geometry: { type: "Point", coordinates: [numLng, numLat] },
                 properties: {
                     name: trimmedPointKey,
                     title: trimmedPointKey,
@@ -991,10 +991,8 @@
                     auditStatus: targetDeviceStatus,
                     auditNote: remark || "",
                     photos: photoUrls,
-                    fillColor: "#FCD770", // 已清查黃色
-                    color: "#ffffff",
-                    radius: 8,
-                    fillOpacity: 0.85
+                    fillColor: "#FCD770", // 黃點
+                    color: "#ffffff"
                 }
             };
 
@@ -1004,11 +1002,8 @@
                     const name = f.properties?.name || f.properties?.title || f.properties?.auditPointKey;
                     return name === trimmedPointKey;
                 });
-                if (existingIdx >= 0) {
-                    ns.allKmlFeatures[existingIdx] = newGeoJsonFeature;
-                } else {
-                    ns.allKmlFeatures.push(newGeoJsonFeature);
-                }
+                if (existingIdx >= 0) ns.allKmlFeatures[existingIdx] = newGeoJsonFeature;
+                else ns.allKmlFeatures.push(newGeoJsonFeature);
             }
 
             // 寫入 Firestore
@@ -1019,19 +1014,28 @@
                 .doc(trimmedPointKey)
                 .set(structuredData, { merge: true });
 
-            // 1. 強制重繪地圖，使點位顏色立即更新為黃點
+            // 執行地圖重繪
             if (typeof forceMapRefresh === 'function') {
                 forceMapRefresh();
             }
 
-            // 2. 重繪後自動於地圖尋找並重新選取該點位，回歸編輯與選取狀態
+            // 【復原畫面與選取狀態】
             if (ns && ns.map) {
+                if (currentCenter && currentZoom) {
+                    ns.map.setView(currentCenter, currentZoom, { animate: false });
+                }
+
+                // 重新鎖定該點位的 Layer 並改色
                 ns.map.eachLayer(layer => {
                     const p = layer.feature?.properties || layer.properties;
                     const pKey = p?.auditPointKey || p?.name || p?.title;
                     if (pKey === trimmedPointKey) {
                         window.currentSelectedPoint = layer;
-                        if (typeof layer.openPopup === 'function') layer.openPopup();
+                        
+                        // 直接進行原生 Leaflet 變色
+                        if (typeof layer.setStyle === 'function') {
+                            layer.setStyle({ fillColor: "#FCD770", color: "#ffffff", fillOpacity: 0.85 });
+                        }
                     }
                 });
             }
@@ -1049,9 +1053,9 @@
                 showConfirmButton: false
             });
 
-            // 3. 刷新底部選單顯示，切換為「查看 / 修改」
+            // 刷新底部選單顯示為「查看 / 修改」
             if (typeof updateBottomBtnState === 'function') {
-                setTimeout(updateBottomBtnState, 200);
+                setTimeout(updateBottomBtnState, 150);
             }
 
         } catch (e) {
@@ -1357,7 +1361,7 @@
     };
     
     // =========================================================
-    // 5-6. 清查資料編輯、修改與刪除紀錄邏輯
+    // 5-6. 清查資料編輯與修改 (直接原地變更顏色與鎖定畫面)
     // =========================================================
     window.openAuditEditor = async function(isModifyMode = false) {
         if (typeof checkHasAuditPermission === 'function' && !checkHasAuditPermission()) return;
@@ -1548,7 +1552,7 @@
                                     const photoRef = firebase.storage().refFromURL(photoUrl);
                                     await photoRef.delete();
                                 } catch (err) {
-                                    console.warn(`Storage 照片刪除失敗或已不存在 (${photoUrl}):`, err);
+                                    console.warn(`Storage 照片刪除失敗:`, err);
                                 }
                             }
                         });
@@ -1584,8 +1588,7 @@
 
                     Swal.fire({ icon: 'success', title: '點位與照片已成功徹底刪除', timer: 1200, showConfirmButton: false });
 
-                    if (typeof forceMapRefresh === 'function') forceMapRefresh();
-                    if (typeof updateBottomBtnState === 'function') setTimeout(updateBottomBtnState, 300);
+                    if (typeof updateBottomBtnState === 'function') setTimeout(updateBottomBtnState, 200);
 
                 } catch (e) {
                     console.error("徹底刪除點位失敗:", e);
@@ -1598,7 +1601,11 @@
         if (res) {
             Swal.fire({ title: '正在上傳與更新資料...', didOpen: () => Swal.showLoading(), allowOutsideClick: false });
             try {
-                // 上傳照片至 Storage 取得網址
+                const map = window.mapNamespace?.map;
+                // 【關鍵1】記住目前的中心與縮放，確保視窗不偏移
+                const savedCenter = map ? map.getCenter() : null;
+                const savedZoom = map ? map.getZoom() : null;
+
                 const photoUrls = await window.uploadPhotosToStorage(res.photos, kmlId, pointKey, kmlLayerName);
 
                 const structuredData = {
@@ -1614,14 +1621,24 @@
                 if (!window.auditLayersState[kmlId]) window.auditLayersState[kmlId] = {};
                 window.auditLayersState[kmlId][pointKey] = structuredData;
 
-                // 同步更新記憶體中的點位屬性（立即改為已清查黃色）
-                if (activePoint && activePoint.feature && activePoint.feature.properties) {
+                // 【關鍵2】寫入記憶體屬性
+                if (activePoint && activePoint.feature) {
+                    if (!activePoint.feature.properties) activePoint.feature.properties = {};
                     const props = activePoint.feature.properties;
                     props.isAudited = true;
                     props.auditStatus = res.status;
                     props.auditNote = res.note;
                     props.photos = photoUrls;
-                    props.fillColor = "#FCD770"; 
+                    props.fillColor = "#FCD770";
+                }
+
+                // 【關鍵3】即時使用原生 Leaflet API 將該點位改變為黃色
+                if (typeof activePoint.setStyle === 'function') {
+                    activePoint.setStyle({
+                        fillColor: "#FCD770", // 黃色已清查
+                        color: "#ffffff",
+                        fillOpacity: 0.85
+                    });
                 }
 
                 const appPath = typeof APP_PATH !== 'undefined' ? APP_PATH : 'kmlData';
@@ -1632,12 +1649,10 @@
                     .doc(pointKey) 
                     .set(structuredData, { merge: true });
 
-                // 1. 即時重新繪製地圖
-                if (typeof forceMapRefresh === 'function') {
-                    forceMapRefresh();
+                // 【關鍵4】恢復視角並繼續保持當前點位的選取狀態
+                if (map && savedCenter && savedZoom) {
+                    map.setView(savedCenter, savedZoom, { animate: false });
                 }
-
-                // 2. 保持鎖定目前的點位狀態，確保不會丟失 SelectedPoint
                 window.currentSelectedPoint = activePoint;
 
                 if (typeof generateLayerCsvReport === 'function') {
@@ -1646,10 +1661,11 @@
 
                 Swal.fire({ icon: 'success', title: '更新成功', timer: 1000, showConfirmButton: false });
 
-                // 3. 刷新底部按鈕顯示（轉換為 查看 / 修改）
+                // 立即更新底部選單按鈕（顯示 查看 / 修改）
                 if (typeof updateBottomBtnState === 'function') {
-                    setTimeout(updateBottomBtnState, 200);
+                    setTimeout(updateBottomBtnState, 100);
                 }
+
             } catch (e) { 
                 console.error("儲存清查資料失敗:", e);
                 Swal.fire('錯誤', e.message || '儲存失敗', 'error'); 
