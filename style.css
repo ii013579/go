@@ -951,12 +951,22 @@ canvas {
     box-shadow: 0 1px 2px rgba(0,0,0,0.2) !important;
 }
 
-/* ---------- 修正 SweetAlert2 觸發滾動條問題 ---------- */
-body {
-    overflow: hidden !important; /* 鎖死主頁面滾動條 */
+/* ---------- 修正地圖灰底與 Swal 擠壓問題 ---------- */
+/* 1. 強制地圖容器吃滿剩餘所有高度 */
+#map, .leaflet-container {
+    flex: 1 1 auto !important;
+    width: 100% !important;
+    height: 100% !important;
+    position: relative !important;
+    z-index: 1;
 }
 
-/* 將彈窗容器抽離 Flex 佈局流 */
+/* 2. 避免 Swal 觸發全頁滾動條與推擠版面 */
+body.swal2-shown {
+    padding-right: 0 !important;
+    overflow: hidden !important;
+}
+
 .swal2-container {
     position: fixed !important;
     top: 0;
@@ -964,10 +974,4 @@ body {
     width: 100vw;
     height: 100vh;
     z-index: 9999 !important;
-}
-
-/* 覆蓋 Swal 預設加給 body 的內距與溢出設定 */
-body.swal2-shown {
-    padding-right: 0 !important;
-    overflow: hidden !important;
 }

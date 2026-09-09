@@ -1378,7 +1378,7 @@
     };
     
     // =========================================================
-    // 5-6. 清查資料編輯與修改
+    // 5-6. 清查資料編輯與修改 (完整修正版)
     // =========================================================
     window.openAuditEditor = async function(isModifyMode = false) {
         if (typeof checkHasAuditPermission === 'function' && !checkHasAuditPermission()) return;
@@ -1523,6 +1523,13 @@
                     const addBtn = document.getElementById('btn-standalone-add-point');
                     if (addBtn) addBtn.style.setProperty('display', 'inline-flex', 'important');
                 }
+
+                // 💡【解決灰色區域關鍵】等待 Swal 關閉動畫 (300ms) 完結後，強制 Leaflet 重算高寬
+                setTimeout(() => {
+                    if (window.mapNamespace && window.mapNamespace.map) {
+                        window.mapNamespace.map.invalidateSize({ pan: false });
+                    }
+                }, 300);
             },
             preConfirm: () => {
                 const statusValue = document.getElementById('swal-status').value;
@@ -1601,12 +1608,11 @@
                         window.mapNamespace.map.removeLayer(activePoint);
                     }
 
-                    // 💡【核心新增】刪除點位後取消選取
+                    // 取消點位選取狀態
                     window.currentSelectedPoint = null;
 
                     Swal.fire({ icon: 'success', title: '點位與照片已成功徹底刪除', timer: 1200, showConfirmButton: false });
 
-                    if (window.mapNamespace?.map) window.mapNamespace.map.invalidateSize();
                     if (typeof updateBottomBtnState === 'function') {
                         setTimeout(updateBottomBtnState, 200);
                     } else if (typeof syncAuditButtonVisibility === 'function') {
@@ -1647,19 +1653,19 @@
                     .doc(pointKey) 
                     .set(structuredData, { merge: true });
 
-                // 原位變黃點
-                applyAuditStyleToLayer(pointKey, true);
+                // 原位變黃點 (不選取點位)
+                applyAuditStyleToLayer(pointKey, true, false);
 
                 if (typeof generateLayerCsvReport === 'function') {
                     await generateLayerCsvReport(kmlId, kmlLayerName, maxPhotos);
                 }
 
-                // 💡【核心新增】更新成功後取消選取點位並隱藏「查看與修改」按鈕
+                // 💡 更新成功後取消選取點位，隱藏「查看與修改」按鈕
                 window.currentSelectedPoint = null;
 
                 Swal.fire({ icon: 'success', title: '更新成功', timer: 1000, showConfirmButton: false });
 
-                // 觸發 UI 狀態同步
+                // 觸發 UI 狀態同步 (隱藏查看與修改)
                 if (typeof updateBottomBtnState === 'function') {
                     setTimeout(updateBottomBtnState, 200);
                 } else if (typeof syncAuditButtonVisibility === 'function') {
