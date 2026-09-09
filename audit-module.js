@@ -878,53 +878,72 @@
     
     
     // =========================================================
-    // 關鍵輔助函式：原位強刷 Marker 樣式與 Leaflet 畫面修正
+    // 關鍵輔助函式：原位強刷 Marker 樣式與 Leaflet 畫面修正 (立即變色版)
     // =========================================================
     function applyAuditStyleToLayer(targetPointKey, isAudited = true, shouldSelect = false) {
         const ns = window.mapNamespace;
         if (!ns || !ns.map || !targetPointKey) return;
 
-        // 清除前後空白並轉字串，防止型態或空白不一致導致比對失敗
+        // 強制轉字串並去除空白，避免比對失效
         const cleanTargetKey = String(targetPointKey).trim();
 
-        // 1. 雙重觸發尺寸修正
+        // 1. 雙重尺寸修正 (解決灰區)
         requestAnimationFrame(() => ns.map.invalidateSize({ pan: false }));
         setTimeout(() => ns.map.invalidateSize({ pan: false }), 200);
 
-        // 2. 遍歷地圖所有圖層，找到對應點位並強制改色
+        // 2. 遍歷地圖所有圖層原位改色
         ns.map.eachLayer(layer => {
             const p = layer.feature?.properties || layer.properties;
             const rawKey = p?.auditPointKey || p?.name || p?.title || p?.id;
             const pKey = rawKey ? String(rawKey).trim() : '';
 
             if (pKey && pKey === cleanTargetKey) {
-                // 更新 Feature 屬性 (確保後續重繪時狀態正確)
+                // 更新 GeoJSON Feature 屬性
                 if (layer.feature) {
                     if (!layer.feature.properties) layer.feature.properties = {};
                     layer.feature.properties.isAudited = isAudited;
                     layer.feature.properties.fillColor = isAudited ? "#FCD770" : "#3388ff";
                 }
 
-                // A. CircleMarker (向量圓點) -> 呼叫 setStyle 強制變色
+                const targetColor = isAudited ? "#FCD770" : "#3388ff";
+
+                // 情況 A: CircleMarker (向量點)
                 if (typeof layer.setStyle === 'function') {
                     layer.setStyle({
-                        fillColor: isAudited ? "#FCD770" : "#3388ff", // 黃色已清查 / 藍色未清查
+                        fillColor: targetColor,  // 黃色已清查 / 藍色未清查
                         color: "#ffffff",
                         fillOpacity: 0.9,
                         radius: 8
                     });
+
+                    // 💡【關鍵 1】向量圖層強制重繪，讓顏色瞬間生效
+                    if (typeof layer.redraw === 'function') {
+                        layer.redraw();
+                    }
                 } 
-                // B. 傳統 PNG Icon Marker -> 濾鏡變色
+                // 情況 B: 傳統 PNG Icon Marker
                 else if (layer._icon) { 
                     layer._icon.style.filter = isAudited ? 'hue-rotate(140deg) brightness(1.2)' : 'none';
                 }
 
-                // C. 若有使用 MarkerCluster 群集，通知 Cluster 重新渲染內部圖層
-                if (layer.__parent && typeof layer.__parent.refreshClusters === 'function') {
-                    layer.__parent.refreshClusters();
+                // 💡【關鍵 2】維護全局 currentSelectedPoint 的屬性，確保系統同步
+                if (window.currentSelectedPoint === layer) {
+                    if (window.currentSelectedPoint.feature?.properties) {
+                        window.currentSelectedPoint.feature.properties.isAudited = isAudited;
+                        window.currentSelectedPoint.feature.properties.fillColor = targetColor;
+                    }
                 }
 
-                // 根據需求決定是否設為選取點位
+                // 💡【關鍵 3】若是 Cluster 聚合點，觸發群集圖層刷新
+                if (layer.__parent) {
+                    if (typeof layer.__parent.refreshClusters === 'function') {
+                        layer.__parent.refreshClusters();
+                    } else if (typeof layer.__parent.redraw === 'function') {
+                        layer.__parent.redraw();
+                    }
+                }
+
+                // 是否保持鎖定選取
                 if (shouldSelect) {
                     window.currentSelectedPoint = layer;
                 }
