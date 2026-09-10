@@ -203,20 +203,25 @@
             }
         });
 
-        if (window.addGeoJsonLayers && ns.allKmlFeatures) {
+    if (window.addGeoJsonLayers && ns.allKmlFeatures) {
             window.addGeoJsonLayers(ns.allKmlFeatures);
         }
 
         if (typeof syncAuditButtonVisibility === 'function') {
             syncAuditButtonVisibility();
         }
+
+        // ★ 新增：強制立刻重繪
+        forceLeafletRepaint();
     }
     window.forceMapRefresh = forceMapRefresh;
 
     // 1-3. 關鍵輔助函式：原位強刷 Marker 樣式（已強化）
     function applyAuditStyleToLayer(target, isAudited = true, shouldSelect = false) {
+        const color = isAudited ? "#FCD770" : "#0055D4";
+    
+        // 1. 若傳入的是真正的 Leaflet Layer，立即改樣式
         if (target && typeof target.setStyle === 'function') {
-            const color = isAudited ? "#FCD770" : "#0055D4";
             target.setStyle({
                 fillColor: color,
                 color: "#ffffff",
@@ -232,19 +237,56 @@
                 target.redraw();
             }
         }
-
-        // 給一點時間確保 state 寫入後再全圖重繪
+    
+        // 2. 強制全圖重繪 + 觸發畫面更新
         if (typeof window.forceMapRefresh === 'function') {
             setTimeout(() => {
                 window.forceMapRefresh();
-            }, 60);
+                // 關鍵：強制 Leaflet 立刻重繪
+                forceLeafletRepaint();
+            }, 50);
         }
-
+    
         if (!shouldSelect) {
             window.currentSelectedPoint = null;
         }
     }
     window.applyAuditStyleToLayer = applyAuditStyleToLayer;
+    
+    /**
+     * 強制 Leaflet 立刻重繪（解決移動地圖才變色的問題）
+     */
+    function forceLeafletRepaint() {
+        const map = window.mapNamespace?.map;
+        if (!map) return;
+    
+        try {
+            // 方法1：invalidateSize
+            map.invalidateSize({ animate: false });
+    
+            // 方法2：對所有有 feature 的 layer 強制 redraw
+            map.eachLayer(function(layer) {
+                if (layer.feature && typeof layer.redraw === 'function') {
+                    layer.redraw();
+                }
+                // Canvas renderer 專用
+                if (layer._renderer && typeof layer._renderer._updatePath === 'function') {
+                    try {
+                        layer._renderer._updatePath(layer);
+                    } catch (e) {}
+                }
+            });
+    
+            // 方法3：微幅平移觸發重繪（最有效）
+            const center = map.getCenter();
+            map.panTo([center.lat + 0.0000001, center.lng], { animate: false });
+            map.panTo(center, { animate: false });
+    
+        } catch (err) {
+            console.warn('forceLeafletRepaint 失敗:', err);
+        }
+    }
+    window.forceLeafletRepaint = forceLeafletRepaint;
 
     // ---------------------------------------------------------
     // 2. 底部控制按鈕面板 (僅針對選取的點位)
