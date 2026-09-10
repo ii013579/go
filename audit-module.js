@@ -77,17 +77,19 @@
     }
     window.syncAuditButtonVisibility = syncAuditButtonVisibility;
 
-    // ---------------------------------------------------------
-    // 1. 樣式攔截器與強力重繪機制
-    // ---------------------------------------------------------
+    // =========================================================
+    // 1. 樣式攔截器與強力重繪機制 (完整版)
+    // =========================================================
+
+    // 1-1. GeoJSON 數據載入攔截器
     const originalAddLayers = window.addGeoJsonLayers;
     window.addGeoJsonLayers = function(features) {
         const ns = window.mapNamespace;
         const kmlId = ns?.currentKmlLayerId;
 
         if (kmlId && Array.isArray(features)) {
-            const config = window.globalAuditConfigs[kmlId];
-            const records = window.auditLayersState[kmlId] || {};
+            const config = window.globalAuditConfigs?.[kmlId];
+            const records = window.auditLayersState?.[kmlId] || {};
 
             features.forEach(f => {
                 if (!f.properties) f.properties = {};
@@ -96,25 +98,25 @@
                 const pointKey = f.properties.name || f.properties.title || f.properties.id || f.id || "未知點位";
                 f.properties.auditPointKey = pointKey; 
 
-                if (config && config.isAuditing === true && canSeeAuditColors()) {
+                if (config && config.isAuditing === true && typeof canSeeAuditColors === 'function' && canSeeAuditColors()) {
                     const record = records[pointKey];
                     if (record) {
                         f.properties.auditStatus = record.deviceStatus || "正常";
                         f.properties.auditNote = record.note;
                         f.properties.photos = record.photos || [];
                         f.properties.isAudited = true;
-                        f.properties.fillColor = "#FCD770"; // 已清查
+                        f.properties.fillColor = "#FCD770"; // 金黃色 (已清查)
                         f.properties.radius = 8;
                     } else {
                         f.properties.isAudited = false;
                         f.properties.auditStatus = null;
-                        f.properties.fillColor = "#2A00D2"; // 未清查
+                        f.properties.fillColor = "#0055D4"; // 寶藍色 (未清查)
                         f.properties.radius = 8;
                     }
                     f.properties.color = "#ffffff";
-                    f.properties.fillOpacity = 0.85;
+                    f.properties.fillOpacity = 0.95;
                 } else {
-                    f.properties.fillColor = "#e74c3c"; // 預設
+                    f.properties.fillColor = "#e74c3c"; // 預設紅色
                     f.properties.radius = 8;
                     f.properties.isAudited = false;
                     f.properties.fillOpacity = 0.85;
@@ -125,20 +127,22 @@
         if (originalAddLayers) return originalAddLayers.apply(this, arguments);
     };
 
+    // 1-2. 地圖強制全圖重繪函式
     function forceMapRefresh() {
         const ns = window.mapNamespace;
         const kmlId = ns?.currentKmlLayerId;
         if (!ns?.map || !kmlId) return;
 
-        // 強制重新計算 Leaflet 地圖容器尺寸，解決手機移動破圖
+        // 強制重新計算 Leaflet 地圖容器尺寸，解決畫面縮放/灰區問題
         setTimeout(() => {
             if (ns.map && typeof ns.map.invalidateSize === 'function') {
                 ns.map.invalidateSize({ animate: false });
             }
         }, 100);
 
-        const records = window.auditLayersState[kmlId] || {};
-        const showAuditMode = window.globalAuditConfigs[kmlId]?.isAuditing && canSeeAuditColors();
+        const records = window.auditLayersState?.[kmlId] || {};
+        const showAuditMode = window.globalAuditConfigs?.[kmlId]?.isAuditing && 
+                              (typeof canSeeAuditColors === 'function' ? canSeeAuditColors() : true);
 
         ns.map.eachLayer(function(layer) {
             if (layer.feature && layer.feature.properties) {
@@ -155,29 +159,29 @@
 
                         if (typeof layer.setStyle === 'function') {
                             layer.setStyle({
-                                fillColor: "#ff85c0",
+                                fillColor: "#FCD770", // 金黃色 (已清查)
                                 color: "#ffffff",
                                 weight: 2,
-                                fillOpacity: 0.9,
-                                radius: 10
+                                fillOpacity: 0.95,
+                                radius: 8
                             });
                         }
                     } else {
                         props.isAudited = false;
                         if (typeof layer.setStyle === 'function') {
                             layer.setStyle({
-                                fillColor: "#3498db",
+                                fillColor: "#0055D4", // 寶藍色 (未清查)
                                 color: "#ffffff",
                                 weight: 2,
-                                fillOpacity: 0.9,
-                                radius: 10
+                                fillOpacity: 0.95,
+                                radius: 8
                             });
                         }
                     }
                 } else {
                     if (typeof layer.setStyle === 'function') {
                         layer.setStyle({
-                            fillColor: "#e74c3c",
+                            fillColor: "#e74c3c", // 預設紅色
                             color: "#ffffff",
                             weight: 1.5,
                             fillOpacity: 0.85,
@@ -192,9 +196,24 @@
             window.addGeoJsonLayers(ns.allKmlFeatures);
         }
 
-        syncAuditButtonVisibility();
+        if (typeof syncAuditButtonVisibility === 'function') {
+            syncAuditButtonVisibility();
+        }
     }
     window.forceMapRefresh = forceMapRefresh;
+
+    // 1-3. 關鍵輔助函式：原位強刷 Marker 樣式與 Leaflet 畫面修正
+    function applyAuditStyleToLayer(targetPointKey, isAudited = true, shouldSelect = false) {
+        // 1. 直接觸發全圖重繪 (自動更新金黃 / 寶藍點狀態與 Feature 屬性)
+        if (typeof window.forceMapRefresh === 'function') {
+            window.forceMapRefresh();
+        }
+
+        // 2. 依需求解除或保持點位選取狀態
+        if (!shouldSelect) {
+            window.currentSelectedPoint = null;
+        }
+    }
 
     // ---------------------------------------------------------
     // 2. 底部控制按鈕面板 (僅針對選取的點位)
@@ -876,87 +895,6 @@
         }
     };
       
-    // =========================================================
-    // 關鍵輔助函式：原位強刷 Marker 樣式 (強制重繪版)
-    // =========================================================
-    function applyAuditStyleToLayer(targetPointKey, isAudited = true, shouldSelect = false) {
-        const ns = window.mapNamespace;
-        if (!ns || !ns.map || !targetPointKey) return;
-
-        const cleanTargetKey = String(targetPointKey).trim();
-        const targetColor = isAudited ? "#FCD770" : "#3388ff"; // 黃色已清查 / 藍色未清查
-
-        // 1. 雙重尺寸修正 (解決灰區)
-        requestAnimationFrame(() => ns.map.invalidateSize({ pan: false }));
-        setTimeout(() => ns.map.invalidateSize({ pan: false }), 200);
-
-        // 定義單一圖層的強效變色邏輯
-        const updateSingleLayerStyle = (layer) => {
-            const p = layer.feature?.properties || layer.properties;
-            const rawKey = p?.auditPointKey || p?.name || p?.title || p?.id;
-            const pKey = rawKey ? String(rawKey).trim() : '';
-
-            if (pKey && pKey === cleanTargetKey) {
-                // A. 更新 GeoJSON 屬性數據
-                if (!layer.feature) layer.feature = { properties: {} };
-                if (!layer.feature.properties) layer.feature.properties = {};
-                layer.feature.properties.isAudited = isAudited;
-                layer.feature.properties.fillColor = targetColor;
-
-                // B. CircleMarker (向量圓點) -> 強制覆蓋 Style 並重繪
-                if (typeof layer.setStyle === 'function') {
-                    layer.options.fillColor = targetColor;
-                    layer.setStyle({
-                        fillColor: targetColor,
-                        color: "#ffffff",
-                        fillOpacity: 0.9,
-                        radius: 8
-                    });
-
-                    // 強制觸發 Canvas/SVG 底層重繪
-                    if (layer._map || layer._renderer) {
-                        if (typeof layer.redraw === 'function') layer.redraw();
-                    }
-                } 
-                // C. 傳統 PNG Icon Marker -> 利用 CSS 濾鏡強刷
-                else if (layer._icon) { 
-                    layer._icon.style.filter = isAudited ? 'hue-rotate(140deg) brightness(1.2)' : 'none';
-                }
-
-                // D. 若點位在 Cluster 內，標記該 Cluster 需要刷新
-                if (layer.__parent && typeof layer.__parent.refreshClusters === 'function') {
-                    layer.__parent.refreshClusters(layer);
-                }
-
-                if (shouldSelect) {
-                    window.currentSelectedPoint = layer;
-                }
-            }
-        };
-
-        // 2. 遞迴走訪所有圖層 (包含 ClusterGroup 與 LayerGroup)
-        const traverseLayers = (currentLayer) => {
-            if (!currentLayer) return;
-
-            // 如果是獨立的 Marker / CircleMarker
-            updateSingleLayerStyle(currentLayer);
-
-            // 如果是 LayerGroup, GeoJSON 或 ClusterGroup，繼續往下挖
-            if (typeof currentLayer.eachLayer === 'function') {
-                currentLayer.eachLayer(childLayer => traverseLayers(childLayer));
-            }
-        };
-
-        // 從地圖主體開始深度走訪
-        ns.map.eachLayer(layer => traverseLayers(layer));
-
-        // 3. 全局 Cluster 統一刷新備援
-        if (ns.clusterGroup && typeof ns.clusterGroup.refreshClusters === 'function') {
-            ns.clusterGroup.refreshClusters();
-        }
-    }
-
-
     // =========================================================
     // 5-4. 新增/修改自訂點位送出邏輯
     // =========================================================
