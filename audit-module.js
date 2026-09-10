@@ -214,6 +214,7 @@
             window.currentSelectedPoint = null;
         }
     }
+    window.applyAuditStyleToLayer = applyAuditStyleToLayer;
 
     // ---------------------------------------------------------
     // 2. 底部控制按鈕面板 (僅針對選取的點位)
@@ -1491,7 +1492,6 @@
                     if (addBtn) addBtn.style.setProperty('display', 'inline-flex', 'important');
                 }
 
-                // 💡【解決灰色區域關鍵】等待 Swal 關閉動畫 (300ms) 完結後，強制 Leaflet 重算高寬
                 setTimeout(() => {
                     if (window.mapNamespace && window.mapNamespace.map) {
                         window.mapNamespace.map.invalidateSize({ pan: false });
@@ -1608,10 +1608,12 @@
                     updatedAt: firebase.firestore.FieldValue.serverTimestamp()
                 };
 
+                // 1. 同步全域記憶體狀態
                 if (!window.auditLayersState) window.auditLayersState = {};
                 if (!window.auditLayersState[kmlId]) window.auditLayersState[kmlId] = {};
                 window.auditLayersState[kmlId][pointKey] = structuredData;
 
+                // 2. 寫入 Firestore (v8 Compat 語法)
                 const appPath = typeof APP_PATH !== 'undefined' ? APP_PATH : 'kmlData';
                 await firebase.firestore()
                     .collection(appPath)
@@ -1620,19 +1622,23 @@
                     .doc(pointKey) 
                     .set(structuredData, { merge: true });
 
-                // 原位變黃點 (不選取點位)
-                applyAuditStyleToLayer(pointKey, true, false);
+                // 3. 【即時變色核心】強制重繪此點位樣式 (刷為黃點，且非選取高亮狀態)
+                if (typeof applyAuditStyleToLayer === 'function') {
+                    applyAuditStyleToLayer(activePoint || pointKey, true, false);
+                } else if (typeof renderLayerAuditStyles === 'function') {
+                    renderLayerAuditStyles(kmlId);
+                }
 
                 if (typeof generateLayerCsvReport === 'function') {
                     await generateLayerCsvReport(kmlId, kmlLayerName, maxPhotos);
                 }
 
-                // 💡 更新成功後取消選取點位，隱藏「查看與修改」按鈕
+                // 4. 重置選取點位變數
                 window.currentSelectedPoint = null;
 
                 Swal.fire({ icon: 'success', title: '更新成功', timer: 1000, showConfirmButton: false });
 
-                // 觸發 UI 狀態同步 (隱藏查看與修改)
+                // 5. 觸發 UI 狀態同步 (自動隱藏「查看與修改」按鈕)
                 if (typeof updateBottomBtnState === 'function') {
                     setTimeout(updateBottomBtnState, 200);
                 } else if (typeof syncAuditButtonVisibility === 'function') {
