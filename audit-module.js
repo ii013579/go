@@ -202,14 +202,28 @@
     }
     window.forceMapRefresh = forceMapRefresh;
 
-    // 1-3. 關鍵輔助函式：原位強刷 Marker 樣式與 Leaflet 畫面修正
-    function applyAuditStyleToLayer(targetPointKey, isAudited = true, shouldSelect = false) {
-        // 1. 直接觸發全圖重繪 (自動更新金黃 / 寶藍點狀態與 Feature 屬性)
+    // 1-3. 關鍵輔助函式：原位強刷 Marker 樣式與 Leaflet 畫面修正 (優化版)
+    function applyAuditStyleToLayer(target, isAudited = true, shouldSelect = false) {
+        // 1. 若傳入的是 Leaflet Layer 物件，先直接強制改變該點位的樣式 (防護機制)
+        if (target && typeof target.setStyle === 'function') {
+            target.setStyle({
+                fillColor: isAudited ? "#FCD770" : "#0055D4", // 金黃色(已清查) / 寶藍色(未清查)
+                color: "#ffffff",
+                weight: 2,
+                fillOpacity: 0.95,
+                radius: 8
+            });
+            if (target.feature && target.feature.properties) {
+                target.feature.properties.isAudited = isAudited;
+            }
+        }
+
+        // 2. 觸發全圖重繪
         if (typeof window.forceMapRefresh === 'function') {
             window.forceMapRefresh();
         }
 
-        // 2. 依需求解除或保持點位選取狀態
+        // 3. 依需求解除或保持點位選取狀態
         if (!shouldSelect) {
             window.currentSelectedPoint = null;
         }
@@ -1575,7 +1589,6 @@
                         window.mapNamespace.map.removeLayer(activePoint);
                     }
 
-                    // 取消點位選取狀態
                     window.currentSelectedPoint = null;
 
                     Swal.fire({ icon: 'success', title: '點位與照片已成功徹底刪除', timer: 1200, showConfirmButton: false });
@@ -1608,12 +1621,17 @@
                     updatedAt: firebase.firestore.FieldValue.serverTimestamp()
                 };
 
-                // 1. 同步全域記憶體狀態
+                // 1. 同步全域記憶體紀錄狀態
                 if (!window.auditLayersState) window.auditLayersState = {};
                 if (!window.auditLayersState[kmlId]) window.auditLayersState[kmlId] = {};
                 window.auditLayersState[kmlId][pointKey] = structuredData;
 
-                // 2. 寫入 Firestore (v8 Compat 語法)
+                // 2. 關鍵修正：確保此圖層的清查模式開關開啟，避免 forceMapRefresh 判定失敗刷回紅色
+                if (!window.globalAuditConfigs) window.globalAuditConfigs = {};
+                if (!window.globalAuditConfigs[kmlId]) window.globalAuditConfigs[kmlId] = {};
+                window.globalAuditConfigs[kmlId].isAuditing = true;
+
+                // 3. 寫入 Firestore (v8 Compat 語法)
                 const appPath = typeof APP_PATH !== 'undefined' ? APP_PATH : 'kmlData';
                 await firebase.firestore()
                     .collection(appPath)
@@ -1622,23 +1640,23 @@
                     .doc(pointKey) 
                     .set(structuredData, { merge: true });
 
-                // 3. 【即時變色核心】強制重繪此點位樣式 (刷為黃點，且非選取高亮狀態)
+                // 4. 【即時變色核心】直接傳入 activePoint 強制將圖層塗上金黃色 (#FCD770)
                 if (typeof applyAuditStyleToLayer === 'function') {
-                    applyAuditStyleToLayer(activePoint || pointKey, true, false);
-                } else if (typeof renderLayerAuditStyles === 'function') {
-                    renderLayerAuditStyles(kmlId);
+                    applyAuditStyleToLayer(activePoint, true, false);
+                } else if (typeof forceMapRefresh === 'function') {
+                    forceMapRefresh();
                 }
 
                 if (typeof generateLayerCsvReport === 'function') {
                     await generateLayerCsvReport(kmlId, kmlLayerName, maxPhotos);
                 }
 
-                // 4. 重置選取點位變數
+                // 5. 解除當前選取點位變數
                 window.currentSelectedPoint = null;
 
                 Swal.fire({ icon: 'success', title: '更新成功', timer: 1000, showConfirmButton: false });
 
-                // 5. 觸發 UI 狀態同步 (自動隱藏「查看與修改」按鈕)
+                // 6. 同步按鈕與底欄顯示 UI
                 if (typeof updateBottomBtnState === 'function') {
                     setTimeout(updateBottomBtnState, 200);
                 } else if (typeof syncAuditButtonVisibility === 'function') {
