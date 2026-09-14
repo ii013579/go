@@ -1,5 +1,5 @@
 ﻿/**
- * audit-module.js - 清查與修改覆蓋整合優化版 (v3.16 顏色即時更新修復版)
+ * audit-module.js - 清查與修改覆蓋整合優化版 (v3.15 破圖修復與點位按鈕切換版)
  */
 (function() {
     'use strict';
@@ -55,17 +55,6 @@
     const escapeHtml = safeEscape;
     window.escapeHtml = safeEscape;
 
-    /**
-     * 統一取得點位 Key（解決顏色對不上的核心問題）
-     */
-    function getPointKey(source) {
-        if (!source) return null;
-        const props = source.properties || source.feature?.properties || source;
-        const key = props.auditPointKey || props.name || props.title || props.id || "";
-        return key.toString().trim() || null;
-    }
-    window.getPointKey = getPointKey;
-
     // ---------------------------------------------------------
     // 0.1 懸浮按鈕顯隱狀態同步 (全域)
     // ---------------------------------------------------------
@@ -79,6 +68,7 @@
         const hasPermission = checkHasAuditPermission();
         const isAuditing = !!(config && config.isAuditing === true);
 
+        // 權限符合且該圖層開啟清查時顯示懸浮按鈕
         if (hasPermission && isAuditing) {
             btn.style.setProperty('display', 'inline-flex', 'important');
         } else {
@@ -87,46 +77,44 @@
     }
     window.syncAuditButtonVisibility = syncAuditButtonVisibility;
 
-    // =========================================================
-    // 1. 樣式攔截器與強力重繪機制 (完整版)
-    // =========================================================
-
-    // 1-1. GeoJSON 數據載入攔截器
+    // ---------------------------------------------------------
+    // 1. 樣式攔截器與強力重繪機制
+    // ---------------------------------------------------------
     const originalAddLayers = window.addGeoJsonLayers;
     window.addGeoJsonLayers = function(features) {
         const ns = window.mapNamespace;
         const kmlId = ns?.currentKmlLayerId;
 
         if (kmlId && Array.isArray(features)) {
-            const config = window.globalAuditConfigs?.[kmlId];
-            const records = window.auditLayersState?.[kmlId] || {};
+            const config = window.globalAuditConfigs[kmlId];
+            const records = window.auditLayersState[kmlId] || {};
 
             features.forEach(f => {
                 if (!f.properties) f.properties = {};
                 f.properties.kmlId = kmlId;
                 
-                const pointKey = getPointKey(f) || "未知點位";
+                const pointKey = f.properties.name || f.properties.title || f.properties.id || f.id || "未知點位";
                 f.properties.auditPointKey = pointKey; 
 
-                if (config && config.isAuditing === true && typeof canSeeAuditColors === 'function' && canSeeAuditColors()) {
+                if (config && config.isAuditing === true && canSeeAuditColors()) {
                     const record = records[pointKey];
                     if (record) {
                         f.properties.auditStatus = record.deviceStatus || "正常";
-                        f.properties.auditNote = record.note || record.remark || "";
+                        f.properties.auditNote = record.note;
                         f.properties.photos = record.photos || [];
                         f.properties.isAudited = true;
-                        f.properties.fillColor = "#FCD770";
+                        f.properties.fillColor = "#FCD770"; // 已清查
                         f.properties.radius = 8;
                     } else {
                         f.properties.isAudited = false;
                         f.properties.auditStatus = null;
-                        f.properties.fillColor = "#0055D4";
+                        f.properties.fillColor = "#2A00D2"; // 未清查
                         f.properties.radius = 8;
                     }
                     f.properties.color = "#ffffff";
-                    f.properties.fillOpacity = 0.95;
+                    f.properties.fillOpacity = 0.85;
                 } else {
-                    f.properties.fillColor = "#e74c3c";
+                    f.properties.fillColor = "#e74c3c"; // 預設
                     f.properties.radius = 8;
                     f.properties.isAudited = false;
                     f.properties.fillOpacity = 0.85;
@@ -137,55 +125,52 @@
         if (originalAddLayers) return originalAddLayers.apply(this, arguments);
     };
 
-    // 1-2. 地圖強制全圖重繪函式（已強化 key 匹配）
     function forceMapRefresh() {
         const ns = window.mapNamespace;
         const kmlId = ns?.currentKmlLayerId;
         if (!ns?.map || !kmlId) return;
 
+        // 強制重新計算 Leaflet 地圖容器尺寸，解決手機移動破圖
         setTimeout(() => {
             if (ns.map && typeof ns.map.invalidateSize === 'function') {
                 ns.map.invalidateSize({ animate: false });
             }
         }, 100);
 
-        const records = window.auditLayersState?.[kmlId] || {};
-        const showAuditMode = !!(window.globalAuditConfigs?.[kmlId]?.isAuditing) && 
-                              (typeof canSeeAuditColors === 'function' ? canSeeAuditColors() : true);
+        const records = window.auditLayersState[kmlId] || {};
+        const showAuditMode = window.globalAuditConfigs[kmlId]?.isAuditing && canSeeAuditColors();
 
         ns.map.eachLayer(function(layer) {
             if (layer.feature && layer.feature.properties) {
                 const props = layer.feature.properties;
-                const pointKey = getPointKey(props);
+                const pointKey = props.name || props.title || props.id || "未知點位";
                 
-                if (!pointKey) return;
-
                 if (showAuditMode) {
                     const record = records[pointKey];
                     if (record) {
                         props.isAudited = true;
                         props.auditStatus = record.deviceStatus || "正常";
                         props.photos = record.photos || [];
-                        props.auditNote = record.note || record.remark || "";
+                        props.auditNote = record.note;
 
                         if (typeof layer.setStyle === 'function') {
                             layer.setStyle({
-                                fillColor: "#FCD770",
+                                fillColor: "#ff85c0",
                                 color: "#ffffff",
                                 weight: 2,
-                                fillOpacity: 0.95,
-                                radius: 8
+                                fillOpacity: 0.9,
+                                radius: 10
                             });
                         }
                     } else {
                         props.isAudited = false;
                         if (typeof layer.setStyle === 'function') {
                             layer.setStyle({
-                                fillColor: "#0055D4",
+                                fillColor: "#3498db",
                                 color: "#ffffff",
                                 weight: 2,
-                                fillOpacity: 0.95,
-                                radius: 8
+                                fillOpacity: 0.9,
+                                radius: 10
                             });
                         }
                     }
@@ -203,90 +188,13 @@
             }
         });
 
-    if (window.addGeoJsonLayers && ns.allKmlFeatures) {
+        if (window.addGeoJsonLayers && ns.allKmlFeatures) {
             window.addGeoJsonLayers(ns.allKmlFeatures);
         }
 
-        if (typeof syncAuditButtonVisibility === 'function') {
-            syncAuditButtonVisibility();
-        }
-
-        // ★ 新增：強制立刻重繪
-        forceLeafletRepaint();
+        syncAuditButtonVisibility();
     }
     window.forceMapRefresh = forceMapRefresh;
-
-    // 1-3. 關鍵輔助函式：原位強刷 Marker 樣式（已強化）
-    function applyAuditStyleToLayer(target, isAudited = true, shouldSelect = false) {
-        const color = isAudited ? "#FCD770" : "#0055D4";
-    
-        // 1. 若傳入的是真正的 Leaflet Layer，立即改樣式
-        if (target && typeof target.setStyle === 'function') {
-            target.setStyle({
-                fillColor: color,
-                color: "#ffffff",
-                weight: 2,
-                fillOpacity: 0.95,
-                radius: 8
-            });
-            if (target.feature && target.feature.properties) {
-                target.feature.properties.isAudited = isAudited;
-                target.feature.properties.fillColor = color;
-            }
-            if (typeof target.redraw === 'function') {
-                target.redraw();
-            }
-        }
-    
-        // 2. 強制全圖重繪 + 觸發畫面更新
-        if (typeof window.forceMapRefresh === 'function') {
-            setTimeout(() => {
-                window.forceMapRefresh();
-                // 關鍵：強制 Leaflet 立刻重繪
-                forceLeafletRepaint();
-            }, 50);
-        }
-    
-        if (!shouldSelect) {
-            window.currentSelectedPoint = null;
-        }
-    }
-    window.applyAuditStyleToLayer = applyAuditStyleToLayer;
-    
-    /**
-     * 強制 Leaflet 立刻重繪（解決移動地圖才變色的問題）
-     */
-    function forceLeafletRepaint() {
-        const map = window.mapNamespace?.map;
-        if (!map) return;
-    
-        try {
-            // 方法1：invalidateSize
-            map.invalidateSize({ animate: false });
-    
-            // 方法2：對所有有 feature 的 layer 強制 redraw
-            map.eachLayer(function(layer) {
-                if (layer.feature && typeof layer.redraw === 'function') {
-                    layer.redraw();
-                }
-                // Canvas renderer 專用
-                if (layer._renderer && typeof layer._renderer._updatePath === 'function') {
-                    try {
-                        layer._renderer._updatePath(layer);
-                    } catch (e) {}
-                }
-            });
-    
-            // 方法3：微幅平移觸發重繪（最有效）
-            const center = map.getCenter();
-            map.panTo([center.lat + 0.0000001, center.lng], { animate: false });
-            map.panTo(center, { animate: false });
-    
-        } catch (err) {
-            console.warn('forceLeafletRepaint 失敗:', err);
-        }
-    }
-    window.forceLeafletRepaint = forceLeafletRepaint;
 
     // ---------------------------------------------------------
     // 2. 底部控制按鈕面板 (僅針對選取的點位)
@@ -305,7 +213,7 @@
 
         if (active && config && config.isAuditing === true) {
             const layerProps = active.feature?.properties || active.properties || {};
-            const pointKey = getPointKey(layerProps) || "未知點位";
+            const pointKey = layerProps.name || layerProps.title || layerProps.id || "未知點位";
             const safePointKey = escapeHtml(pointKey);
             
             const currentRecords = window.auditLayersState[kmlId] || {};
@@ -361,7 +269,7 @@
     });
 
     // ---------------------------------------------------------
-    // 3. CSV 總表生成（路徑已確認保留）
+    // 3. CSV 總表生成
     // ---------------------------------------------------------
     async function generateLayerCsvReport(kmlId, kmlLayerName, maxPhotos) {
         console.log(`[CSV] 開始生成總表 - KML ID: ${kmlId}, LayerName: ${kmlLayerName}`);
@@ -393,7 +301,7 @@
         const featureMap = new Map();
         if (Array.isArray(features)) {
             features.forEach(f => {
-                const key = getPointKey(f);
+                const key = f.properties?.name || f.properties?.title || f.id;
                 if (key) featureMap.set(String(key), f);
             });
         }
@@ -435,7 +343,7 @@
                     rowArr.push(`"${getCleanPhotoName(url)}"`);
                 }
 
-                const note = record.note || record.remark || "";
+                const note = record.remark || record.note || "";
                 rowArr.push(`"${String(note).replace(/"/g, '""')}"`);
             } else {
                 rowArr.push('""');
@@ -452,7 +360,6 @@
             rootPath = rootPath.replace(/^\/+|\/+$/g, ''); 
             
             const safeLayerName = kmlLayerName || 'default_layer';
-            // ★ 路徑完全保留
             const csvStoragePath = `${rootPath}/${safeLayerName}/${safeLayerName}_清查總表.csv`;
 
             if (typeof firebase === 'undefined' || !firebase.storage) {
@@ -614,12 +521,6 @@
             } else {
                 Swal.fire({ title: '正在關閉清查...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
                 
-                // 關閉時取消監聽
-                if (auditUnsubscribes[kmlId]) {
-                    auditUnsubscribes[kmlId]();
-                    delete auditUnsubscribes[kmlId];
-                }
-
                 await firebase.firestore().collection(APP_PATH).doc(kmlId).set({ 
                     isAuditing: false 
                 }, { merge: true });
@@ -644,10 +545,11 @@
     };
         
     // =========================================================
-    // 5-1. 獨立區段：手動新增點位功能 & 地圖點擊拾取
+    // 5-1. 獨立區段：手動新增點位功能 & 地圖點擊拾取 (切換狀態支援)
     // =========================================================
     let activeAddPointCleanup = null;
     
+    // 按鈕 UI 狀態切換更新輔助函式
     function setAddButtonActiveState(isActive) {
         const btn = document.getElementById('btn-standalone-add-point');
         if (!btn) return;
@@ -662,6 +564,7 @@
     }
     
     window.startAddCustomPoint = function(kmlId) {
+        // 若當前已處於新增拾取狀態，點擊則執行取消邏輯
         if (activeAddPointCleanup) {
             activeAddPointCleanup();
             Swal.fire({ icon: 'info', title: '已取消新增點位', timer: 1000, showConfirmButton: false });
@@ -685,6 +588,7 @@
         const container = map.getContainer();
         container.style.cursor = 'crosshair';
     
+        // 變更按鈕為「❌ 取消新增」與紅底
         setAddButtonActiveState(true);
     
         Swal.mixin({
@@ -727,7 +631,7 @@
     
     
     // =========================================================
-    // 5-2. 動態渲染獨立「新增點位」膠囊按鈕
+    // 5-2. 動態渲染獨立「新增點位」膠囊按鈕（固定於右下角）
     // =========================================================
     (function renderStandaloneAddButton() {
         let btn = document.getElementById('btn-standalone-add-point');
@@ -773,6 +677,7 @@
         }
     })();
     
+    // 監聽下拉選單切換，自動重整按鈕顯隱
     document.addEventListener('change', (e) => {
         if (e.target && e.target.id === 'kmlLayerSelect') {
             setTimeout(() => {
@@ -785,9 +690,10 @@
     
     
     // =========================================================
-    // 5-3. 彈窗 UI 介面與照片預覽
+    // 5-3. 彈窗 UI 介面與照片預覽 (支援新增與編輯模式、動態照片數)
     // =========================================================
     
+    // 照片預覽輔助函式 (使用 Object URL 優化渲染效能)
     window.handleAddPhotoPreview = function(input, index) {
         if (input.files && input.files[0]) {
             const file = input.files[0];
@@ -809,6 +715,7 @@
     window.openAddPointModal = async function(param1, param2, param3) {
         let kmlId, lat, lng, editData = null, isEditMode = false;
     
+        // 判斷傳入參數為物件（編輯模式）或個別參數（新增模式）
         if (typeof param1 === 'object' && param1 !== null) {
             editData = param1;
             kmlId = editData.kmlId;
@@ -922,9 +829,9 @@
                     const img = document.getElementById(`add-prev-${i}`);
     
                     if (fileInput && fileInput.files && fileInput.files[0]) {
-                        photosArray.push(fileInput.files[0]);
+                        photosArray.push(fileInput.files[0]); // 新選擇的 File 物件
                     } else if (img && img.src && !img.src.startsWith('data:') && !img.src.startsWith('blob:') && img.src !== window.location.href) {
-                        photosArray.push(img.src);
+                        photosArray.push(img.src); // 沿用既有照片 URL
                     }
                 }
     
@@ -968,42 +875,45 @@
             }
         }
     };
-      
+    
+    
     // =========================================================
-    // 5-4. 新增/修改自訂點位送出邏輯（已強化顏色即時更新）
+    // 5-4. 新增/修改自訂點位送出邏輯 (儲存至 APP_PATH 並立即渲染地圖)
     // =========================================================
     window.submitNewCustomPoint = async function(formValues) {
         const { kmlId, kmlLayerName, lat, lng, pointKey, status, deviceStatus, remark, photos, isEditMode, oldPointKey } = formValues;
-
+    
         const trimmedPointKey = (pointKey || '').trim();
         const targetDeviceStatus = deviceStatus || status || "新增";
-
+    
         if (!trimmedPointKey) {
             Swal.fire('提示', '請輸入點位名稱', 'warning');
             return;
         }
-
+    
         const numLat = parseFloat(lat);
         const numLng = parseFloat(lng);
         if (isNaN(numLat) || isNaN(numLng)) {
             Swal.fire('錯誤', '請提供有效的經緯度座標', 'error');
             return;
         }
-
+    
         const ns = window.mapNamespace;
         const currentRecords = (window.auditLayersState && window.auditLayersState[kmlId]) 
             ? window.auditLayersState[kmlId] 
             : {};
-
+    
+        // 檢查點名重複（非編輯模式，或編輯模式下修改了名稱）
         if (!isEditMode || (isEditMode && oldPointKey !== trimmedPointKey)) {
             let isDuplicateInKml = false;
             if (ns && Array.isArray(ns.allKmlFeatures)) {
                 isDuplicateInKml = ns.allKmlFeatures.some(f => {
-                    return getPointKey(f) === trimmedPointKey;
+                    const name = f.properties?.name || f.properties?.title || f.properties?.auditPointKey;
+                    return name === trimmedPointKey;
                 });
             }
             const isDuplicateInState = !!currentRecords[trimmedPointKey];
-
+    
             if (isDuplicateInKml || isDuplicateInState) {
                 Swal.fire({
                     icon: 'warning',
@@ -1014,13 +924,13 @@
                 return;
             }
         }
-
+    
         Swal.fire({
             title: '正在處理並儲存資料...',
             didOpen: () => Swal.showLoading(),
             allowOutsideClick: false
         });
-
+    
         try {
             let photoUrls = [];
             if (typeof window.uploadPhotosToStorage === 'function') {
@@ -1028,24 +938,29 @@
             } else {
                 photoUrls = Array.isArray(photos) ? photos.filter(p => typeof p === 'string') : [];
             }
-
+    
             const appPath = typeof APP_PATH !== 'undefined' ? APP_PATH : 'kmlData';
-
+    
+            // 若為編輯模式且點名有更換，刪除舊節點
             if (isEditMode && oldPointKey && oldPointKey !== trimmedPointKey) {
                 if (window.auditLayersState && window.auditLayersState[kmlId]) {
                     delete window.auditLayersState[kmlId][oldPointKey];
                 }
                 if (ns && Array.isArray(ns.allKmlFeatures)) {
-                    ns.allKmlFeatures = ns.allKmlFeatures.filter(f => getPointKey(f) !== oldPointKey);
+                    ns.allKmlFeatures = ns.allKmlFeatures.filter(f => {
+                        const name = f.properties?.name || f.properties?.title || f.properties?.auditPointKey;
+                        return name !== oldPointKey;
+                    });
                 }
                 await firebase.firestore().collection(appPath).doc(kmlId).collection('auditRecords').doc(oldPointKey).delete();
             }
-
+    
+            // 結構化資料：同時補齊 status 與 deviceStatus 避免跨模組讀取錯位
             const structuredData = {
                 pointName: trimmedPointKey,
-                status: "已完成",
-                deviceStatus: targetDeviceStatus,
-                auditStatus: targetDeviceStatus,
+                status: "已完成",                  // 清查流程狀態
+                deviceStatus: targetDeviceStatus,  // 設備實體狀態
+                auditStatus: targetDeviceStatus,   // 雙向相容
                 note: remark || "",
                 photos: photoUrls,
                 lat: numLat,
@@ -1053,28 +968,18 @@
                 isCustomPoint: true,
                 updatedAt: firebase.firestore.FieldValue.serverTimestamp()
             };
-
-            // ===== 本地狀態立即更新 =====
+    
             if (!window.auditLayersState) window.auditLayersState = {};
             if (!window.auditLayersState[kmlId]) window.auditLayersState[kmlId] = {};
             window.auditLayersState[kmlId][trimmedPointKey] = structuredData;
-
-            if (!window.globalAuditConfigs) window.globalAuditConfigs = {};
-            if (!window.globalAuditConfigs[kmlId]) window.globalAuditConfigs[kmlId] = {};
-            window.globalAuditConfigs[kmlId].isAuditing = true;
-
-            // 寫入 Firestore
-            await firebase.firestore()
-                .collection(appPath)
-                .doc(kmlId)
-                .collection('auditRecords')
-                .doc(trimmedPointKey)
-                .set(structuredData, { merge: true });
-
-            // 同步記憶體內的 Feature
+    
+            // GeoJSON Feature 屬性同步補齊
             const newGeoJsonFeature = {
                 type: "Feature",
-                geometry: { type: "Point", coordinates: [numLng, numLat] },
+                geometry: {
+                    type: "Point",
+                    coordinates: [numLng, numLat]
+                },
                 properties: {
                     name: trimmedPointKey,
                     title: trimmedPointKey,
@@ -1082,52 +987,72 @@
                     auditPointKey: trimmedPointKey,
                     isCustomPoint: true,
                     isAudited: true,
-                    fillColor: "#FCD770"
+                    deviceStatus: targetDeviceStatus,
+                    auditStatus: targetDeviceStatus,
+                    auditNote: remark || "",
+                    photos: photoUrls,
+                    fillColor: "#FCD770",
+                    color: "#ffffff",
+                    radius: 8,
+                    fillOpacity: 0.85
                 }
             };
-            if (ns && Array.isArray(ns.allKmlFeatures)) {
-                const idx = ns.allKmlFeatures.findIndex(f => getPointKey(f) === trimmedPointKey);
-                if (idx >= 0) ns.allKmlFeatures[idx] = newGeoJsonFeature;
-                else ns.allKmlFeatures.push(newGeoJsonFeature);
-            }
-
-            // ===== 顏色即時更新（核心修正）=====
-            let targetLayer = null;
-            if (ns?.map) {
-                ns.map.eachLayer(function(layer) {
-                    if (layer.feature && getPointKey(layer.feature) === trimmedPointKey) {
-                        targetLayer = layer;
-                    }
+    
+            if (ns) {
+                if (!Array.isArray(ns.allKmlFeatures)) ns.allKmlFeatures = [];
+                const existingIdx = ns.allKmlFeatures.findIndex(f => {
+                    const name = f.properties?.name || f.properties?.title || f.properties?.auditPointKey;
+                    return name === trimmedPointKey;
                 });
+                if (existingIdx >= 0) {
+                    ns.allKmlFeatures[existingIdx] = newGeoJsonFeature;
+                } else {
+                    ns.allKmlFeatures.push(newGeoJsonFeature);
+                }
             }
-
-            if (targetLayer) {
-                applyAuditStyleToLayer(targetLayer, true, false);
-            } else {
-                applyAuditStyleToLayer(null, true, false);
+    
+            // 寫入 Firestore
+            await firebase.firestore()
+                .collection(appPath)
+                .doc(kmlId)
+                .collection('auditRecords')
+                .doc(trimmedPointKey)
+                .set(structuredData, { merge: true });
+    
+            // 地圖即時繪製：改傳入全量 ns.allKmlFeatures 陣列，避免傳入單點陣列導致既有 KML 被清空
+            if (ns && Array.isArray(ns.allKmlFeatures) && typeof window.addGeoJsonLayers === 'function') {
+                window.addGeoJsonLayers(ns.allKmlFeatures);
+            } else if (typeof forceMapRefresh === 'function') {
+                forceMapRefresh();
+            } else if (ns && ns.map && typeof L !== 'undefined') {
+                const marker = L.circleMarker([numLat, numLng], {
+                    radius: 8,
+                    fillColor: "#FCD770",
+                    color: "#ffffff",
+                    weight: 2,
+                    opacity: 1,
+                    fillOpacity: 0.85
+                }).bindPopup(`<b>${trimmedPointKey}</b><br>狀態：${targetDeviceStatus}`);
+    
+                marker.addTo(ns.map);
             }
-
+    
             const layerFolderName = kmlLayerName || kmlId || 'default_layer';
             if (typeof generateLayerCsvReport === 'function') {
                 const config = window.globalAuditConfigs?.[kmlId] || {};
                 await generateLayerCsvReport(kmlId, layerFolderName, config.targetPhotos || 2);
             }
-
-            window.currentSelectedPoint = null;
-
+    
             Swal.fire({
                 icon: 'success',
                 title: isEditMode ? '修改點位成功' : '新增清查點位成功',
-                timer: 1000,
+                timer: 1200,
                 showConfirmButton: false
             });
-
-            if (typeof updateBottomBtnState === 'function') {
-                setTimeout(updateBottomBtnState, 200);
-            } else if (typeof syncAuditButtonVisibility === 'function') {
-                setTimeout(syncAuditButtonVisibility, 200);
-            }
-
+    
+            if (typeof forceMapRefresh === 'function') forceMapRefresh();
+            if (typeof updateBottomBtnState === 'function') setTimeout(updateBottomBtnState, 300);
+    
         } catch (e) {
             console.error("❌ 儲存點位失敗:", e);
             Swal.fire('錯誤', e.message || '儲存失敗', 'error');
@@ -1135,9 +1060,12 @@
     };
     
     // =========================================================
-    // 5-5. Firebase Storage 照片上傳處理（路徑已確認保留）
+    // 5-5. Firebase Storage 照片上傳處理 (通用工具函式 & UI 選單)
     // =========================================================
     
+    /**
+     * 通用照片上傳至 Firebase Storage 函式
+     */
     window.uploadPhotosToStorage = async function(photos, kmlId, pointKey, kmlLayerName) {
         if (!photos || !Array.isArray(photos) || photos.length === 0) return [];
     
@@ -1160,12 +1088,12 @@
     
         const uploadPromises = photos.map(async (photoData, index) => {
             if (!photoData) return '';
+            // 已是網路 URL 者直接保留
             if (typeof photoData === 'string' && !photoData.startsWith('data:image')) {
                 return photoData;
             }
     
             const photoIndexStr = String(index + 1).padStart(2, '0');
-            // ★ 路徑完全保留
             const customStoragePath = `${rootPath}/${targetLayerName}/${safePointKey}_${photoIndexStr}.jpg`;
             const ref = storageRef.child(customStoragePath);
     
@@ -1197,6 +1125,9 @@
         }
     };
     
+    /**
+     * 建立統一風格的清查 UI 按鈕
+     */
     window.createUnifiedAuditButton = function(text, bgColor, onClickHandler) {
         const btn = document.createElement('button');
         btn.innerHTML = text;
@@ -1222,6 +1153,9 @@
         return btn;
     };
     
+    /**
+     * 刪除自訂點位（含 Storage 照片與 Firestore 紀錄）
+     */
     window.deleteCustomPoint = async function(kmlId, pointKey, kmlLayerName) {
         if (!kmlId || !pointKey) {
             Swal.fire('錯誤', '無效的點位資訊，無法刪除', 'error');
@@ -1259,17 +1193,19 @@
             const safePointKey = String(pointKey).replace(/[/\\?%*:|"<>]/g, '_');
             const storageRef = firebase.storage().ref();
     
-            const maxPhotos = window.globalAuditConfigs?.[kmlId]?.targetPhotos || 12;
-            const deletePhotoPromises = [];
-            for (let i = 1; i <= maxPhotos; i++) {
+            // 清理 Storage 照片 (支援最多 3 張)
+            const deletePhotoPromises = [1, 2, 3].map(async (i) => {
                 const photoIndexStr = String(i).padStart(2, '0');
                 const customStoragePath = `${rootPath}/${targetLayerName}/${safePointKey}_${photoIndexStr}.jpg`;
-                deletePhotoPromises.push(
-                    storageRef.child(customStoragePath).delete().catch(() => {})
-                );
-            }
+                try {
+                    await storageRef.child(customStoragePath).delete();
+                } catch (err) {
+                    // 忽略檔案不存在的錯誤
+                }
+            });
             await Promise.all(deletePhotoPromises);
     
+            // 刪除 Firestore 紀錄
             const appPath = typeof APP_PATH !== 'undefined' ? APP_PATH : 'kmlData';
             await firebase.firestore()
                 .collection(appPath)
@@ -1278,18 +1214,22 @@
                 .doc(pointKey)
                 .delete();
     
+            // 清理記憶體狀態
             if (window.auditLayersState && window.auditLayersState[kmlId]) {
                 delete window.auditLayersState[kmlId][pointKey];
             }
     
             const ns = window.mapNamespace;
             if (ns && Array.isArray(ns.allKmlFeatures)) {
-                ns.allKmlFeatures = ns.allKmlFeatures.filter(f => getPointKey(f) !== pointKey);
+                ns.allKmlFeatures = ns.allKmlFeatures.filter(f => {
+                    const name = f.properties?.name || f.properties?.title || f.properties?.auditPointKey;
+                    return name !== pointKey;
+                });
             }
     
             window.currentSelectedPoint = null;
             if (typeof generateLayerCsvReport === 'function') {
-                await generateLayerCsvReport(kmlId, targetLayerName, maxPhotos);
+                await generateLayerCsvReport(kmlId, targetLayerName, 2);
             }
     
             Swal.fire({
@@ -1308,6 +1248,9 @@
         }
     };
     
+    /**
+     * 動態更新底部清查選單與獨立新增按鈕顯示狀態
+     */
     window.updateAuditBottomMenuUI = function(mode, extraData) {
         if (typeof bottomControl === 'undefined' || !bottomControl || !bottomControl._container) return;
     
@@ -1322,6 +1265,7 @@
     
         const isAuditingEnabled = !!(window.globalAuditConfigs?.[currentKmlId]?.isAuditing);
         
+        // 若 SweetAlert2 彈窗開啟中，自動維持隱藏，避免按鈕突發被重繪顯示
         const isModalOpen = typeof Swal !== 'undefined' && Swal.isVisible();
     
         if (!currentKmlId || !hasPermission || !isAuditingEnabled || isModalOpen) {
@@ -1352,7 +1296,7 @@
             const editBtn = window.createUnifiedAuditButton('修改', '#f39c12', () => {
                 if (isCustom) {
                     if (typeof window.openCustomPointModal === 'function') {
-                        const pointKey = getPointKey(props);
+                        const pointKey = props.auditPointKey || props.name || props.title;
                         const coords = extraData?.geometry?.coordinates || extraData?.feature?.geometry?.coordinates;
                         const lat = coords ? coords[1] : (props.lat || 0);
                         const lng = coords ? coords[0] : (props.lng || 0);
@@ -1381,7 +1325,7 @@
     
             if (isCustom) {
                 const delBtn = window.createUnifiedAuditButton('🗑️ 刪除', '#e74c3c', () => {
-                    const pointKey = getPointKey(props);
+                    const pointKey = props.auditPointKey || props.name || props.title;
                     const selectEl = document.getElementById('kmlLayerSelect');
                     const rawLayerName = selectEl?.options[selectEl.selectedIndex]?.getAttribute('data-basename') || window.currentActiveKmlName || '預設區域';
                     const layerFolderName = rawLayerName.replace(/\.kml$/i, '').trim();
@@ -1412,25 +1356,25 @@
     };
     
     // =========================================================
-    // 5-6. 清查資料編輯與修改（已強化顏色即時更新）
+    // 5-6. 清查資料編輯、修改與刪除紀錄邏輯
     // =========================================================
     window.openAuditEditor = async function(isModifyMode = false) {
         if (typeof checkHasAuditPermission === 'function' && !checkHasAuditPermission()) return;
         const activePoint = window.currentSelectedPoint;
         if (!activePoint) return;
-
+    
         const layerProps = activePoint.feature?.properties || activePoint.properties || {};
-        const pointKey = getPointKey(layerProps) || "未知點位"; 
+        const pointKey = layerProps.name || layerProps.title || layerProps.id || "未知點位"; 
         const kmlId = layerProps.kmlId || window.mapNamespace?.currentKmlLayerId;
         const config = (window.globalAuditConfigs && window.globalAuditConfigs[kmlId]) || { targetPhotos: 2 };
         const maxPhotos = config.targetPhotos || 2;
-
+    
         const selectEl = document.getElementById('kmlLayerSelect');
         const rawLayerName = selectEl?.options[selectEl.selectedIndex]?.getAttribute('data-basename') || '預設區域';
         const kmlLayerName = rawLayerName.replace(/\.kml$/i, '').trim(); 
-
+    
         const historyRecord = isModifyMode ? (window.auditLayersState?.[kmlId]?.[pointKey] || {}) : {};
-
+    
         const isUserCreatedPoint = !!(
             layerProps.isCustom || 
             layerProps.isNew || 
@@ -1440,21 +1384,21 @@
             historyRecord.deviceStatus === '新增' ||
             layerProps.deviceStatus === '新增'
         );
-
+    
         const currentPhotos = new Array(maxPhotos).fill('');
         if (isModifyMode && Array.isArray(historyRecord.photos)) {
             historyRecord.photos.forEach((url, idx) => {
                 if (idx < maxPhotos) currentPhotos[idx] = url || '';
             });
         }
-
+    
         const currentStatus = isUserCreatedPoint ? '新增' : (historyRecord.deviceStatus || '');
-        const currentNote = historyRecord.note || historyRecord.remark || '';
-
+        const currentNote = historyRecord.note || '';
+    
         const layerConfig = window.globalAuditConfigs?.[kmlId] || {};
         const baseStatusOptions = layerConfig.statusOptions || 
                                   (localStorage.getItem('audit_status_options') ? JSON.parse(localStorage.getItem('audit_status_options')) : ['正常','損壞','遺失']);
-
+    
         let statusSelectHtml = '';
         if (isUserCreatedPoint) {
             statusSelectHtml = `
@@ -1473,7 +1417,7 @@
                     ${statusOptionsHtml}
                 </select>`;
         }
-
+    
         window._tempPreview = function(input, index) {
             if (input.files && input.files[0]) {
                 const reader = new FileReader();
@@ -1492,11 +1436,11 @@
                         const prevEl = document.getElementById('audit-prev-' + index);
                         const iconEl = document.getElementById('audit-icon-' + index);
                         const tagEl = document.getElementById('audit-tag-' + index);
-
+    
                         if (prevEl) { prevEl.src = base64; prevEl.style.display = 'block'; }
                         if (iconEl) { iconEl.style.display = 'none'; }
                         if (tagEl) { tagEl.innerHTML = '<span>🖼️</span> 新選擇'; }
-
+    
                         currentPhotos[index] = base64;
                     };
                     img.src = e.target.result;
@@ -1504,7 +1448,7 @@
                 reader.readAsDataURL(input.files[0]);
             }
         };
-
+    
         let photoHtml = '';
         for (let i = 0; i < maxPhotos; i++) {
             const photoData = currentPhotos[i] || '';
@@ -1517,26 +1461,26 @@
                         <span id="audit-icon-${i}" style="font-size:24px; color:#bbb; display:${photoData ? 'none' : 'block'}; z-index:1;">📷</span>
                         <input type="file" id="audit-file-input-${i}" accept="image/*" capture="environment" onchange="window._tempPreview(this, ${i})" style="position:absolute; width:100%; height:100%; opacity:0; z-index:2; cursor:pointer;" title="直接拍照">
                     </div>
-
+    
                     <input type="file" id="audit-gallery-input-${i}" accept="image/*" onchange="window._tempPreview(this, ${i})" style="display:none;">
-
+    
                     <label for="audit-gallery-input-${i}" id="audit-tag-${i}" style="position:absolute; left:50%; transform:translateX(-50%); bottom:-10px; z-index:3; background:#444; color:#fff; font-size:11px; padding:2px 8px; border-radius:10px; display:flex; align-items:center; gap:3px; white-space:nowrap; cursor:pointer; box-shadow:0 2px 4px rgba(0,0,0,0.2);">
                         ${isUrl ? '<span>🖼️</span> 舊照片' : (photoData ? '<span>🖼️</span> 新選擇' : '<span>📁</span> 開啟舊檔')}
                     </label>
                 </div>`;
         }
-
+    
         const { value: res, isDenied } = await Swal.fire({
             title: `<div style="font-size:18px;">${isModifyMode ? '修改' : '填寫'}清查紀錄：${window.escapeHtml(pointKey)}</div>`,
             html: `<div style="text-align:left;">
                 <label style="font-size:14px; font-weight:bold;">設備狀態 <span style="color:red;">*必選</span></label>
                 ${statusSelectHtml}
-
+    
                 <label style="font-size:14px; font-weight:bold;">現場照片 (需滿 ${maxPhotos} 張) <span style="color:red;">*必填</span></label>
                 <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(95px, 1fr)); gap:10px; margin:8px 0 16px 0;">
                     ${photoHtml}
                 </div>
-
+    
                 <label style="font-size:14px; font-weight:bold;">備註事項 <span style="color:#888; font-weight:normal;">(選填)</span></label>
                 <textarea id="swal-note" class="swal2-textarea" style="width:100%; height:70px; margin:6px 0 0 0; resize:vertical;" placeholder="輸入備註事項...">${window.escapeHtml(currentNote)}</textarea>
             </div>`,
@@ -1557,12 +1501,6 @@
                     const addBtn = document.getElementById('btn-standalone-add-point');
                     if (addBtn) addBtn.style.setProperty('display', 'inline-flex', 'important');
                 }
-
-                setTimeout(() => {
-                    if (window.mapNamespace && window.mapNamespace.map) {
-                        window.mapNamespace.map.invalidateSize({ pan: false });
-                    }
-                }, 300);
             },
             preConfirm: () => {
                 const statusValue = document.getElementById('swal-status').value;
@@ -1582,9 +1520,9 @@
                 };
             }
         });
-
+    
         delete window._tempPreview;
-
+    
         if (isDenied) {
             const confirmDelete = await Swal.fire({
                 title: '確定要刪除此新增點位？',
@@ -1596,12 +1534,12 @@
                 confirmButtonText: '確定刪除',
                 cancelButtonText: '取消'
             });
-
+    
             if (confirmDelete.isConfirmed) {
                 Swal.fire({ title: '正在清理 Storage 照片與紀錄...', didOpen: () => Swal.showLoading(), allowOutsideClick: false });
                 try {
                     const appPath = typeof APP_PATH !== 'undefined' ? APP_PATH : 'kmlData';
-
+    
                     if (Array.isArray(historyRecord.photos) && historyRecord.photos.length > 0) {
                         const deletePhotoPromises = historyRecord.photos.map(async (photoUrl) => {
                             if (photoUrl && photoUrl.startsWith('http')) {
@@ -1609,48 +1547,43 @@
                                     const photoRef = firebase.storage().refFromURL(photoUrl);
                                     await photoRef.delete();
                                 } catch (err) {
-                                    console.warn(`Storage 照片刪除失敗:`, err);
+                                    console.warn(`Storage 照片刪除失敗或已不存在 (${photoUrl}):`, err);
                                 }
                             }
                         });
                         await Promise.all(deletePhotoPromises);
                     }
-
+    
                     await firebase.firestore()
                         .collection(appPath)
                         .doc(kmlId)
                         .collection('auditRecords')
                         .doc(pointKey)
                         .delete();
-
+    
                     if (typeof deleteCustomPointFromFirestore === 'function') {
                         await deleteCustomPointFromFirestore(kmlId, pointKey);
                     }
-
+    
                     if (window.auditLayersState?.[kmlId]?.[pointKey]) {
                         delete window.auditLayersState[kmlId][pointKey];
                     }
-
+    
                     if (typeof generateLayerCsvReport === 'function') {
                         await generateLayerCsvReport(kmlId, kmlLayerName, maxPhotos);
                     }
-
+    
                     if (activePoint && typeof activePoint.remove === 'function') {
                         activePoint.remove();
                     } else if (window.mapNamespace?.map && activePoint) {
                         window.mapNamespace.map.removeLayer(activePoint);
                     }
-
-                    window.currentSelectedPoint = null;
-
+    
                     Swal.fire({ icon: 'success', title: '點位與照片已成功徹底刪除', timer: 1200, showConfirmButton: false });
-
-                    if (typeof updateBottomBtnState === 'function') {
-                        setTimeout(updateBottomBtnState, 200);
-                    } else if (typeof syncAuditButtonVisibility === 'function') {
-                        setTimeout(syncAuditButtonVisibility, 200);
-                    }
-
+    
+                    if (typeof forceMapRefresh === 'function') forceMapRefresh();
+                    if (typeof updateBottomBtnState === 'function') setTimeout(updateBottomBtnState, 300);
+    
                 } catch (e) {
                     console.error("徹底刪除點位失敗:", e);
                     Swal.fire('錯誤', e.message || '刪除失敗', 'error');
@@ -1658,12 +1591,13 @@
             }
             return;
         }
-
+    
         if (res) {
             Swal.fire({ title: '正在上傳與更新資料...', didOpen: () => Swal.showLoading(), allowOutsideClick: false });
             try {
+                // 直接呼叫 5-5 封裝好的工具函式處理照片上傳與轉譯 safePointKey
                 const photoUrls = await window.uploadPhotosToStorage(res.photos, kmlId, pointKey, kmlLayerName);
-
+    
                 const structuredData = {
                     pointName: pointKey,
                     status: "已完成",
@@ -1672,18 +1606,11 @@
                     photos: photoUrls, 
                     updatedAt: firebase.firestore.FieldValue.serverTimestamp()
                 };
-
-                // 1. 同步全域記憶體紀錄狀態
+    
                 if (!window.auditLayersState) window.auditLayersState = {};
                 if (!window.auditLayersState[kmlId]) window.auditLayersState[kmlId] = {};
                 window.auditLayersState[kmlId][pointKey] = structuredData;
-
-                // 2. 確保清查模式開啟
-                if (!window.globalAuditConfigs) window.globalAuditConfigs = {};
-                if (!window.globalAuditConfigs[kmlId]) window.globalAuditConfigs[kmlId] = {};
-                window.globalAuditConfigs[kmlId].isAuditing = true;
-
-                // 3. 寫入 Firestore
+    
                 const appPath = typeof APP_PATH !== 'undefined' ? APP_PATH : 'kmlData';
                 await firebase.firestore()
                     .collection(appPath)
@@ -1691,30 +1618,15 @@
                     .collection('auditRecords')
                     .doc(pointKey) 
                     .set(structuredData, { merge: true });
-
-                // 4. 【即時變色核心】
-                if (typeof applyAuditStyleToLayer === 'function') {
-                    applyAuditStyleToLayer(activePoint, true, false);
-                } else if (typeof forceMapRefresh === 'function') {
-                    forceMapRefresh();
-                }
-
+    
                 if (typeof generateLayerCsvReport === 'function') {
                     await generateLayerCsvReport(kmlId, kmlLayerName, maxPhotos);
                 }
-
-                // 5. 解除當前選取點位
-                window.currentSelectedPoint = null;
-
+    
                 Swal.fire({ icon: 'success', title: '更新成功', timer: 1000, showConfirmButton: false });
-
-                // 6. 同步按鈕
-                if (typeof updateBottomBtnState === 'function') {
-                    setTimeout(updateBottomBtnState, 200);
-                } else if (typeof syncAuditButtonVisibility === 'function') {
-                    setTimeout(syncAuditButtonVisibility, 200);
-                }
-
+    
+                if (typeof forceMapRefresh === 'function') forceMapRefresh();
+                if (typeof updateBottomBtnState === 'function') setTimeout(updateBottomBtnState, 300);
             } catch (e) { 
                 console.error("儲存清查資料失敗:", e);
                 Swal.fire('錯誤', e.message || '儲存失敗', 'error'); 
@@ -1741,7 +1653,7 @@
             title: `清查紀錄：${escapeHtml(pointKey)}`,
             html: `<div style="text-align: left; font-size:14px;">
                 <p><b>設備狀況：</b><span style="color:#e91e63; font-weight:bold;">🟢 ${escapeHtml(record.deviceStatus || '正常')}</span></p>
-                <p><b>現場備註：</b><br>${escapeHtml(record.note || record.remark || '無備註')}</p>
+                <p><b>現場備註：</b><br>${escapeHtml(record.note || '無備註')}</p>
                 <p><b>現場照片：</b></p>
                 <div style="display:flex; flex-wrap:wrap;">${imagesHtml || '無照片'}</div>
             </div>`,
@@ -1750,7 +1662,7 @@
     };
 
     // ---------------------------------------------------------
-    // 8.打包 Firebase Storage 照片
+    // 8.打包 Firebase Storage 照片 (直連原生 CORS 下載)
     // ---------------------------------------------------------
     window.downloadAuditPhotosZip = async function(kmlId, appId = 'default') {
         if (typeof JSZip === 'undefined' || typeof saveAs === 'undefined') {
@@ -1923,7 +1835,7 @@
     }
 
     // ---------------------------------------------------------
-    // 10. Leaflet 地圖初始化掛載
+    // 10. Leaflet 地圖初始化掛載 (破圖修復機制)
     // ---------------------------------------------------------
     let checkAttempts = 0;
     const maxAttempts = 30; 
@@ -1934,12 +1846,14 @@
             
             const map = window.mapNamespace.map;
 
+            // 監聽拖曳結束與縮放，自動校正與重新補圖
             map.on('moveend zoomend resize', function() {
                 setTimeout(() => {
                     map.invalidateSize({ animate: false });
                 }, 100);
             });
 
+            // 優化 TileLayer 緩衝，設定拖曳時即時載入，減少空白破圖
             map.eachLayer(function(layer) {
                 if (layer instanceof L.TileLayer) {
                     layer.options.keepBuffer = 4;
