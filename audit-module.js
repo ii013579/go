@@ -1,7 +1,7 @@
 ﻿/**
  * ============================================================================
- * Audit & Site Verification Module (v3.16 Single-File Production Version)
- * 特點：自帶 CSS 樣式動態注入，無須額外引入外部 CSS 檔，直接載入即可使用。
+ * Audit & Site Verification Module (v3.16 Final Production Version)
+ * 包含：自帶 CSS 樣式、Firebase v8 相容語法、地圖點擊綁定與延遲初始化
  * ============================================================================
  */
 
@@ -220,7 +220,7 @@
     };
 
     // ------------------------------------------------------------------------
-    // 2. Storage 檔案處理與上傳模組
+    // 2. Storage 檔案處理與上傳模組 (Firebase v8)
     // ------------------------------------------------------------------------
     const AuditStorage = {
         async uploadPhotos(layerName, pointKey, filesArray) {
@@ -501,10 +501,9 @@
         }
     };
 
-    document.addEventListener('DOMContentLoaded', () => {
-        window.AuditModule.updateAuditBottomMenuUI();
-    });
-    
+    // ------------------------------------------------------------------------
+    // 5. 延遲初始化控制 (與 v3.15 相同的 500ms 緩衝保護)
+    // ------------------------------------------------------------------------
     setTimeout(() => {
         if (window.AuditModule && typeof window.AuditModule.updateAuditBottomMenuUI === 'function') {
             window.AuditModule.updateAuditBottomMenuUI();
