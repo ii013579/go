@@ -136,44 +136,73 @@
 
     function forceMapRefresh() {
         const ns = window.mapNamespace;
-        const kmlId = ns?.currentKmlLayerId;
+        const kmlId = ns?.currentKmlLayerId || window.currentActiveKmlId;
         if (!ns?.map || !kmlId) return;
-
-        setTimeout(() => {
-            if (ns.map && typeof ns.map.invalidateSize === 'function') {
-                ns.map.invalidateSize({ animate: false });
-            }
-        }, 100);
-
+    
+        const map = ns.map;
+    
+        // 1. 🎯 鎖定上傳前的地圖中心點與縮放層級 (防止畫面跑掉)
+        const currentCenter = map.getCenter();
+        const currentZoom = map.getZoom();
+    
         const records = window.auditLayersState[kmlId] || {};
         const showAuditMode = window.globalAuditConfigs[kmlId]?.isAuditing && canSeeAuditColors();
-
-        ns.map.eachLayer(layer => {
+    
+        // 2. 🟡🔵 遍歷並即時更新圓點顏色 (已清查:黃色 / 未清查:藍色)
+        map.eachLayer(layer => {
             if (layer.feature && layer.feature.properties) {
                 const props = layer.feature.properties;
                 const pointKey = getPointKey(props);
                 const record = records[pointKey];
-
+                const isAudited = !!record;
+    
+                props.isAudited = isAudited;
                 if (showAuditMode && record) {
-                    props.isAudited = true;
                     props.auditStatus = record.deviceStatus || "正常";
                     props.photos = record.photos || [];
                     props.auditNote = record.note;
-                } else {
-                    props.isAudited = false;
                 }
-                applyMarkerStyle(layer, !!record, showAuditMode);
+    
+                if (typeof layer.setStyle === 'function') {
+                    if (showAuditMode) {
+                        layer.setStyle({
+                            fillColor: isAudited ? "#FCD770" : "#2A00D2",
+                            color: "#ffffff",
+                            weight: 2,
+                            fillOpacity: 0.85,
+                            radius: 8
+                        });
+                    } else {
+                        layer.setStyle({
+                            fillColor: "#e74c3c",
+                            color: "#ffffff",
+                            weight: 1.5,
+                            fillOpacity: 0.85,
+                            radius: 8
+                        });
+                    }
+                }
             }
         });
-
-        if (window.addGeoJsonLayers && ns.allKmlFeatures) {
-            window.addGeoJsonLayers(ns.allKmlFeatures);
-        }
-
+    
+        // 3. 🎯 強制保持原本 Viewport 視角
+        map.setView(currentCenter, currentZoom, { animate: false });
+    
+        // 4. 🛠️ 自動補強：多段式觸發重新計算地圖高度，避開 Swal 關閉動畫時間差，徹底消除下方灰邊
+        const fixMapLayout = () => {
+            if (map && typeof map.invalidateSize === 'function') {
+                map.invalidateSize({ animate: false });
+            }
+        };
+    
+        requestAnimationFrame(fixMapLayout);
+        setTimeout(fixMapLayout, 150);
+        setTimeout(fixMapLayout, 350);
+    
         syncAuditButtonVisibility();
     }
     window.forceMapRefresh = forceMapRefresh;
-
+    
     // ---------------------------------------------------------
     // 2. 底部控制按鈕面板 (僅針對選取的點位)
     // ---------------------------------------------------------
