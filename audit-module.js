@@ -1,5 +1,5 @@
 ﻿/**
- * audit-module.js - 清查與修改覆蓋整合優化版 (v3.18 CSS樣式修復版)
+ * audit-module.js - 清查與修改覆蓋整合優化版 (v3.19 加回獨立新增點位按鈕版)
  */
 (function() {
     'use strict';
@@ -247,7 +247,7 @@
     }
 
     // ---------------------------------------------------------
-    // 5. 統一點位編輯 Modal (補回表單 CSS 樣式)
+    // 5. 統一點位編輯 Modal
     // ---------------------------------------------------------
     window.openAuditEditor = async function(isModifyMode = false, isCustomNew = false) {
         if (!checkHasAuditPermission()) return;
@@ -288,7 +288,6 @@
             }
         };
 
-        // 常用的輸入框樣式
         const inputStyle = "width:100%; padding:10px; border:1px solid #dcdfe6; border-radius:6px; box-sizing:border-box; margin-top:4px; margin-bottom:12px; font-size:14px;";
 
         const { value: res, isDenied } = await Swal.fire({
@@ -356,8 +355,71 @@
     };
 
     // ---------------------------------------------------------
-    // 6. 地圖懸浮與底欄按鈕機制
+    // 6. 新增點位與地圖懸浮按鈕機制
     // ---------------------------------------------------------
+    window.startAddCustomPoint = function(kmlId) {
+        if (!checkHasAuditPermission()) return Swal.fire('權限不足', '不允許新增點位', 'warning');
+        const targetKmlId = kmlId || window.currentActiveKmlId || window.mapNamespace?.currentKmlLayerId;
+        const map = window.mapNamespace?.map;
+        if (!map || !targetKmlId) return Swal.fire('提示', '請先選擇或加載圖層', 'info');
+
+        Swal.fire({
+            title: '請在地圖上點擊位置',
+            text: '點擊地圖任意位置以新增該點位',
+            icon: 'info',
+            toast: true,
+            position: 'top',
+            showConfirmButton: false,
+            timer: 3000
+        });
+
+        map.getContainer().style.cursor = 'crosshair';
+        const handleMapClick = e => {
+            map.off('click', handleMapClick);
+            map.getContainer().style.cursor = '';
+            window.currentSelectedPoint = { 
+                properties: { 
+                    kmlId: targetKmlId, 
+                    lat: e.latlng.lat, 
+                    lng: e.latlng.lng, 
+                    isCustomPoint: true 
+                } 
+            };
+            window.openAuditEditor(false, true);
+        };
+        map.on('click', handleMapClick);
+    };
+
+    // 動態繪製/綁定獨立的「新增點位按鈕」
+    function renderStandaloneAddButton() {
+        let btn = document.getElementById('btn-standalone-add-point');
+        if (!btn) {
+            btn = document.createElement('button');
+            btn.id = 'btn-standalone-add-point';
+            btn.innerHTML = '➕ 新增點位';
+            Object.assign(btn.style, {
+                position: 'fixed',
+                top: '80px',
+                right: '20px',
+                zIndex: '4000',
+                background: '#4CAF50',
+                color: 'white',
+                border: 'none',
+                padding: '10px 16px',
+                borderRadius: '20px',
+                boxShadow: '0 2px 6px rgba(0,0,0,0.3)',
+                fontWeight: 'bold',
+                cursor: 'pointer',
+                display: 'none',
+                alignItems: 'center',
+                gap: '6px'
+            });
+            btn.onclick = () => window.startAddCustomPoint();
+            document.body.appendChild(btn);
+        }
+        syncAuditButtonVisibility();
+    }
+
     function updateBottomBtnState() {
         if (!bottomControl?._container) return;
         const container = bottomControl._container;
@@ -393,22 +455,6 @@
     }
     window.addEventListener('click', () => setTimeout(updateBottomBtnState, 150));
 
-    window.startAddCustomPoint = function(kmlId) {
-        if (!checkHasAuditPermission()) return Swal.fire('權限不足', '不允許新增點位', 'warning');
-        const targetKmlId = kmlId || window.currentActiveKmlId || window.mapNamespace?.currentKmlLayerId;
-        const map = window.mapNamespace?.map;
-        if (!map || !targetKmlId) return;
-
-        map.getContainer().style.cursor = 'crosshair';
-        const handleMapClick = e => {
-            map.off('click', handleMapClick);
-            map.getContainer().style.cursor = '';
-            window.currentSelectedPoint = { properties: { kmlId: targetKmlId, lat: e.latlng.lat, lng: e.latlng.lng, isCustomPoint: true } };
-            window.openAuditEditor(false, true);
-        };
-        map.on('click', handleMapClick);
-    };
-
     // ---------------------------------------------------------
     // 7. 監聽與初始化
     // ---------------------------------------------------------
@@ -434,6 +480,7 @@
             clearInterval(checkMapInterval);
             const map = window.mapNamespace.map;
 
+            // 建立地圖底欄選單容器
             const AuditMenu = L.Control.extend({
                 onAdd: function() {
                     this._container = L.DomUtil.create('div', 'audit-bottom-menu');
@@ -443,6 +490,9 @@
             });
             bottomControl = new AuditMenu();
             bottomControl.addTo(map);
+
+            // 掛載獨立「新增點位按鈕」並進行監聽初始化
+            renderStandaloneAddButton();
             initGlobalConfigListener();
         } else if (++checkAttempts >= 30) {
             clearInterval(checkMapInterval);
