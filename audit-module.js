@@ -1,5 +1,5 @@
 ﻿/**
- * audit-module.js - 清查與修改覆蓋整合優化版 (v3.16 程式碼重構精簡版)
+ * audit-module.js - 清查與修改覆蓋整合優化版 (v3.17 漏洞修正與精簡版)
  */
 (function() {
     'use strict';
@@ -761,6 +761,8 @@
     
     // =========================================================
     // 5-5. Firebase Storage 照片上傳處理 (通用工具函式 & UI 選單)
+    // ---------------------------------------------------------
+    // [Bug 1 修正]: 為 pointKey 補上預設防護，避免產生 undefined_01.jpg 檔名
     // =========================================================
     window.uploadPhotosToStorage = async function(photos, kmlId, pointKey, kmlLayerName) {
         if (!photos || !Array.isArray(photos) || photos.length === 0) return [];
@@ -768,7 +770,7 @@
 
         const targetLayerName = kmlLayerName || getLayerFolderName(kmlId);
         const storageRef = firebase.storage().ref();
-        const safePointKey = String(pointKey).replace(/[/\\?%*:|"<>]/g, '_');
+        const safePointKey = String(pointKey || 'point').replace(/[/\\?%*:|"<>]/g, '_');
 
         const uploadPromises = photos.map(async (photoData, index) => {
             if (!photoData) return '';
@@ -935,6 +937,9 @@
     
     // =========================================================
     // 5-6. 清查資料編輯、修改與刪除紀錄邏輯
+    // ---------------------------------------------------------
+    // [Bug 2 修正]: 替換不存在的 deleteCustomPointFromFirestore 為 window.deleteCustomPoint
+    // [Bug 3 修正]: 改用 didOpen 內置事件監聽處理 Base64 壓縮，維護獨立陣列狀態
     // =========================================================
     window.openAuditEditor = async function(isModifyMode = false) {
         if (!checkHasAuditPermission()) return;
@@ -973,36 +978,6 @@
                 ${baseStatusOptions.filter(opt => opt !== '新增').map(opt => `<option value="${opt}" ${currentStatus === opt ? 'selected' : ''}>${opt}</option>`).join('')}
             </select>`;
 
-        window._tempPreview = function(input, index) {
-            if (input.files?.[0]) {
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    const img = new Image();
-                    img.onload = () => {
-                        const canvas = document.createElement('canvas');
-                        let width = img.width, height = img.height, max_size = 1920;
-                        if (width > height) { if (width > max_size) { height *= max_size / width; width = max_size; } } 
-                        else { if (height > max_size) { width *= max_size / height; height = max_size; } }
-                        canvas.width = width; canvas.height = height;
-                        canvas.getContext('2d').drawImage(img, 0, 0, width, height);
-                        const base64 = canvas.toDataURL('image/jpeg', 0.82);
-                        
-                        const prevEl = document.getElementById('audit-prev-' + index);
-                        const iconEl = document.getElementById('audit-icon-' + index);
-                        const tagEl = document.getElementById('audit-tag-' + index);
-
-                        if (prevEl) { prevEl.src = base64; prevEl.style.display = 'block'; }
-                        if (iconEl) iconEl.style.display = 'none';
-                        if (tagEl) tagEl.innerHTML = '<span>🖼️</span> 新選擇';
-
-                        currentPhotos[index] = base64;
-                    };
-                    img.src = e.target.result;
-                };
-                reader.readAsDataURL(input.files[0]);
-            }
-        };
-
         let photoHtml = '';
         for (let i = 0; i < maxPhotos; i++) {
             const photoData = currentPhotos[i] || '';
@@ -1013,9 +988,9 @@
                     <div style="border:2px dashed #ccc; height:85px; position:relative; display:flex; align-items:center; justify-content:center; background:#fafafa; border-radius:8px; overflow:hidden;">
                         <img id="audit-prev-${i}" src="${photoData}" style="width:100%; height:100%; object-fit:cover; display:${photoData ? 'block' : 'none'}; position:absolute; top:0; left:0; z-index:1;">
                         <span id="audit-icon-${i}" style="font-size:24px; color:#bbb; display:${photoData ? 'none' : 'block'}; z-index:1;">📷</span>
-                        <input type="file" id="audit-file-input-${i}" accept="image/*" capture="environment" onchange="window._tempPreview(this, ${i})" style="position:absolute; width:100%; height:100%; opacity:0; z-index:2; cursor:pointer;" title="直接拍照">
+                        <input type="file" id="audit-file-input-${i}" data-index="${i}" accept="image/*" capture="environment" style="position:absolute; width:100%; height:100%; opacity:0; z-index:2; cursor:pointer;" title="直接拍照">
                     </div>
-                    <input type="file" id="audit-gallery-input-${i}" accept="image/*" onchange="window._tempPreview(this, ${i})" style="display:none;">
+                    <input type="file" id="audit-gallery-input-${i}" data-index="${i}" accept="image/*" style="display:none;">
                     <label for="audit-gallery-input-${i}" id="audit-tag-${i}" style="position:absolute; left:50%; transform:translateX(-50%); bottom:-10px; z-index:3; background:#444; color:#fff; font-size:11px; padding:2px 8px; border-radius:10px; display:flex; align-items:center; gap:3px; white-space:nowrap; cursor:pointer; box-shadow:0 2px 4px rgba(0,0,0,0.2);">
                         ${isUrl ? '<span>🖼️</span> 舊照片' : (photoData ? '<span>🖼️</span> 新選擇' : '<span>📁</span> 開啟舊檔')}
                     </label>
@@ -1038,7 +1013,47 @@
             denyButtonColor: '#e74c3c',
             confirmButtonText: isModifyMode ? '覆蓋更新' : '確認並上傳',
             cancelButtonText: '取消',
-            didOpen: () => setPointAddBtnVisible(false),
+            didOpen: (modalEl) => {
+                setPointAddBtnVisible(false);
+
+                // 綁定動態動態圖片壓縮與預覽事件
+                const handlePhotoChange = (inputEl, index) => {
+                    if (inputEl.files?.[0]) {
+                        const reader = new FileReader();
+                        reader.onload = (e) => {
+                            const img = new Image();
+                            img.onload = () => {
+                                const canvas = document.createElement('canvas');
+                                let width = img.width, height = img.height, max_size = 1920;
+                                if (width > height) { if (width > max_size) { height *= max_size / width; width = max_size; } } 
+                                else { if (height > max_size) { width *= max_size / height; height = max_size; } }
+                                canvas.width = width; canvas.height = height;
+                                canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+                                const base64 = canvas.toDataURL('image/jpeg', 0.82);
+                                
+                                const prevEl = document.getElementById('audit-prev-' + index);
+                                const iconEl = document.getElementById('audit-icon-' + index);
+                                const tagEl = document.getElementById('audit-tag-' + index);
+
+                                if (prevEl) { prevEl.src = base64; prevEl.style.display = 'block'; }
+                                if (iconEl) iconEl.style.display = 'none';
+                                if (tagEl) tagEl.innerHTML = '<span>🖼️</span> 新選擇';
+
+                                currentPhotos[index] = base64;
+                            };
+                            img.src = e.target.result;
+                        };
+                        reader.readAsDataURL(inputEl.files[0]);
+                    }
+                };
+
+                for (let i = 0; i < maxPhotos; i++) {
+                    const cameraInput = modalEl.querySelector(`#audit-file-input-${i}`);
+                    const galleryInput = modalEl.querySelector(`#audit-gallery-input-${i}`);
+                    if (cameraInput) cameraInput.onchange = (e) => handlePhotoChange(e.target, i);
+                    if (galleryInput) galleryInput.onchange = (e) => handlePhotoChange(e.target, i);
+                }
+            },
             willClose: () => syncAuditButtonVisibility(),
             preConfirm: () => {
                 const statusValue = document.getElementById('swal-status').value;
@@ -1051,54 +1066,10 @@
             }
         });
 
-        delete window._tempPreview;
-
         if (isDenied) {
-            const confirmDelete = await Swal.fire({
-                title: '確定要刪除此新增點位？',
-                text: `點位 [ ${pointKey} ] 的 Storage 照片、清查紀錄與 CSV 報表資料將會被永久移除。`,
-                icon: 'warning',
-                showCancelButton: true,
-                confirmButtonColor: '#d33',
-                cancelButtonColor: '#3085d6',
-                confirmButtonText: '確定刪除',
-                cancelButtonText: '取消'
-            });
-
-            if (confirmDelete.isConfirmed) {
-                Swal.fire({ title: '正在清理 Storage 照片與紀錄...', didOpen: () => Swal.showLoading(), allowOutsideClick: false });
-                try {
-                    if (Array.isArray(historyRecord.photos)) {
-                        await Promise.all(historyRecord.photos.map(async (photoUrl) => {
-                            if (photoUrl?.startsWith('http')) {
-                                try { await firebase.storage().refFromURL(photoUrl).delete(); } catch (err) {}
-                            }
-                        }));
-                    }
-
-                    await firebase.firestore().collection(APP_PATH).doc(kmlId).collection('auditRecords').doc(pointKey).delete();
-
-                    if (typeof deleteCustomPointFromFirestore === 'function') {
-                        await deleteCustomPointFromFirestore(kmlId, pointKey);
-                    }
-
-                    if (window.auditLayersState?.[kmlId]?.[pointKey]) delete window.auditLayersState[kmlId][pointKey];
-                    if (typeof generateLayerCsvReport === 'function') await generateLayerCsvReport(kmlId, kmlLayerName, maxPhotos);
-
-                    if (activePoint && typeof activePoint.remove === 'function') {
-                        activePoint.remove();
-                    } else if (window.mapNamespace?.map && activePoint) {
-                        window.mapNamespace.map.removeLayer(activePoint);
-                    }
-
-                    Swal.fire({ icon: 'success', title: '點位與照片已成功徹底刪除', timer: 1200, showConfirmButton: false });
-                    forceMapRefresh();
-                    setTimeout(updateBottomBtnState, 300);
-
-                } catch (e) {
-                    console.error("徹底刪除點位失敗:", e);
-                    Swal.fire('錯誤', e.message || '刪除失敗', 'error');
-                }
+            // [Bug 2 修正]: 呼叫現有的全域 deleteCustomPoint
+            if (typeof window.deleteCustomPoint === 'function') {
+                await window.deleteCustomPoint(kmlId, pointKey, kmlLayerName);
             }
             return;
         }
