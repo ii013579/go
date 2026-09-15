@@ -1,5 +1,5 @@
 ﻿/**
- * audit-module.js - 清查與修改覆蓋整合優化版 (v3.23 照片單行四格版)
+ * audit-module.js - 清查與修改覆蓋整合優化版 (v3.24 地圖灰邊與點位狀態即時更新版)
  */
 (function() {
     'use strict';
@@ -44,8 +44,8 @@
     window.escapeHtml = safeEscape;
 
     const STYLE_PRESETS = {
-        audited:   { fillColor: "#ff85c0", color: "#ffffff", weight: 2, fillOpacity: 0.9, radius: 10 },
-        unaudited: { fillColor: "#3498db", color: "#ffffff", weight: 2, fillOpacity: 0.9, radius: 10 },
+        audited:   { fillColor: "#FCD770", color: "#ffffff", weight: 2, fillOpacity: 0.9, radius: 10 }, // 黃色已清查
+        unaudited: { fillColor: "#2A00D2", color: "#ffffff", weight: 2, fillOpacity: 0.9, radius: 10 }, // 藍色未清查
         default:   { fillColor: "#e74c3c", color: "#ffffff", weight: 1.5, fillOpacity: 0.85, radius: 8 }
     };
 
@@ -73,7 +73,7 @@
     window.syncAuditButtonVisibility = syncAuditButtonVisibility;
 
     // ---------------------------------------------------------
-    // 2. 地圖圖層與樣式重繪
+    // 2. 地圖圖層與樣式重繪 (確保灰邊問題解決 & 點位狀態即時更新)
     // ---------------------------------------------------------
     const originalAddLayers = window.addGeoJsonLayers;
     window.addGeoJsonLayers = function(features) {
@@ -109,22 +109,29 @@
 
     function forceMapRefresh() {
         const ns = window.mapNamespace;
-        const kmlId = ns?.currentKmlLayerId;
+        const kmlId = ns?.currentKmlLayerId || window.currentActiveKmlId;
+        
+        // 修正地圖灰邊問題：重新計算尺寸
+        if (ns?.map) {
+            setTimeout(() => {
+                ns.map.invalidateSize({ animate: false });
+            }, 100);
+        }
+
         if (!ns?.map || !kmlId) {
             syncAuditButtonVisibility();
             return;
         }
 
-        setTimeout(() => ns.map?.invalidateSize?.({ animate: false }), 100);
-
         const records = window.auditLayersState[kmlId] || {};
-        const showAuditMode = window.globalAuditConfigs[kmlId]?.isAuditing && canSeeAuditColors();
+        const showAuditMode = (window.globalAuditConfigs[kmlId]?.isAuditing ?? true) && canSeeAuditColors();
 
+        // 逐一更新圖層樣式（即時反映藍/黃狀態）
         ns.map.eachLayer(layer => {
             const props = layer.feature?.properties;
             if (!props) return;
 
-            const pointKey = props.name || props.title || props.id || "未知點位";
+            const pointKey = props.name || props.title || props.id || props.auditPointKey || "未知點位";
             const record = records[pointKey];
 
             if (showAuditMode) {
@@ -132,9 +139,16 @@
                 if (record) {
                     Object.assign(props, { auditStatus: record.deviceStatus || "正常", photos: record.photos || [], auditNote: record.note });
                 }
-                layer.setStyle?.(record ? STYLE_PRESETS.audited : STYLE_PRESETS.unaudited);
+                
+                // 套用樣式
+                const style = record ? STYLE_PRESETS.audited : STYLE_PRESETS.unaudited;
+                if (layer.setStyle) {
+                    layer.setStyle(style);
+                } else if (layer.setOptions) {
+                    layer.setOptions(style);
+                }
             } else {
-                layer.setStyle?.(STYLE_PRESETS.default);
+                if (layer.setStyle) layer.setStyle(STYLE_PRESETS.default);
             }
         });
 
@@ -201,6 +215,7 @@
         });
         if (!confirmRes.isConfirmed) {
             syncAuditButtonVisibility(false);
+            forceMapRefresh();
             return;
         }
 
@@ -216,6 +231,7 @@
         } catch (e) {
             Swal.fire('錯誤', e.message || '刪除失敗', 'error');
             syncAuditButtonVisibility(false);
+            forceMapRefresh();
         }
     };
 
@@ -280,7 +296,6 @@
         const kmlId = layerProps.kmlId || window.mapNamespace?.currentKmlLayerId;
         const config = window.globalAuditConfigs?.[kmlId] || {};
         
-        // 原設定四格 (4張)
         const maxPhotos = config.targetPhotos || 4;
 
         const selectEl = document.getElementById('kmlLayerSelect');
@@ -290,17 +305,14 @@
         const isUserCreated = isCustomNew || layerProps.isCustomPoint || historyRecord.deviceStatus === '新增';
         const currentPhotos = Array.from({ length: maxPhotos }, (_, i) => historyRecord.photos?.[i] || '');
 
-        // 單行四格 CSS 結構調整
         let photoHtml = currentPhotos.map((url, i) => `
             <div style="position:relative; flex:1; min-width:0; display:flex; flex-direction:column; align-items:center;">
-                <!-- 上方相機拍照區 -->
                 <div style="position:relative; border:2px dashed #ccc; background:#fbfbfb; width:100%; aspect-ratio:1/1; border-radius:8px; display:flex; align-items:center; justify-content:center; overflow:hidden; cursor:pointer;">
                     <img id="prev-${i}" src="${url}" style="width:100%; height:100%; object-fit:cover; display:${url ? 'block' : 'none'};">
                     <span id="icon-${i}" style="font-size:20px; opacity:0.6; display:${url ? 'none' : 'block'};">📷</span>
                     <input type="file" accept="image/*" capture="environment" onchange="window._previewImage(this, ${i})" style="position:absolute; top:0; left:0; width:100%; height:100%; opacity:0; cursor:pointer; z-index:2;">
                 </div>
                 
-                <!-- 下方開啟舊檔按鈕 -->
                 <label style="position:relative; margin-top:-10px; z-index:5; background:#343a40; color:white; padding:2px 4px; border-radius:8px; font-size:10px; font-weight:bold; cursor:pointer; display:flex; align-items:center; justify-content:center; width:90%; white-space:nowrap; box-shadow:0 2px 4px rgba(0,0,0,0.2);">
                     📁 舊檔
                     <input type="file" accept="image/*" onchange="window._previewImage(this, ${i})" style="position:absolute; top:0; left:0; width:100%; height:100%; opacity:0; cursor:pointer;">
@@ -339,7 +351,6 @@
                     </select>
 
                     <label style="font-weight:bold; display:block; margin-bottom:6px;">現場照片 (需滿 ${maxPhotos} 張) <span style="color:red;">*必填</span></label>
-                    <!-- 四格單一行 (1 line 4 items) -->
                     <div style="display:flex; flex-direction:row; justify-content:space-between; gap:6px; margin-bottom:12px; width:100%;">
                         ${photoHtml}
                     </div>
@@ -367,8 +378,10 @@
 
         delete window._previewImage;
 
+        // 若取消直接離開，關閉彈窗並恢復地圖及按鈕
         if (isDismissed) {
             syncAuditButtonVisibility(false);
+            forceMapRefresh();
             return;
         }
 
@@ -389,13 +402,17 @@
                 await getDb().collection(APP_PATH).doc(kmlId).collection('auditRecords').doc(res.name).set(structuredData, { merge: true });
                 await generateLayerCsvReport(kmlId, kmlLayerName, maxPhotos);
 
+                // 取消點位選取
                 window.currentSelectedPoint = null;
 
                 Swal.fire({ icon: 'success', title: '儲存成功', timer: 1000, showConfirmButton: false });
+                
+                // 立即重置地圖尺寸及刷新藍/黃點狀態
                 forceMapRefresh();
             } catch (e) {
                 Swal.fire('錯誤', e.message || '儲存失敗', 'error');
                 syncAuditButtonVisibility(false);
+                forceMapRefresh();
             }
         }
     };
