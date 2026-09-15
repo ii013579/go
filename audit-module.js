@@ -1,5 +1,5 @@
 ﻿/**
- * audit-module.js - 清查與修改覆蓋整合優化版 (v3.17 精簡重構版)
+ * audit-module.js - 清查與修改覆蓋整合優化版 (v3.18 CSS樣式修復版)
  */
 (function() {
     'use strict';
@@ -157,14 +157,12 @@
         const safePointKey = String(pointKey).replace(/[/\\?%*:|"<>]/g, '_');
         const storageRef = getStorage().ref();
 
-        // 刪除 Storage 照片
         if (existingPhotos.length > 0) {
             await Promise.all(existingPhotos.map(url => url?.startsWith('http') ? getStorage().refFromURL(url).delete().catch(() => {}) : null));
         } else {
             await Promise.all([1, 2, 3].map(i => storageRef.child(`${rootPath}/${kmlLayerName}/${safePointKey}_0${i}.jpg`).delete().catch(() => {})));
         }
 
-        // 刪除 Firestore 紀錄與本地快取
         await getDb().collection(APP_PATH).doc(kmlId).collection('auditRecords').doc(pointKey).delete();
         delete window.auditLayersState?.[kmlId]?.[pointKey];
 
@@ -249,7 +247,7 @@
     }
 
     // ---------------------------------------------------------
-    // 5. 統一點位編輯 Modal (整合新增與修改)
+    // 5. 統一點位編輯 Modal (補回表單 CSS 樣式)
     // ---------------------------------------------------------
     window.openAuditEditor = async function(isModifyMode = false, isCustomNew = false) {
         if (!checkHasAuditPermission()) return;
@@ -269,8 +267,8 @@
         const currentPhotos = Array.from({ length: maxPhotos }, (_, i) => historyRecord.photos?.[i] || '');
 
         let photoHtml = currentPhotos.map((url, i) => `
-            <div style="position:relative; margin-bottom:12px; width:80px;">
-                <div style="border:2px dashed #ccc; height:80px; width:80px; display:flex; align-items:center; justify-content:center; background:#fafafa; border-radius:8px; overflow:hidden;">
+            <div style="position:relative; margin-bottom:8px; width:80px;">
+                <div style="border:2px dashed #dcdfe6; height:80px; width:80px; display:flex; align-items:center; justify-content:center; background:#fafafa; border-radius:8px; overflow:hidden;">
                     <img id="prev-${i}" src="${url}" style="width:100%; height:100%; object-fit:cover; display:${url ? 'block' : 'none'};">
                     <span id="icon-${i}" style="font-size:24px; color:#bbb; display:${url ? 'none' : 'block'};">📷</span>
                     <input type="file" accept="image/*" capture="environment" onchange="window._previewImage(this, ${i})" style="position:absolute; width:100%; height:100%; opacity:0; cursor:pointer;">
@@ -290,19 +288,30 @@
             }
         };
 
+        // 常用的輸入框樣式
+        const inputStyle = "width:100%; padding:10px; border:1px solid #dcdfe6; border-radius:6px; box-sizing:border-box; margin-top:4px; margin-bottom:12px; font-size:14px;";
+
         const { value: res, isDenied } = await Swal.fire({
             title: `${isModifyMode ? '修改' : '填寫'}清查紀錄`,
             html: `
-                <div style="text-align:left; font-size:14px;">
-                    ${isCustomNew ? `<label>點位名稱</label><input id="swal-name" class="swal2-input" value="${pointKey === '新增點位' ? '' : pointKey}">` : `<p><b>點位:</b> ${safeEscape(pointKey)}</p>`}
-                    <label>設備狀態</label>
-                    <select id="swal-status" class="swal2-input" ${isUserCreated ? 'disabled' : ''}>
+                <div style="text-align:left; font-size:14px; color:#333;">
+                    ${isCustomNew ? `
+                        <label style="font-weight:bold;">點位名稱</label>
+                        <input id="swal-name" style="${inputStyle}" value="${pointKey === '新增點位' ? '' : pointKey}" placeholder="請輸入點位名稱">
+                    ` : `
+                        <p style="margin-bottom:12px; font-size:15px;"><b>點位名稱：</b> ${safeEscape(pointKey)}</p>
+                    `}
+                    
+                    <label style="font-weight:bold;">設備狀態</label>
+                    <select id="swal-status" style="${inputStyle}" ${isUserCreated ? 'disabled' : ''}>
                         ${isUserCreated ? '<option value="新增">新增</option>' : (config.statusOptions || ['正常','損壞','遺失']).map(o => `<option value="${o}" ${historyRecord.deviceStatus === o ? 'selected' : ''}>${o}</option>`).join('')}
                     </select>
-                    <label>現場照片 (${maxPhotos} 張)</label>
-                    <div style="display:flex; gap:10px; flex-wrap:wrap; margin:8px 0;">${photoHtml}</div>
-                    <label>備註事項</label>
-                    <textarea id="swal-note" class="swal2-textarea" style="height:60px;">${safeEscape(historyRecord.note || '')}</textarea>
+
+                    <label style="font-weight:bold; display:block; margin-bottom:4px;">現場照片 (${maxPhotos} 張)</label>
+                    <div style="display:flex; gap:12px; flex-wrap:wrap; margin-bottom:8px;">${photoHtml}</div>
+
+                    <label style="font-weight:bold;">備註事項</label>
+                    <textarea id="swal-note" style="${inputStyle} height:70px; resize:vertical;" placeholder="請輸入備註內容...">${safeEscape(historyRecord.note || '')}</textarea>
                 </div>`,
             showCancelButton: true,
             showDenyButton: isModifyMode && isUserCreated,
