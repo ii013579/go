@@ -1,5 +1,5 @@
 ﻿/**
- * audit-module.js - 清查與修改覆蓋整合優化版 (v3.22 還原相機/舊檔雙按鈕版)
+ * audit-module.js - 清查與修改覆蓋整合優化版 (v3.23 照片單行四格版)
  */
 (function() {
     'use strict';
@@ -176,7 +176,7 @@
         if (existingPhotos.length > 0) {
             await Promise.all(existingPhotos.map(url => url?.startsWith('http') ? getStorage().refFromURL(url).delete().catch(() => {}) : null));
         } else {
-            await Promise.all([1, 2, 3].map(i => storageRef.child(`${rootPath}/${kmlLayerName}/${safePointKey}_0${i}.jpg`).delete().catch(() => {})));
+            await Promise.all([1, 2, 3, 4].map(i => storageRef.child(`${rootPath}/${kmlLayerName}/${safePointKey}_0${i}.jpg`).delete().catch(() => {})));
         }
 
         await getDb().collection(APP_PATH).doc(kmlId).collection('auditRecords').doc(pointKey).delete();
@@ -210,7 +210,7 @@
             await deleteAuditRecord(kmlId, pointKey, kmlLayerName, records?.photos || []);
             
             window.currentSelectedPoint = null;
-            await generateLayerCsvReport(kmlId, kmlLayerName, 2);
+            await generateLayerCsvReport(kmlId, kmlLayerName, 4);
             Swal.fire({ icon: 'success', title: '刪除成功', timer: 1200, showConfirmButton: false });
             forceMapRefresh();
         } catch (e) {
@@ -222,7 +222,7 @@
     // ---------------------------------------------------------
     // 4. CSV 清冊與打包工具
     // ---------------------------------------------------------
-    async function generateLayerCsvReport(kmlId, kmlLayerName, maxPhotos = 2) {
+    async function generateLayerCsvReport(kmlId, kmlLayerName, maxPhotos = 4) {
         const activeKmlId = kmlId || window.currentActiveKmlId || window.mapNamespace?.currentKmlLayerId;
         const records = window.auditLayersState?.[activeKmlId] || {};
         const features = window.mapNamespace?.allKmlFeatures || [];
@@ -272,7 +272,6 @@
     window.openAuditEditor = async function(isModifyMode = false, isCustomNew = false) {
         if (!checkHasAuditPermission()) return;
 
-        // 開啟 Modal 時隱藏按鈕
         syncAuditButtonVisibility(true);
 
         const activePoint = window.currentSelectedPoint;
@@ -280,7 +279,9 @@
         const pointKey = layerProps.name || layerProps.title || layerProps.id || "新增點位";
         const kmlId = layerProps.kmlId || window.mapNamespace?.currentKmlLayerId;
         const config = window.globalAuditConfigs?.[kmlId] || {};
-        const maxPhotos = config.targetPhotos || 3;
+        
+        // 原設定四格 (4張)
+        const maxPhotos = config.targetPhotos || 4;
 
         const selectEl = document.getElementById('kmlLayerSelect');
         const kmlLayerName = (selectEl?.options[selectEl.selectedIndex]?.getAttribute('data-basename') || '預設區域').replace(/\.kml$/i, '').trim();
@@ -289,21 +290,19 @@
         const isUserCreated = isCustomNew || layerProps.isCustomPoint || historyRecord.deviceStatus === '新增';
         const currentPhotos = Array.from({ length: maxPhotos }, (_, i) => historyRecord.photos?.[i] || '');
 
-        // 依圖片展示 UI：中間是拍照，下方是開啟舊檔
+        // 單行四格 CSS 結構調整
         let photoHtml = currentPhotos.map((url, i) => `
-            <div style="position:relative; width:100px; display:flex; flex-direction:column; align-items:center; margin-bottom:12px;">
-                <!-- 上方照片區域 / 拍照觸發區 -->
-                <div style="position:relative; border:2px dashed #ccc; background:#fbfbfb; width:100px; height:100px; border-radius:12px; display:flex; align-items:center; justify-content:center; overflow:hidden; cursor:pointer;">
+            <div style="position:relative; flex:1; min-width:0; display:flex; flex-direction:column; align-items:center;">
+                <!-- 上方相機拍照區 -->
+                <div style="position:relative; border:2px dashed #ccc; background:#fbfbfb; width:100%; aspect-ratio:1/1; border-radius:8px; display:flex; align-items:center; justify-content:center; overflow:hidden; cursor:pointer;">
                     <img id="prev-${i}" src="${url}" style="width:100%; height:100%; object-fit:cover; display:${url ? 'block' : 'none'};">
-                    <span id="icon-${i}" style="font-size:32px; opacity:0.6; display:${url ? 'none' : 'block'};">📷</span>
-                    
-                    <!-- 點擊中間區域直接開啟相機 -->
+                    <span id="icon-${i}" style="font-size:20px; opacity:0.6; display:${url ? 'none' : 'block'};">📷</span>
                     <input type="file" accept="image/*" capture="environment" onchange="window._previewImage(this, ${i})" style="position:absolute; top:0; left:0; width:100%; height:100%; opacity:0; cursor:pointer; z-index:2;">
                 </div>
                 
-                <!-- 下方開啟舊檔小按鈕 -->
-                <label style="position:relative; margin-top:-14px; z-index:5; background:#343a40; color:white; padding:3px 10px; border-radius:12px; font-size:11px; font-weight:bold; cursor:pointer; display:flex; align-items:center; gap:4px; box-shadow:0 2px 4px rgba(0,0,0,0.2);">
-                    📁 開啟舊檔
+                <!-- 下方開啟舊檔按鈕 -->
+                <label style="position:relative; margin-top:-10px; z-index:5; background:#343a40; color:white; padding:2px 4px; border-radius:8px; font-size:10px; font-weight:bold; cursor:pointer; display:flex; align-items:center; justify-content:center; width:90%; white-space:nowrap; box-shadow:0 2px 4px rgba(0,0,0,0.2);">
+                    📁 舊檔
                     <input type="file" accept="image/*" onchange="window._previewImage(this, ${i})" style="position:absolute; top:0; left:0; width:100%; height:100%; opacity:0; cursor:pointer;">
                 </label>
             </div>`).join('');
@@ -321,10 +320,11 @@
             }
         };
 
-        const inputStyle = "width:100%; padding:10px; border:1px solid #dcdfe6; border-radius:6px; box-sizing:border-box; margin-top:4px; margin-bottom:12px; font-size:14px;";
+        const inputStyle = "width:100%; padding:8px 10px; border:1px solid #dcdfe6; border-radius:6px; box-sizing:border-box; margin-top:4px; margin-bottom:10px; font-size:14px;";
 
         const { value: res, isDenied, isDismissed } = await Swal.fire({
             title: `填寫清查紀錄 : ${safeEscape(pointKey)}`,
+            customClass: { popup: 'swal-wide-modal' },
             html: `
                 <div style="text-align:left; font-size:14px; color:#333;">
                     ${isCustomNew ? `
@@ -338,11 +338,14 @@
                         ${isUserCreated ? '<option value="新增" selected>新增</option>' : (config.statusOptions || ['正常','損壞','遺失']).map(o => `<option value="${o}" ${historyRecord.deviceStatus === o ? 'selected' : ''}>${o}</option>`).join('')}
                     </select>
 
-                    <label style="font-weight:bold; display:block; margin-bottom:8px;">現場照片 (需滿 ${maxPhotos} 張) <span style="color:red;">*必填</span></label>
-                    <div style="display:flex; justify-content:space-between; gap:8px; margin-bottom:12px;">${photoHtml}</div>
+                    <label style="font-weight:bold; display:block; margin-bottom:6px;">現場照片 (需滿 ${maxPhotos} 張) <span style="color:red;">*必填</span></label>
+                    <!-- 四格單一行 (1 line 4 items) -->
+                    <div style="display:flex; flex-direction:row; justify-content:space-between; gap:6px; margin-bottom:12px; width:100%;">
+                        ${photoHtml}
+                    </div>
 
                     <label style="font-weight:bold;">備註事項 (選填)</label>
-                    <textarea id="swal-note" style="${inputStyle} height:70px; resize:vertical;" placeholder="輸入備註事項...">${safeEscape(historyRecord.note || '')}</textarea>
+                    <textarea id="swal-note" style="${inputStyle} height:65px; resize:vertical;" placeholder="輸入備註事項...">${safeEscape(historyRecord.note || '')}</textarea>
                 </div>`,
             showCancelButton: true,
             showDenyButton: isModifyMode && isUserCreated,
@@ -386,7 +389,6 @@
                 await getDb().collection(APP_PATH).doc(kmlId).collection('auditRecords').doc(res.name).set(structuredData, { merge: true });
                 await generateLayerCsvReport(kmlId, kmlLayerName, maxPhotos);
 
-                // 取消選取點位
                 window.currentSelectedPoint = null;
 
                 Swal.fire({ icon: 'success', title: '儲存成功', timer: 1000, showConfirmButton: false });
