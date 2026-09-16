@@ -1,5 +1,5 @@
 ﻿/**
- * audit-module.js - 清查與修改覆蓋整合優化版 (v3.24 黃點開關完全修復版)
+ * audit-module.js - 清查與修改覆蓋整合優化版 (v3.25 介面精簡優化版)
  */
 (function() {
     'use strict';
@@ -100,7 +100,6 @@
     }
     window.getAuditProgress = getAuditProgress;
 
-    // 🟡 修正點 1: 點擊切換狀態並強制完整重新整理地圖與 UI
     window.toggleAuditedPointsVisibility = function() {
         window.showAuditedPoints = !window.showAuditedPoints;
         forceMapRefresh();
@@ -135,7 +134,6 @@
             const showAudit = isAuditingMode && canSeeAuditColors();
             const isAuditedVisible = window.showAuditedPoints !== false;
 
-            // 處理 features 屬性與隱藏判定
             features.forEach(f => {
                 if (!f.properties) f.properties = {};
                 f.properties.kmlId = kmlId;
@@ -154,7 +152,6 @@
                         f.properties.photos = record.photos || [];
                         f.properties.fillColor = "#FCD770"; // 🟡 已清查：黃色
                         
-                        // 🟡 徹底隱藏：同時將填滿與邊線透明度歸零
                         f.properties.fillOpacity = isAuditedVisible ? 0.85 : 0;
                         f.properties.opacity = isAuditedVisible ? 1 : 0;
                         f.properties.stroke = isAuditedVisible;
@@ -182,10 +179,8 @@
             });
         }
         
-        // 呼叫原本的加載函式
         const result = originalAddLayers ? originalAddLayers.apply(this, arguments) : null;
 
-        // 🟡 確保 Leaflet 上的實體 Layer 樣式同步套用（雙重保險）
         if (ns?.map) {
             const isAuditedVisible = window.showAuditedPoints !== false;
             ns.map.eachLayer(function(layer) {
@@ -193,7 +188,7 @@
                 if (props && props.isAudited) {
                     if (typeof layer.setStyle === 'function') {
                         layer.setStyle({
-                            fillOpacity: isAuditedVisible ? 0.85 : 0, // 🟡 同步控制內部黃色填滿
+                            fillOpacity: isAuditedVisible ? 0.85 : 0,
                             opacity: isAuditedVisible ? 1 : 0,
                             stroke: isAuditedVisible,
                             weight: isAuditedVisible ? 2 : 0
@@ -213,18 +208,15 @@
         return result;
     };
 
-    // 🟡 修正點 2: 強制重繪地圖與 UI 元件
     function forceMapRefresh() {
         const ns = window.mapNamespace;
         const kmlId = ns?.currentKmlLayerId || window.currentActiveKmlId;
         if (!ns?.map || !kmlId) return;
 
-        // 🎯 重新觸發主系統的 GeoJSON 載入與樣式計算
         if (window.addGeoJsonLayers && ns.allKmlFeatures) {
             window.addGeoJsonLayers(ns.allKmlFeatures);
         }
 
-        // 🎯 底部按鈕與進度列、黃點按鈕同步
         if (typeof syncAuditButtonVisibility === 'function') {
             syncAuditButtonVisibility();
         }
@@ -235,7 +227,7 @@
     window.forceMapRefresh = forceMapRefresh;
 
     // ---------------------------------------------------------
-    // 2. 底部控制按鈕面板 (含進度 Badge 與 黃點開關)
+    // 2. 底部控制按鈕面板與右上角元件 (無文字黃點鈕、進度條在縮放鈕下方)
     // ---------------------------------------------------------
     function updateBottomBtnState() {
         const canAudit = checkHasAuditPermission() && canSeeAuditColors();
@@ -243,7 +235,6 @@
         const config = kmlId ? window.globalAuditConfigs[kmlId] : null;
         const isAuditing = config && config.isAuditing === true;
 
-        // 隱藏/顯示控制區塊
         if (!canAudit || !isAuditing) {
             if (bottomControl?._container) bottomControl._container.style.display = 'none';
             if (yellowDotControl?._container) yellowDotControl._container.style.display = 'none';
@@ -251,26 +242,28 @@
             return;
         }
 
-        // 1. 🟡 更新圖層切換下方的黃點隱藏/顯示開關
+        // 1. 🟡 黃點切換按鈕（無文字，隱藏時帶有 ❌ 標示）
         if (yellowDotControl?._container) {
             const isAuditedVisible = window.showAuditedPoints !== false;
             yellowDotControl._container.style.display = 'block';
             yellowDotControl._container.innerHTML = `
                 <button onclick="window.toggleAuditedPointsVisibility()" 
-                        style="background: ${isAuditedVisible ? '#f1c40f' : '#7f8c8d'}; color: ${isAuditedVisible ? '#000' : '#fff'}; border: none; padding: 6px 12px; border-radius: 4px; font-weight: bold; font-size: 12px; cursor: pointer; white-space: nowrap; box-shadow: 0 2px 5px rgba(0,0,0,0.3); pointer-events: auto;">
-                    ${isAuditedVisible ? '🟡 隱藏黃點' : '👁️ 顯示黃點'}
+                        title="${isAuditedVisible ? '隱藏已清查黃點' : '顯示已清查黃點'}"
+                        style="background: #ffffff; color: #333; border: 2px solid rgba(0,0,0,0.2); width: 34px; height: 34px; border-radius: 4px; font-weight: bold; font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 1px 5px rgba(0,0,0,0.4); pointer-events: auto; padding: 0; position: relative;">
+                    <span style="display: inline-block; width: 14px; height: 14px; background: #f1c40f; border-radius: 50%; border: 1.5px solid #fff; box-shadow: 0 0 2px rgba(0,0,0,0.3);"></span>
+                    ${!isAuditedVisible ? '<span style="position: absolute; color: #e74c3c; font-size: 18px; font-weight: 900; line-height: 1; text-shadow: 0 0 2px #fff;">❌</span>' : ''}
                 </button>
             `;
         }
 
-        // 2. 📊 更新地圖放大鈕左邊的進度條
+        // 2. 📊 清查進度條（放置於縮放鈕下方，無漏斗圖示）
         if (progressControl?._container) {
             const progress = getAuditProgress();
             if (progress) {
                 progressControl._container.style.display = 'block';
                 progressControl._container.innerHTML = `
-                    <div style="background: #34495e; color: #f1c40f; border: 1px solid #f1c40f; padding: 5px 12px; border-radius: 20px; font-weight: bold; font-size: 12px; white-space: nowrap; box-shadow: 0 2px 5px rgba(0,0,0,0.3); pointer-events: auto;">
-                        ⏳ 未清查: ${progress.remaining} / ${progress.total}
+                    <div style="background: rgba(255, 255, 255, 0.95); color: #2c3e50; border: 2px solid rgba(0,0,0,0.2); padding: 5px 10px; border-radius: 4px; font-weight: bold; font-size: 12px; white-space: nowrap; box-shadow: 0 1px 5px rgba(0,0,0,0.4); pointer-events: auto;">
+                        未清查: ${progress.remaining} / ${progress.total}
                     </div>
                 `;
             } else {
@@ -278,7 +271,7 @@
             }
         }
 
-        // 3. 🎯 更新底部清查與編輯按鈕
+        // 3. 🎯 底部清查與編輯按鈕
         if (bottomControl?._container) {
             const active = window.currentSelectedPoint;
 
@@ -318,8 +311,6 @@
     // 3. CSV 總表生成
     // ---------------------------------------------------------
     async function generateLayerCsvReport(kmlId, kmlLayerName, maxPhotos) {
-        console.log(`[CSV] 開始生成總表 - KML ID: ${kmlId}, LayerName: ${kmlLayerName}`);
-        
         const activeKmlId = kmlId || window.currentActiveKmlId || window.mapNamespace?.currentKmlLayerId;
         const records = (window.auditLayersState && window.auditLayersState[activeKmlId]) || {};
         const features = window.mapNamespace?.allKmlFeatures || [];
@@ -388,7 +379,6 @@
             return await firebase.storage().ref().child(csvStoragePath).put(blob, { contentType: 'text/csv' });
 
         } catch (err) {
-            console.error("❌ [CSV 失敗] 上傳失敗原因：", err);
             if (typeof window.downloadCsvFallback === 'function') {
                 window.downloadCsvFallback(csvContent, `${kmlLayerName || '清查'}_總表.csv`);
             }
@@ -524,7 +514,6 @@
                 Swal.fire({ icon: 'success', title: '已關閉清查模式', timer: 1000, showConfirmButton: false });
             }
         } catch (error) {
-            console.error("切換清查狀態失敗:", error);
             Swal.fire({
                 icon: 'error',
                 title: '同步至資料庫失敗',
@@ -849,7 +838,6 @@
             setTimeout(updateBottomBtnState, 300);
     
         } catch (e) {
-            console.error("❌ 儲存點位失敗:", e);
             Swal.fire('錯誤', e.message || '儲存失敗', 'error');
         }
     };
@@ -884,7 +872,6 @@
                 await ref.put(blob);
                 return await ref.getDownloadURL();
             } catch (uploadError) {
-                console.error(`❌ 照片 ${index + 1} 上傳失敗:`, uploadError);
                 throw new Error(`照片 ${index + 1} 上傳失敗: ${uploadError.message}`);
             }
         });
@@ -892,17 +879,8 @@
         try {
             return await Promise.all(uploadPromises);
         } catch (error) {
-            console.error("❌ 照片批次上傳失敗:", error);
             throw error;
         }
-    };
-    
-    window.createUnifiedAuditButton = function(text, bgColor, onClickHandler) {
-        const btn = document.createElement('button');
-        btn.innerHTML = text;
-        btn.style.cssText = `pointer-events: auto; background: ${bgColor}; color: #ffffff; border: none; padding: 10px 22px; border-radius: 25px; font-weight: bold; font-size: 15px; box-shadow: 0 3px 10px rgba(0,0,0,0.25); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px; transition: transform 0.1s ease, box-shadow 0.1s ease; outline: none;`;
-        btn.onclick = onClickHandler;
-        return btn;
     };
     
     window.deleteCustomPoint = async function(kmlId, pointKey, kmlLayerName) {
@@ -954,7 +932,6 @@
             setTimeout(updateBottomBtnState, 300);
 
         } catch (e) {
-            console.error("❌ 刪除點位失敗:", e);
             Swal.fire('錯誤', e.message || '刪除失敗', 'error');
         }
     };
@@ -1115,7 +1092,6 @@
                 forceMapRefresh();
                 setTimeout(updateBottomBtnState, 300);
             } catch (e) { 
-                console.error("儲存清查資料失敗:", e);
                 Swal.fire('錯誤', e.message || '儲存失敗', 'error'); 
             }
         }
@@ -1198,7 +1174,6 @@
                         rootFolder.file(fileRef.name, await response.blob());
                     } catch (err) {
                         failCount++;
-                        console.warn(`下載失敗 (${fileRef.name}):`, err);
                     } finally {
                         completedCount++;
                         if (progressEl) progressEl.textContent = `打包進度: (${completedCount}/${items.length})`;
@@ -1220,7 +1195,6 @@
             });
 
         } catch (error) {
-            console.error('打包失敗:', error);
             Swal.fire({ icon: 'error', title: '打包失敗', text: error.message || '發生未知錯誤' });
         }
     };
@@ -1241,7 +1215,7 @@
             });
             updateKmlSelectUI();
             forceMapRefresh();
-        }, err => console.warn("監聽根目錄圖層配置受限或中斷:", err.message));
+        }, err => {});
     };
 
     function startAuditDataListener(kmlId) {
@@ -1252,7 +1226,7 @@
                 snapshot.forEach(doc => updates[doc.id] = doc.data());
                 window.auditLayersState[kmlId] = updates;
                 forceMapRefresh(); 
-            }, err => console.warn(`監聽子圖層 ${kmlId} 紀錄失敗:`, err.message));
+            }, err => {});
     }
 
     window.cleanupAuditListeners = function() {
@@ -1308,24 +1282,24 @@
             bottomControl = new AuditMenu();
             bottomControl.addTo(map);
 
-            // 2. 🟡 黃點隱藏/顯示開關 Control
+            // 2. 🟡 黃點隱藏/顯示開關 Control (右上角)
             const YellowDotControl = L.Control.extend({
                 options: { position: 'topright' },
                 onAdd: function() {
                     this._container = L.DomUtil.create('div', 'leaflet-control-yellow-dot');
-                    this._container.style.cssText = 'display:none; margin-top:10px; margin-right:10px; z-index:1000;';
+                    this._container.style.cssText = 'margin-top:10px; margin-right:10px; z-index:1000;';
                     return this._container;
                 }
             });
             yellowDotControl = new YellowDotControl();
             yellowDotControl.addTo(map);
 
-            // 3. 📊 清查進度條 Control
+            // 3. 📊 清查進度條 Control (緊貼在縮放鈕下方，與右上角控制項同側)
             const ProgressControl = L.Control.extend({
                 options: { position: 'topright' },
                 onAdd: function() {
                     this._container = L.DomUtil.create('div', 'leaflet-control-audit-progress');
-                    this._container.style.cssText = 'display:none; margin-top:10px; margin-right:50px; z-index:1000;';
+                    this._container.style.cssText = 'margin-top: 145px; margin-right: 10px; z-index: 1000;';
                     return this._container;
                 }
             });
@@ -1335,7 +1309,6 @@
             initGlobalConfigListener();
         } else if (checkAttempts >= 30) {
             clearInterval(checkMapInterval);
-            console.warn("Leaflet 地圖載入逾時，停止清查選單初始化。");
         }
     }, 500);
 
