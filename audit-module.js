@@ -1,5 +1,5 @@
 ﻿/**
- * audit-module.js - 清查與修改覆蓋整合優化版 (v3.21 位置調整版)
+ * audit-module.js - 清查與修改覆蓋整合優化版 (v3.22 UI與黃點控制修正版)
  */
 (function() {
     'use strict';
@@ -102,8 +102,7 @@
 
     window.toggleAuditedPointsVisibility = function() {
         window.showAuditedPoints = !window.showAuditedPoints;
-        if (typeof forceMapRefresh === 'function') forceMapRefresh();
-        if (typeof updateBottomBtnState === 'function') updateBottomBtnState();
+        forceMapRefresh();
     };
 
     // ---------------------------------------------------------
@@ -155,11 +154,13 @@
                     f.properties.color = "#ffffff";
                     f.properties.radius = 8;
                     f.properties.fillOpacity = (isAudited && window.showAuditedPoints === false) ? 0 : 0.85;
+                    f.properties.opacity = (isAudited && window.showAuditedPoints === false) ? 0 : 1;
                 } else {
                     f.properties.fillColor = "#e74c3c"; // 🔴 預設紅色
                     f.properties.radius = 8;
                     f.properties.isAudited = false;
                     f.properties.fillOpacity = 0.85;
+                    f.properties.opacity = 1;
                     delete f.properties.auditStatus;
                 }
             });
@@ -304,10 +305,9 @@
             }
         }
 
-        // 3. 🎯 更新底部清查與編輯按鈕
+        // 3. 🎯 更新底部清查與編輯按鈕 (取消「請點擊點位」)
         if (bottomControl?._container) {
             const active = window.currentSelectedPoint;
-            let btnHtml = '';
 
             if (active) {
                 const layerProps = active.feature?.properties || active.properties || {};
@@ -317,21 +317,22 @@
 
                 const btnBaseStyle = `color: white; border: none; padding: 6px 16px; border-radius: 50px; font-weight: bold; font-size: 13px; box-shadow: 0 2px 8px rgba(0,0,0,0.3); cursor: pointer; outline: none; line-height: 1.4; white-space: nowrap;`;
 
-                btnHtml = isAudited ? `
+                const btnHtml = isAudited ? `
                     <button onclick="window.viewAuditDetailOnly('${safePointKey}')" style="background: #e91e63; ${btnBaseStyle}">🔍 查看</button>
                     <button onclick="window.openAuditEditor(true)" style="background: #f39c12; ${btnBaseStyle}">✏️ 修改</button>
                 ` : `
                     <button onclick="window.openAuditEditor(false)" style="background: #2ecc71; ${btnBaseStyle}">📋 清查點位</button>
                 `;
-            } else {
-                btnHtml = `<span style="color:#aaa; font-size:12px; padding: 4px 6px; white-space: nowrap;">請點擊點位</span>`;
-            }
 
-            bottomControl._container.style.display = 'block';
-            bottomControl._container.innerHTML = `
-                <div style="text-align: center; pointer-events: auto; display: flex; gap: 6px; align-items: center; justify-content: center; background: rgba(0,0,0,0.8); padding: 6px 14px; border-radius: 50px; backdrop-filter: blur(5px); box-shadow: 0 4px 15px rgba(0,0,0,0.4);">
-                    ${btnHtml}
-                </div>`;
+                bottomControl._container.style.display = 'block';
+                bottomControl._container.innerHTML = `
+                    <div style="text-align: center; pointer-events: auto; display: flex; gap: 6px; align-items: center; justify-content: center; background: rgba(0,0,0,0.8); padding: 6px 14px; border-radius: 50px; backdrop-filter: blur(5px); box-shadow: 0 4px 15px rgba(0,0,0,0.4);">
+                        ${btnHtml}
+                    </div>`;
+            } else {
+                bottomControl._container.style.display = 'none';
+                bottomControl._container.innerHTML = '';
+            }
         }
     }
 
@@ -1418,12 +1419,12 @@
             yellowDotControl = new YellowDotControl();
             yellowDotControl.addTo(map);
 
-            // 3. 📊 清查進度條 Control (掛載於左上角，位在縮放按鈕左側)
+            // 3. 📊 清查進度條 Control (掛載於右上角，位在縮放按鈕左側)
             const ProgressControl = L.Control.extend({
-                options: { position: 'topleft' },
+                options: { position: 'topright' },
                 onAdd: function() {
                     this._container = L.DomUtil.create('div', 'leaflet-control-audit-progress');
-                    this._container.style.cssText = 'display:none; margin-left:10px; margin-top:10px; z-index:1000;';
+                    this._container.style.cssText = 'display:none; margin-top:10px; margin-right:50px; z-index:1000;';
                     return this._container;
                 }
             });
