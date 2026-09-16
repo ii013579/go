@@ -1,11 +1,13 @@
 ﻿/**
- * audit-module.js - 清查與修改覆蓋整合優化版 (v3.17 漏洞修正與精簡版)
+ * audit-module.js - 清查與修改覆蓋整合優化版 (v3.20 統計進度與黃點開關新增版)
  */
 (function() {
     'use strict';
 
     window.auditLayersState = window.auditLayersState || {};
     window.globalAuditConfigs = {}; 
+    window.showAuditedPoints = window.showAuditedPoints ?? true; // 🟡 預設顯示已清查黃點
+
     const auditUnsubscribes = {};
     let bottomControl = null;
     let clickDebounceTimer = null;
@@ -60,24 +62,47 @@
         if (btn) btn.style.setProperty('display', visible ? 'inline-flex' : 'none', 'important');
     }
 
-    function applyMarkerStyle(layerOrProps, isAudited, isAuditMode) {
-        const isLayer = typeof layerOrProps.setStyle === 'function';
-        const target = isLayer ? layerOrProps.feature.properties : layerOrProps;
-        
-        if (isAuditMode) {
-            target.fillColor = isAudited ? "#ff85c0" : "#3498db";
-            target.color = "#ffffff";
-            target.radius = 10;
-            target.fillOpacity = 0.9;
-            if (isLayer) layerOrProps.setStyle({ fillColor: target.fillColor, color: target.color, weight: 2, fillOpacity: 0.9, radius: 10 });
-        } else {
-            target.fillColor = "#e74c3c";
-            target.color = "#ffffff";
-            target.radius = 8;
-            target.fillOpacity = 0.85;
-            if (isLayer) layerOrProps.setStyle({ fillColor: "#e74c3c", color: "#ffffff", weight: 1.5, fillOpacity: 0.85, radius: 8 });
-        }
+    // ---------------------------------------------------------
+    // 📊 清查進度與黃點隱藏控制
+    // ---------------------------------------------------------
+    function getAuditProgress() {
+        const ns = window.mapNamespace;
+        const kmlId = ns?.currentKmlLayerId || window.currentActiveKmlId;
+        if (!kmlId) return null;
+
+        const records = window.auditLayersState?.[kmlId] || {};
+        const features = ns?.allKmlFeatures || [];
+
+        const pointFeatures = features.filter(f => !f.geometry || f.geometry.type === 'Point');
+        const totalCount = pointFeatures.length;
+
+        if (totalCount === 0) return null;
+
+        let auditedCount = 0;
+        pointFeatures.forEach(f => {
+            const props = f.properties || {};
+            const pointKey = getPointKey(props, f.id);
+            if (records[pointKey]) {
+                auditedCount++;
+            }
+        });
+
+        const remainingCount = totalCount - auditedCount;
+
+        return {
+            audited: auditedCount,
+            remaining: remainingCount,
+            total: totalCount,
+            text: `未清查: ${remainingCount} / ${totalCount}`
+        };
     }
+    window.getAuditProgress = getAuditProgress;
+
+    window.toggleAuditedPointsVisibility = function() {
+        window.showAuditedPoints = !window.showAuditedPoints;
+        if (typeof forceMapRefresh === 'function') forceMapRefresh();
+        if (typeof updateBottomBtnState === 'function') updateBottomBtnState();
+    };
 
     // ---------------------------------------------------------
     // 0.1 懸浮按鈕顯隱狀態同步 (全域)
@@ -90,7 +115,7 @@
     window.syncAuditButtonVisibility = syncAuditButtonVisibility;
 
     // ---------------------------------------------------------
-    // 1. 樣式攔截器與強力重繪機制 (融合 v3.07 穩定版)
+    // 1. 樣式攔截器與強力重繪機制 (含黃點隱藏與進度對齊)
     // ---------------------------------------------------------
     const originalAddLayers = window.addGeoJsonLayers;
     window.addGeoJsonLayers = function(features) {
@@ -101,7 +126,6 @@
             const config = window.globalAuditConfigs?.[kmlId];
             const records = window.auditLayersState?.[kmlId] || {};
             
-            // 🛡️ 容錯判斷：確保 isAuditing 預設為 true，避免誤退回紅色
             const isAuditingMode = (config?.isAuditing !== undefined) ? config.isAuditing : true;
             const showAudit = isAuditingMode && canSeeAuditColors();
 
@@ -109,7 +133,6 @@
                 if (!f.properties) f.properties = {};
                 f.properties.kmlId = kmlId;
                 
-                // 優先使用 name/title/id 匹配
                 const pointKey = f.properties.name || f.properties.title || f.properties.id || f.id || "未知點位";
                 f.properties.auditPointKey = pointKey; 
 
@@ -129,9 +152,9 @@
                     }
                     f.properties.color = "#ffffff";
                     f.properties.radius = 8;
-                    f.properties.fillOpacity = 0.85;
+                    f.properties.fillOpacity = (isAudited && window.showAuditedPoints === false) ? 0 : 0.85;
                 } else {
-                    f.properties.fillColor = "#e74c3c"; // 🔴 預設紅色 (僅完全關閉清查時)
+                    f.properties.fillColor = "#e74c3c"; // 🔴 預設紅色
                     f.properties.radius = 8;
                     f.properties.isAudited = false;
                     f.properties.fillOpacity = 0.85;
@@ -151,8 +174,9 @@
         const config = window.globalAuditConfigs?.[kmlId];
         const isAuditingMode = (config?.isAuditing !== undefined) ? config.isAuditing : true;
         const showAuditMode = isAuditingMode && canSeeAuditColors();
+        const isAuditedVisible = window.showAuditedPoints !== false;
 
-        // 1. 🟢 即時更新畫面上所有 Leaflet Layer 顏色與屬性
+        // 1. 🟢 即時更新畫面上所有 Leaflet Layer 顏色、屬性與顯隱狀態
         ns.map.eachLayer(function(layer) {
             if (layer.feature && layer.feature.properties) {
                 const props = layer.feature.properties;
@@ -173,10 +197,14 @@
                             layer.setStyle({
                                 fillColor: "#FCD770", // 🟡 黃色
                                 color: "#ffffff",
-                                weight: 2,
-                                fillOpacity: 0.85,
+                                weight: isAuditedVisible ? 2 : 0,
+                                fillOpacity: isAuditedVisible ? 0.85 : 0,
+                                opacity: isAuditedVisible ? 1 : 0,
                                 radius: 8
                             });
+                            if (layer._path) {
+                                layer._path.style.pointerEvents = isAuditedVisible ? 'auto' : 'none';
+                            }
                         }
                     } else {
                         props.auditStatus = null;
@@ -188,8 +216,12 @@
                                 color: "#ffffff",
                                 weight: 2,
                                 fillOpacity: 0.85,
+                                opacity: 1,
                                 radius: 8
                             });
+                            if (layer._path) {
+                                layer._path.style.pointerEvents = 'auto';
+                            }
                         }
                     }
                 } else {
@@ -200,27 +232,34 @@
                             color: "#ffffff",
                             weight: 1.5,
                             fillOpacity: 0.85,
+                            opacity: 1,
                             radius: 8
                         });
+                        if (layer._path) {
+                            layer._path.style.pointerEvents = 'auto';
+                        }
                     }
                 }
             }
         });
 
-        // 2. 🎯 關鍵 (v3.07 原版機制)：重新觸發 GeoJSON 數據對齊
+        // 2. 🎯 重新觸發 GeoJSON 數據對齊
         if (window.addGeoJsonLayers && ns.allKmlFeatures) {
             window.addGeoJsonLayers(ns.allKmlFeatures);
         }
 
-        // 3. 🎯 底部按鈕同步
+        // 3. 🎯 底部按鈕與進度列同步
         if (typeof syncAuditButtonVisibility === 'function') {
             syncAuditButtonVisibility();
+        }
+        if (typeof updateBottomBtnState === 'function') {
+            updateBottomBtnState();
         }
     }
     window.forceMapRefresh = forceMapRefresh;
 
     // ---------------------------------------------------------
-    // 2. 底部控制按鈕面板 (僅針對選取的點位)
+    // 2. 底部控制按鈕面板 (含進度 Badge 與 黃點開關)
     // ---------------------------------------------------------
     function updateBottomBtnState() {
         if (!bottomControl || !bottomControl._container) return;
@@ -233,24 +272,52 @@
         const active = window.currentSelectedPoint;
         const kmlId = window.mapNamespace?.currentKmlLayerId;
         const config = window.globalAuditConfigs[kmlId];
+        const progress = getAuditProgress();
 
-        if (active && config && config.isAuditing === true) {
-            const layerProps = active.feature?.properties || active.properties || {};
-            const pointKey = getPointKey(layerProps);
-            const safePointKey = safeEscape(pointKey);
-            const isAudited = (window.auditLayersState[kmlId] || {})[pointKey] !== undefined;
+        if (config && config.isAuditing === true) {
+            let btnHtml = '';
 
-            const btnBaseStyle = `color: white; border: none; padding: 8px 20px; border-radius: 25px; font-weight: bold; font-size: 15px; box-shadow: 0 3px 10px rgba(0,0,0,0.3); cursor: pointer; outline: none; line-height: 1.4;`;
+            if (active) {
+                const layerProps = active.feature?.properties || active.properties || {};
+                const pointKey = getPointKey(layerProps);
+                const safePointKey = safeEscape(pointKey);
+                const isAudited = (window.auditLayersState[kmlId] || {})[pointKey] !== undefined;
 
-            const btnHtml = isAudited ? `
-                <button onclick="window.viewAuditDetailOnly('${safePointKey}')" style="background: #e91e63; ${btnBaseStyle}">查看</button>
-                <button onclick="window.openAuditEditor(true)" style="background: #f39c12; ${btnBaseStyle}">修改</button>
-            ` : `
-                <button onclick="window.openAuditEditor(false)" style="background: #2ecc71; ${btnBaseStyle}">清查點位</button>
+                const btnBaseStyle = `color: white; border: none; padding: 6px 16px; border-radius: 50px; font-weight: bold; font-size: 13px; box-shadow: 0 2px 8px rgba(0,0,0,0.3); cursor: pointer; outline: none; line-height: 1.4; white-space: nowrap;`;
+
+                btnHtml = isAudited ? `
+                    <button onclick="window.viewAuditDetailOnly('${safePointKey}')" style="background: #e91e63; ${btnBaseStyle}">🔍 查看</button>
+                    <button onclick="window.openAuditEditor(true)" style="background: #f39c12; ${btnBaseStyle}">✏️ 修改</button>
+                ` : `
+                    <button onclick="window.openAuditEditor(false)" style="background: #2ecc71; ${btnBaseStyle}">📋 清查點位</button>
+                `;
+            } else {
+                btnHtml = `<span style="color:#aaa; font-size:12px; padding: 4px 6px; white-space: nowrap;">請點擊點位</span>`;
+            }
+
+            // 📊 進度 Badge
+            const progressBadge = progress ? `
+                <div style="background: #34495e; color: #f1c40f; border: 1px solid #f1c40f; padding: 5px 12px; border-radius: 50px; font-weight: bold; font-size: 12px; white-space: nowrap;">
+                    ⏳ 未清查: ${progress.remaining} / ${progress.total}
+                </div>
+            ` : '';
+
+            // 🟡 黃點顯示/隱藏開關
+            const isAuditedVisible = window.showAuditedPoints !== false;
+            const toggleYellowBtn = `
+                <button onclick="window.toggleAuditedPointsVisibility()" 
+                        style="background: ${isAuditedVisible ? '#f1c40f' : '#7f8c8d'}; color: ${isAuditedVisible ? '#000' : '#fff'}; border: none; padding: 5px 12px; border-radius: 50px; font-weight: bold; font-size: 12px; cursor: pointer; white-space: nowrap;">
+                    ${isAuditedVisible ? '🟡 隱藏黃點' : '👁️ 顯示黃點'}
+                </button>
             `;
 
             bottomControl._container.style.display = 'block';
-            bottomControl._container.innerHTML = `<div style="text-align: center; pointer-events: auto; display: flex; gap: 10px; justify-content: center; background: transparent; padding: 0;">${btnHtml}</div>`;
+            bottomControl._container.innerHTML = `
+                <div style="text-align: center; pointer-events: auto; display: flex; gap: 6px; align-items: center; justify-content: center; background: rgba(0,0,0,0.8); padding: 6px 14px; border-radius: 50px; backdrop-filter: blur(5px); box-shadow: 0 4px 15px rgba(0,0,0,0.4);">
+                    ${progressBadge}
+                    ${toggleYellowBtn}
+                    ${btnHtml}
+                </div>`;
         } else {
             bottomControl._container.style.display = 'none';
         }
@@ -806,8 +873,6 @@
     
     // =========================================================
     // 5-5. Firebase Storage 照片上傳處理 (通用工具函式 & UI 選單)
-    // ---------------------------------------------------------
-    // [Bug 1 修正]: 為 pointKey 補上預設防護，避免產生 undefined_01.jpg 檔名
     // =========================================================
     window.uploadPhotosToStorage = async function(photos, kmlId, pointKey, kmlLayerName) {
         if (!photos || !Array.isArray(photos) || photos.length === 0) return [];
@@ -982,9 +1047,6 @@
     
     // =========================================================
     // 5-6. 清查資料編輯、修改與刪除紀錄邏輯
-    // ---------------------------------------------------------
-    // [Bug 2 修正]: 替換不存在的 deleteCustomPointFromFirestore 為 window.deleteCustomPoint
-    // [Bug 3 修正]: 改用 didOpen 內置事件監聽處理 Base64 壓縮，維護獨立陣列狀態
     // =========================================================
     window.openAuditEditor = async function(isModifyMode = false) {
         if (!checkHasAuditPermission()) return;
@@ -1061,7 +1123,6 @@
             didOpen: (modalEl) => {
                 setPointAddBtnVisible(false);
 
-                // 綁定動態動態圖片壓縮與預覽事件
                 const handlePhotoChange = (inputEl, index) => {
                     if (inputEl.files?.[0]) {
                         const reader = new FileReader();
@@ -1112,7 +1173,6 @@
         });
 
         if (isDenied) {
-            // [Bug 2 修正]: 呼叫現有的全域 deleteCustomPoint
             if (typeof window.deleteCustomPoint === 'function') {
                 await window.deleteCustomPoint(kmlId, pointKey, kmlLayerName);
             }
