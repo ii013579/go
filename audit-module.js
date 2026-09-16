@@ -150,7 +150,7 @@
                         f.properties.auditStatus = record.deviceStatus || "正常";
                         f.properties.auditNote = record.note;
                         f.properties.photos = record.photos || [];
-                        f.properties.fillColor = "#FCD770"; // 🟡 已清查：黃色
+                        f.properties.fillColor = isAuditedVisible ? "#FCD770" : "transparent"; // 🟡 已清查：黃色
                         
                         f.properties.fillOpacity = isAuditedVisible ? 0.85 : 0;
                         f.properties.opacity = isAuditedVisible ? 1 : 0;
