@@ -1,5 +1,5 @@
 ﻿/**
- * audit-module.js - 清查與修改覆蓋整合優化版 (v3.20 統計進度與黃點開關新增版)
+ * audit-module.js - 清查與修改覆蓋整合優化版 (v3.21 位置調整版)
  */
 (function() {
     'use strict';
@@ -10,6 +10,8 @@
 
     const auditUnsubscribes = {};
     let bottomControl = null;
+    let yellowDotControl = null;
+    let progressControl = null;
     let clickDebounceTimer = null;
     let activeAddPointCleanup = null;
 
@@ -262,19 +264,49 @@
     // 2. 底部控制按鈕面板 (含進度 Badge 與 黃點開關)
     // ---------------------------------------------------------
     function updateBottomBtnState() {
-        if (!bottomControl || !bottomControl._container) return;
+        const canAudit = checkHasAuditPermission() && canSeeAuditColors();
+        const kmlId = window.mapNamespace?.currentKmlLayerId;
+        const config = kmlId ? window.globalAuditConfigs[kmlId] : null;
+        const isAuditing = config && config.isAuditing === true;
 
-        if (!checkHasAuditPermission() || !canSeeAuditColors()) {
-            bottomControl._container.style.display = 'none';
+        // 隱藏/顯示控制區塊
+        if (!canAudit || !isAuditing) {
+            if (bottomControl?._container) bottomControl._container.style.display = 'none';
+            if (yellowDotControl?._container) yellowDotControl._container.style.display = 'none';
+            if (progressControl?._container) progressControl._container.style.display = 'none';
             return;
         }
 
-        const active = window.currentSelectedPoint;
-        const kmlId = window.mapNamespace?.currentKmlLayerId;
-        const config = window.globalAuditConfigs[kmlId];
-        const progress = getAuditProgress();
+        // 1. 🟡 更新圖層切換下方的黃點隱藏/顯示開關
+        if (yellowDotControl?._container) {
+            const isAuditedVisible = window.showAuditedPoints !== false;
+            yellowDotControl._container.style.display = 'block';
+            yellowDotControl._container.innerHTML = `
+                <button onclick="window.toggleAuditedPointsVisibility()" 
+                        style="background: ${isAuditedVisible ? '#f1c40f' : '#7f8c8d'}; color: ${isAuditedVisible ? '#000' : '#fff'}; border: none; padding: 6px 12px; border-radius: 4px; font-weight: bold; font-size: 12px; cursor: pointer; white-space: nowrap; box-shadow: 0 2px 5px rgba(0,0,0,0.3); pointer-events: auto;">
+                    ${isAuditedVisible ? '🟡 隱藏黃點' : '👁️ 顯示黃點'}
+                </button>
+            `;
+        }
 
-        if (config && config.isAuditing === true) {
+        // 2. 📊 更新地圖放大鈕左邊的進度條
+        if (progressControl?._container) {
+            const progress = getAuditProgress();
+            if (progress) {
+                progressControl._container.style.display = 'block';
+                progressControl._container.innerHTML = `
+                    <div style="background: #34495e; color: #f1c40f; border: 1px solid #f1c40f; padding: 5px 12px; border-radius: 20px; font-weight: bold; font-size: 12px; white-space: nowrap; box-shadow: 0 2px 5px rgba(0,0,0,0.3); pointer-events: auto;">
+                        ⏳ 未清查: ${progress.remaining} / ${progress.total}
+                    </div>
+                `;
+            } else {
+                progressControl._container.style.display = 'none';
+            }
+        }
+
+        // 3. 🎯 更新底部清查與編輯按鈕
+        if (bottomControl?._container) {
+            const active = window.currentSelectedPoint;
             let btnHtml = '';
 
             if (active) {
@@ -295,31 +327,11 @@
                 btnHtml = `<span style="color:#aaa; font-size:12px; padding: 4px 6px; white-space: nowrap;">請點擊點位</span>`;
             }
 
-            // 📊 進度 Badge
-            const progressBadge = progress ? `
-                <div style="background: #34495e; color: #f1c40f; border: 1px solid #f1c40f; padding: 5px 12px; border-radius: 50px; font-weight: bold; font-size: 12px; white-space: nowrap;">
-                    ⏳ 未清查: ${progress.remaining} / ${progress.total}
-                </div>
-            ` : '';
-
-            // 🟡 黃點顯示/隱藏開關
-            const isAuditedVisible = window.showAuditedPoints !== false;
-            const toggleYellowBtn = `
-                <button onclick="window.toggleAuditedPointsVisibility()" 
-                        style="background: ${isAuditedVisible ? '#f1c40f' : '#7f8c8d'}; color: ${isAuditedVisible ? '#000' : '#fff'}; border: none; padding: 5px 12px; border-radius: 50px; font-weight: bold; font-size: 12px; cursor: pointer; white-space: nowrap;">
-                    ${isAuditedVisible ? '🟡 隱藏黃點' : '👁️ 顯示黃點'}
-                </button>
-            `;
-
             bottomControl._container.style.display = 'block';
             bottomControl._container.innerHTML = `
                 <div style="text-align: center; pointer-events: auto; display: flex; gap: 6px; align-items: center; justify-content: center; background: rgba(0,0,0,0.8); padding: 6px 14px; border-radius: 50px; backdrop-filter: blur(5px); box-shadow: 0 4px 15px rgba(0,0,0,0.4);">
-                    ${progressBadge}
-                    ${toggleYellowBtn}
                     ${btnHtml}
                 </div>`;
-        } else {
-            bottomControl._container.style.display = 'none';
         }
     }
 
@@ -1383,6 +1395,7 @@
                 }
             });
 
+            // 1. 底部選單 Control
             const AuditMenu = L.Control.extend({
                 onAdd: function() {
                     this._container = L.DomUtil.create('div', 'audit-bottom-menu');
@@ -1392,6 +1405,30 @@
             });
             bottomControl = new AuditMenu();
             bottomControl.addTo(map);
+
+            // 2. 🟡 黃點隱藏/顯示開關 Control (掛載於右上角，位在圖層切換選單下方)
+            const YellowDotControl = L.Control.extend({
+                options: { position: 'topright' },
+                onAdd: function() {
+                    this._container = L.DomUtil.create('div', 'leaflet-control-yellow-dot');
+                    this._container.style.cssText = 'display:none; margin-top:10px; margin-right:10px; z-index:1000;';
+                    return this._container;
+                }
+            });
+            yellowDotControl = new YellowDotControl();
+            yellowDotControl.addTo(map);
+
+            // 3. 📊 清查進度條 Control (掛載於左上角，位在縮放按鈕左側)
+            const ProgressControl = L.Control.extend({
+                options: { position: 'topleft' },
+                onAdd: function() {
+                    this._container = L.DomUtil.create('div', 'leaflet-control-audit-progress');
+                    this._container.style.cssText = 'display:none; margin-left:10px; margin-top:10px; z-index:1000;';
+                    return this._container;
+                }
+            });
+            progressControl = new ProgressControl();
+            progressControl.addTo(map);
             
             initGlobalConfigListener();
         } else if (checkAttempts >= 30) {
