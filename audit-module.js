@@ -1,5 +1,5 @@
 ﻿/**
- * audit-module.js - 清查與修改覆蓋整合優化版 (v3.23 UI與黃點控制全面修正版)
+ * audit-module.js - 清查與修改覆蓋整合優化版 (v3.24 黃點開關完全修復版)
  */
 (function() {
     'use strict';
@@ -100,10 +100,13 @@
     }
     window.getAuditProgress = getAuditProgress;
 
-    // 🟡 修正點 1: 點擊切換狀態並即時刷洗地圖圖層
+    // 🟡 修正點 1: 點擊切換狀態並強制完整重新整理地圖與 UI
     window.toggleAuditedPointsVisibility = function() {
         window.showAuditedPoints = !window.showAuditedPoints;
         forceMapRefresh();
+        if (typeof updateBottomBtnState === 'function') {
+            updateBottomBtnState();
+        }
     };
 
     // ---------------------------------------------------------
@@ -117,7 +120,7 @@
     window.syncAuditButtonVisibility = syncAuditButtonVisibility;
 
     // ---------------------------------------------------------
-    // 1. 樣式攔截器與強力重繪機制 (含黃點隱藏與進度對齊)
+    // 1. 樣式攔截器與強力重繪機制 (含黃點隱藏過濾)
     // ---------------------------------------------------------
     const originalAddLayers = window.addGeoJsonLayers;
     window.addGeoJsonLayers = function(features) {
@@ -130,7 +133,9 @@
             
             const isAuditingMode = (config?.isAuditing !== undefined) ? config.isAuditing : true;
             const showAudit = isAuditingMode && canSeeAuditColors();
+            const isAuditedVisible = window.showAuditedPoints !== false;
 
+            // 處理 features 屬性與隱藏判定
             features.forEach(f => {
                 if (!f.properties) f.properties = {};
                 f.properties.kmlId = kmlId;
@@ -148,130 +153,78 @@
                         f.properties.auditNote = record.note;
                         f.properties.photos = record.photos || [];
                         f.properties.fillColor = "#FCD770"; // 🟡 已清查：黃色
+                        
+                        // 🟡 如果使用者切換為隱藏黃點，直接把透明度與開關歸零
+                        f.properties.fillOpacity = isAuditedVisible ? 0.85 : 0;
+                        f.properties.opacity = isAuditedVisible ? 1 : 0;
+                        f.properties.stroke = isAuditedVisible;
+                        f.properties.weight = isAuditedVisible ? 2 : 0;
                     } else {
                         f.properties.auditStatus = null;
                         f.properties.fillColor = "#2A00D2"; // 🔵 未清查：藍色
+                        f.properties.fillOpacity = 0.85;
+                        f.properties.opacity = 1;
+                        f.properties.stroke = true;
+                        f.properties.weight = 2;
                     }
-                    f.properties.color = "#ffffff";
+                    f.properties.color = isAuditedVisible ? "#ffffff" : "transparent";
                     f.properties.radius = 8;
-                    f.properties.fillOpacity = (isAudited && window.showAuditedPoints === false) ? 0 : 0.85;
-                    f.properties.opacity = (isAudited && window.showAuditedPoints === false) ? 0 : 1;
                 } else {
                     f.properties.fillColor = "#e74c3c"; // 🔴 預設紅色
                     f.properties.radius = 8;
                     f.properties.isAudited = false;
                     f.properties.fillOpacity = 0.85;
                     f.properties.opacity = 1;
+                    f.properties.stroke = true;
+                    f.properties.weight = 1.5;
                     delete f.properties.auditStatus;
                 }
             });
         }
-        if (originalAddLayers) return originalAddLayers.apply(this, arguments);
+        
+        // 呼叫原本的加載函式
+        const result = originalAddLayers ? originalAddLayers.apply(this, arguments) : null;
+
+        // 🟡 確保 Leaflet 上的實體 Layer 樣式同步套用（雙重保險）
+        if (ns?.map) {
+            const isAuditedVisible = window.showAuditedPoints !== false;
+            ns.map.eachLayer(function(layer) {
+                const props = layer.feature?.properties || layer.options?.properties;
+                if (props && props.isAudited) {
+                    if (typeof layer.setStyle === 'function') {
+                        layer.setStyle({
+                            fillOpacity: isAuditedVisible ? 0.85 : 0,
+                            opacity: isAuditedVisible ? 1 : 0,
+                            stroke: isAuditedVisible,
+                            weight: isAuditedVisible ? 2 : 0
+                        });
+                    }
+                    if (layer._path) {
+                        layer._path.style.display = isAuditedVisible ? '' : 'none';
+                        layer._path.style.pointerEvents = isAuditedVisible ? 'auto' : 'none';
+                    }
+                    if (layer._icon) {
+                        layer._icon.style.display = isAuditedVisible ? '' : 'none';
+                    }
+                }
+            });
+        }
+
+        return result;
     };
 
-    // 🟡 修正點 2: 重繪全區域地圖層，兼顧 CircleMarker 與實體 Layer 互動狀態
+    // 🟡 修正點 2: 強制重繪地圖與 UI 元件
     function forceMapRefresh() {
         const ns = window.mapNamespace;
         const kmlId = ns?.currentKmlLayerId || window.currentActiveKmlId;
         if (!ns?.map || !kmlId) return;
 
-        const records = window.auditLayersState?.[kmlId] || {};
-        const config = window.globalAuditConfigs?.[kmlId];
-        const isAuditingMode = (config?.isAuditing !== undefined) ? config.isAuditing : true;
-        const showAuditMode = isAuditingMode && canSeeAuditColors();
-        const isAuditedVisible = window.showAuditedPoints !== false;
-
-        // 1. 🟢 即時更新畫面上所有 Leaflet Layer 顏色、屬性與顯隱狀態
-        ns.map.eachLayer(function(layer) {
-            const props = layer.feature?.properties || layer.options?.properties;
-            if (props) {
-                const pointKey = props.name || props.title || props.id || props.auditPointKey || "未知點位";
-                
-                if (showAuditMode) {
-                    const record = records[pointKey];
-                    const isAudited = !!record;
-                    props.isAudited = isAudited;
-
-                    if (isAudited) {
-                        props.auditStatus = record.deviceStatus || "正常";
-                        props.photos = record.photos || [];
-                        props.auditNote = record.note;
-                        props.fillColor = "#FCD770";
-
-                        if (typeof layer.setStyle === 'function') {
-                            layer.setStyle({
-                                fillColor: "#FCD770", // 🟡 黃色
-                                color: isAuditedVisible ? "#ffffff" : "transparent",
-                                stroke: isAuditedVisible,
-                                weight: isAuditedVisible ? 2 : 0,
-                                fillOpacity: isAuditedVisible ? 0.85 : 0,
-                                opacity: isAuditedVisible ? 1 : 0,
-                                radius: 8
-                            });
-                        }
-
-                        // SVG / Canvas 事件處理與實體隱藏
-                        if (layer._path) {
-                            layer._path.style.display = isAuditedVisible ? '' : 'none';
-                            layer._path.style.pointerEvents = isAuditedVisible ? 'auto' : 'none';
-                        }
-                        if (layer._icon) {
-                            layer._icon.style.display = isAuditedVisible ? '' : 'none';
-                        }
-                    } else {
-                        props.auditStatus = null;
-                        props.fillColor = "#2A00D2";
-
-                        if (typeof layer.setStyle === 'function') {
-                            layer.setStyle({
-                                fillColor: "#2A00D2", // 🔵 藍色
-                                color: "#ffffff",
-                                stroke: true,
-                                weight: 2,
-                                fillOpacity: 0.85,
-                                opacity: 1,
-                                radius: 8
-                            });
-                        }
-
-                        if (layer._path) {
-                            layer._path.style.display = '';
-                            layer._path.style.pointerEvents = 'auto';
-                        }
-                        if (layer._icon) {
-                            layer._icon.style.display = '';
-                        }
-                    }
-                } else {
-                    props.fillColor = "#e74c3c";
-                    if (typeof layer.setStyle === 'function') {
-                        layer.setStyle({
-                            fillColor: "#e74c3c", // 🔴 紅色
-                            color: "#ffffff",
-                            stroke: true,
-                            weight: 1.5,
-                            fillOpacity: 0.85,
-                            opacity: 1,
-                            radius: 8
-                        });
-                    }
-                    if (layer._path) {
-                        layer._path.style.display = '';
-                        layer._path.style.pointerEvents = 'auto';
-                    }
-                    if (layer._icon) {
-                        layer._icon.style.display = '';
-                    }
-                }
-            }
-        });
-
-        // 2. 🎯 重新觸發 GeoJSON 數據對齊
+        // 🎯 重新觸發主系統的 GeoJSON 載入與樣式計算
         if (window.addGeoJsonLayers && ns.allKmlFeatures) {
             window.addGeoJsonLayers(ns.allKmlFeatures);
         }
 
-        // 3. 🎯 底部按鈕與進度列同步
+        // 🎯 底部按鈕與進度列、黃點按鈕同步
         if (typeof syncAuditButtonVisibility === 'function') {
             syncAuditButtonVisibility();
         }
