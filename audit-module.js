@@ -154,7 +154,7 @@
                         f.properties.photos = record.photos || [];
                         f.properties.fillColor = "#FCD770"; // 🟡 已清查：黃色
                         
-                        // 🟡 如果使用者切換為隱藏黃點，直接把透明度與開關歸零
+                        // 🟡 徹底隱藏：同時將填滿與邊線透明度歸零
                         f.properties.fillOpacity = isAuditedVisible ? 0.85 : 0;
                         f.properties.opacity = isAuditedVisible ? 1 : 0;
                         f.properties.stroke = isAuditedVisible;
@@ -193,7 +193,7 @@
                 if (props && props.isAudited) {
                     if (typeof layer.setStyle === 'function') {
                         layer.setStyle({
-                            fillOpacity: isAuditedVisible ? 0.85 : 0,
+                            fillOpacity: isAuditedVisible ? 0.85 : 0, // 🟡 同步控制內部黃色填滿
                             opacity: isAuditedVisible ? 1 : 0,
                             stroke: isAuditedVisible,
                             weight: isAuditedVisible ? 2 : 0
