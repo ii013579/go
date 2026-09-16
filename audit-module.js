@@ -105,7 +105,7 @@
 
         window._yellowToggleBtnAdded = true;
 
-        // 【修正】確保開關能正確插在 Layers 控制組後面；若無 Layers 則自動留存在左上角預設位置
+        // 【修正】確保開關能正確插在 Layers 控制組後面；若無 Layers 則自動留存在預設位置
         setTimeout(() => {
             const layersControl = document.querySelector('.leaflet-control-layers');
             const btnContainer = toggleYellowBtn.getContainer();
@@ -142,7 +142,7 @@
 
         const container = document.createElement('div');
         container.id = 'custom-progress-container';
-        // 【修正】z-index 提升至 9999 避免被地圖控制面板蓋住，固定頂端右側顯示
+        // 【修正】z-index 提升至 9999 避免被地圖面板蓋住，設定為 fixed 定位
         container.style.cssText = `
             position: fixed !important; top: 15px !important; right: 65px !important; z-index: 9999 !important;
             background: rgba(255, 255, 255, 0.95); padding: 8px 14px; border-radius: 6px;
@@ -173,7 +173,7 @@
 
         if (!container || !textEl || !barEl) return;
 
-        // 【修正】同時支援 (current, total) 與單一百分比傳參模式
+        // 【修正】支援 (current, total) 與單一百分比傳參模式
         let percentage = 0;
         if (total === undefined) {
             percentage = Math.min(100, Math.max(0, parseInt(current, 10) || 0));
@@ -570,7 +570,7 @@
     };
 
     // ---------------------------------------------------------
-    // 5. 手動點位與編輯 UI (獨立模組機制)
+    // 5. 手動點位與編輯 UI
     // ---------------------------------------------------------
     function setAddButtonActiveState(isActive) {
         const btn = document.getElementById('btn-standalone-add-point');
