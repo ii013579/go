@@ -188,6 +188,7 @@
                 if (props && props.isAudited) {
                     if (typeof layer.setStyle === 'function') {
                         layer.setStyle({
+                            fillColor: isAuditedVisible ? "#FCD770" : "transparent",
                             fillOpacity: isAuditedVisible ? 0.85 : 0,
                             opacity: isAuditedVisible ? 1 : 0,
                             stroke: isAuditedVisible,
