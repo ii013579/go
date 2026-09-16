@@ -1,5 +1,5 @@
 ﻿/**
- * audit-module.js - 清查與修改覆蓋整合優化版 (v3.2.2 強化初始化與按鈕掛載版)
+ * audit-module.js - 清查與修改覆蓋整合優化版 (v3.2.2 修復黃點與進度條開關版)
  */
 (function(window) {
     'use strict';
@@ -66,7 +66,7 @@
     }
 
     // ---------------------------------------------------------
-    // 0. UI 控制：黃點切換按鈕與進度條 UI
+    // 0. UI 控制：黃點切換按鈕與進度條 UI (【修復重點區】)
     // ---------------------------------------------------------
     function initYellowToggleBtn(map) {
         if (!map) return;
@@ -79,7 +79,6 @@
 
         // 防止重複建立黃點按鈕
         if (window._yellowToggleBtnAdded) return;
-        window._yellowToggleBtnAdded = true;
 
         const toggleYellowBtn = L.easyButton({
             states: [{
@@ -104,13 +103,14 @@
             }]
         }).addTo(map);
 
+        window._yellowToggleBtnAdded = true;
+
+        // 【修正】確保開關能正確插在 Layers 控制組後面；若無 Layers 則自動留存在左上角預設位置
         setTimeout(() => {
             const layersControl = document.querySelector('.leaflet-control-layers');
-            if (layersControl && layersControl.parentNode) {
-                layersControl.parentNode.insertBefore(
-                    toggleYellowBtn.getContainer(),
-                    layersControl.nextSibling
-                );
+            const btnContainer = toggleYellowBtn.getContainer();
+            if (layersControl && layersControl.parentNode && btnContainer) {
+                layersControl.parentNode.insertBefore(btnContainer, layersControl.nextSibling);
             }
         }, 100);
     }
@@ -129,7 +129,7 @@
 
         if (Array.isArray(window.yellowMarkerList)) {
             window.yellowMarkerList.forEach(marker => {
-                if (marker.getElement()) {
+                if (marker && marker.getElement && marker.getElement()) {
                     marker.getElement().style.display = visible ? '' : 'none';
                 }
             });
@@ -142,15 +142,17 @@
 
         const container = document.createElement('div');
         container.id = 'custom-progress-container';
+        // 【修正】z-index 提升至 9999 避免被地圖控制面板蓋住，固定頂端右側顯示
         container.style.cssText = `
-            position: absolute; top: 12px; right: 60px; z-index: 1000;
-            background: rgba(255, 255, 255, 0.95); padding: 6px 12px; border-radius: 6px;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15); display: none; align-items: center;
-            gap: 10px; font-size: 13px; font-family: sans-serif; border: 1px solid #e0e0e0;
+            position: fixed !important; top: 15px !important; right: 65px !important; z-index: 9999 !important;
+            background: rgba(255, 255, 255, 0.95); padding: 8px 14px; border-radius: 6px;
+            box-shadow: 0 3px 10px rgba(0, 0, 0, 0.2); display: none; align-items: center;
+            gap: 10px; font-size: 13px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; border: 1px solid #e0e0e0;
+            pointer-events: none;
         `;
 
         container.innerHTML = `
-            <span id="progress-text" style="font-weight: bold; color: #8e44ad; white-space: nowrap;">處理中 0/0</span>
+            <span id="progress-text" style="font-weight: bold; color: #8e44ad; white-space: nowrap;">處理中 0%</span>
             <div style="width: 120px; background: #e0e0e0; height: 8px; border-radius: 4px; overflow: hidden;">
                 <div id="progress-bar-inner" style="width: 0%; height: 100%; background: #9b59b6; transition: width 0.2s ease-in-out;"></div>
             </div>
@@ -160,23 +162,35 @@
     }
 
     function updateProgressBar(current, total) {
-        const container = document.getElementById('custom-progress-container');
+        let container = document.getElementById('custom-progress-container');
+        if (!container) {
+            initProgressBar();
+            container = document.getElementById('custom-progress-container');
+        }
+
         const textEl = document.getElementById('progress-text');
         const barEl = document.getElementById('progress-bar-inner');
 
         if (!container || !textEl || !barEl) return;
 
-        if (total <= 0) {
-            container.style.display = 'none';
-            return;
+        // 【修正】同時支援 (current, total) 與單一百分比傳參模式
+        let percentage = 0;
+        if (total === undefined) {
+            percentage = Math.min(100, Math.max(0, parseInt(current, 10) || 0));
+            textEl.textContent = `進度: ${percentage}%`;
+        } else {
+            if (total <= 0) {
+                container.style.display = 'none';
+                return;
+            }
+            percentage = Math.min(100, Math.round((current / total) * 100));
+            textEl.textContent = `進度: ${current}/${total} (${percentage}%)`;
         }
 
-        const percentage = Math.min(100, Math.round((current / total) * 100));
-        textEl.textContent = `進度: ${current}/${total}`;
         barEl.style.width = `${percentage}%`;
         container.style.display = 'flex';
 
-        if (current >= total) {
+        if (percentage >= 100 || (total > 0 && current >= total)) {
             setTimeout(() => {
                 container.style.display = 'none';
                 barEl.style.width = '0%';
@@ -1241,7 +1255,7 @@
     }
 
     // ---------------------------------------------------------
-    // 7. Leaflet 地圖掛載主邏輯
+    // 7. Leaflet 地圖掛載主邏輯 (【修復重點區】)
     // ---------------------------------------------------------
     function initAuditModule(map) {
         if (!map) return;
@@ -1251,11 +1265,12 @@
             window.yellowMarkersGroup.addTo(mapInstance);
         }
 
+        // 初始化掛載 UI 控制項
         initYellowToggleBtn(mapInstance);
         initProgressBar();
         initGlobalConfigListener();
 
-        console.log('[AuditModule] v3.2.2 初始化完成');
+        console.log('[AuditModule] v3.2.2 (UI修復版) 初始化完成');
     }
 
     let checkAttempts = 0;
