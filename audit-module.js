@@ -1,5 +1,5 @@
 ﻿/**
- * audit-module.js - 清查與修改覆蓋整合優化版 (v3.2.1 黃點開關/進度條完整版)
+ * audit-module.js - 清查與修改覆蓋整合優化版 (v3.2.2 強化初始化與按鈕掛載版)
  */
 (function(window) {
     'use strict';
@@ -69,7 +69,17 @@
     // 0. UI 控制：黃點切換按鈕與進度條 UI
     // ---------------------------------------------------------
     function initYellowToggleBtn(map) {
-        if (!map || typeof L.easyButton === 'undefined') return;
+        if (!map) return;
+
+        // 若 L.easyButton 尚未載入完成，等待 300ms 後重試
+        if (typeof L.easyButton === 'undefined') {
+            setTimeout(() => initYellowToggleBtn(map), 300);
+            return;
+        }
+
+        // 防止重複建立黃點按鈕
+        if (window._yellowToggleBtnAdded) return;
+        window._yellowToggleBtnAdded = true;
 
         const toggleYellowBtn = L.easyButton({
             states: [{
@@ -1245,13 +1255,14 @@
         initProgressBar();
         initGlobalConfigListener();
 
-        console.log('[AuditModule] v3.2.1 初始化完成');
+        console.log('[AuditModule] v3.2.2 初始化完成');
     }
 
     let checkAttempts = 0;
     const checkMapInterval = setInterval(() => {
         checkAttempts++;
         const map = window.mapNamespace?.map;
+
         if (map && typeof L !== 'undefined') {
             clearInterval(checkMapInterval);
 
@@ -1259,19 +1270,22 @@
                 setTimeout(() => map.invalidateSize({ animate: false }), 100);
             });
 
-            const AuditMenu = L.Control.extend({
-                onAdd: function() {
-                    this._container = L.DomUtil.create('div', 'audit-bottom-menu');
-                    this._container.style.cssText = 'display:none; position:fixed; bottom:35px; left:50%; transform:translateX(-50%); z-index:5000; pointer-events:none; background:transparent; padding:0; box-shadow:none; gap:12px;';
-                    return this._container;
-                }
-            });
-            bottomControl = new AuditMenu();
-            bottomControl.addTo(map);
+            if (!bottomControl) {
+                const AuditMenu = L.Control.extend({
+                    onAdd: function() {
+                        this._container = L.DomUtil.create('div', 'audit-bottom-menu');
+                        this._container.style.cssText = 'display:none; position:fixed; bottom:35px; left:50%; transform:translateX(-50%); z-index:5000; pointer-events:none; background:transparent; padding:0; box-shadow:none; gap:12px;';
+                        return this._container;
+                    }
+                });
+                bottomControl = new AuditMenu();
+                bottomControl.addTo(map);
+            }
 
             initAuditModule(map);
-        } else if (checkAttempts >= 30) {
+        } else if (checkAttempts >= 60) {
             clearInterval(checkMapInterval);
+            console.warn('[AuditModule] 初始化逾時：未找到 window.mapNamespace.map');
         }
     }, 500);
 
