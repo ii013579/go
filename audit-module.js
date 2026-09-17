@@ -119,7 +119,7 @@
     window.syncAuditButtonVisibility = syncAuditButtonVisibility;
 
     // ---------------------------------------------------------
-    // 1. 樣式攔截器與強力重繪機制 (含黃點隱藏過濾)
+    // 1. 樣式攔截器與強力重繪機制 (含黃點隱藏過濾與新增點位展點)
     // ---------------------------------------------------------
     const originalAddLayers = window.addGeoJsonLayers;
     window.addGeoJsonLayers = function(features) {
@@ -130,6 +130,39 @@
             const config = window.globalAuditConfigs?.[kmlId];
             const records = window.auditLayersState?.[kmlId] || {};
             
+            // 🟢【所有使用者皆生效】自動將 Firestore auditRecords 中的自訂點位補入 features 展點陣列
+            Object.entries(records).forEach(([key, record]) => {
+                if ((record.isCustomPoint || record.deviceStatus === "新增") && record.lat && record.lng) {
+                    const pointKey = record.pointName || key;
+                    const exists = features.some(f => {
+                        const fk = f.properties?.name || f.properties?.title || f.properties?.auditPointKey || f.properties?.id || f.id;
+                        return fk === pointKey;
+                    });
+
+                    if (!exists) {
+                        features.push({
+                            type: "Feature",
+                            geometry: {
+                                type: "Point",
+                                coordinates: [parseFloat(record.lng), parseFloat(record.lat)]
+                            },
+                            properties: {
+                                name: pointKey,
+                                title: pointKey,
+                                kmlId: kmlId,
+                                auditPointKey: pointKey,
+                                isCustomPoint: true,
+                                isAudited: true,
+                                deviceStatus: record.deviceStatus || "新增",
+                                auditStatus: record.auditStatus || record.deviceStatus || "新增",
+                                auditNote: record.note || "",
+                                photos: record.photos || []
+                            }
+                        });
+                    }
+                }
+            });
+
             const isAuditingMode = (config?.isAuditing !== undefined) ? config.isAuditing : true;
             const showAudit = isAuditingMode && canSeeAuditColors();
             const isAuditedVisible = window.showAuditedPoints !== false;
@@ -150,7 +183,7 @@
                         f.properties.auditStatus = record.deviceStatus || "正常";
                         f.properties.auditNote = record.note;
                         f.properties.photos = record.photos || [];
-                        f.properties.fillColor = isAuditedVisible ? "#FCD770" : "transparent"; // 🟡 已清查：黃色
+                        f.properties.fillColor = isAuditedVisible ? "#FCD770" : "transparent"; // 🟡 已清查/新增點位：黃色
                         
                         f.properties.fillOpacity = isAuditedVisible ? 0.85 : 0;
                         f.properties.opacity = isAuditedVisible ? 1 : 0;
@@ -167,7 +200,7 @@
                     f.properties.color = isAuditedVisible ? "#ffffff" : "transparent";
                     f.properties.radius = 8;
                 } else {
-                    f.properties.fillColor = "#e74c3c"; // 🔴 預設紅色
+                    f.properties.fillColor = "#e74c3c"; // 🔴 未開啟清查模式或訪客：預設紅色標示 (所有人均可見)
                     f.properties.radius = 8;
                     f.properties.isAudited = false;
                     f.properties.fillOpacity = 0.85;
@@ -1240,11 +1273,13 @@
             snapshot.forEach(doc => { 
                 const data = doc.data();
                 window.globalAuditConfigs[doc.id] = data; 
-                if (data.isAuditing) startAuditDataListener(doc.id);
+                
+                // 🟢 修正：取消 isAuditing 條件限制，所有人與所有圖層均即時監聽新增點位
+                startAuditDataListener(doc.id);
             });
             updateKmlSelectUI();
             forceMapRefresh();
-        }, err => {});
+        }, err => console.error("全域設定監聽失敗:", err));
     };
 
     function startAuditDataListener(kmlId) {
