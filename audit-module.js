@@ -1300,7 +1300,7 @@
                 options: { position: 'topright' },
                 onAdd: function() {
                     this._container = L.DomUtil.create('div', 'leaflet-control-audit-progress');
-                    this._container.style.cssText = 'margin-top: 28px; margin-right: 48px;; z-index: 1000;';
+                    this._container.style.cssText = 'margin-top: 15px; margin-right: 0px;; z-index: 1000;';
                     return this._container;
                 }
             });
