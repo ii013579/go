@@ -1274,7 +1274,7 @@
                 const data = doc.data();
                 window.globalAuditConfigs[doc.id] = data; 
                 
-                // 🟢 修正：取消 isAuditing 條件限制，所有人與所有圖層均即時監聽新增點位
+                // 修正：取消 isAuditing 條件限制，所有人與所有圖層均即時監聽新增點位
                 startAuditDataListener(doc.id);
             });
             updateKmlSelectUI();
@@ -1285,7 +1285,7 @@
     function startAuditDataListener(kmlId) {
         if (auditUnsubscribes[kmlId]) return;
     
-        // 🟢 精確監聽路徑：artifacts/kmldata-d22fb/public/data/kmlLayers/{kmlId}/auditRecords
+        // 精確監聽路徑：artifacts/kmldata-d22fb/public/data/kmlLayers/{kmlId}/auditRecords
         auditUnsubscribes[kmlId] = firebase.firestore()
             .collection(APP_PATH)
             .doc(kmlId)
@@ -1299,7 +1299,7 @@
                 
                 window.auditLayersState[kmlId] = updates;
     
-                // 🟢 將 auditRecords/{pointKey} 中的自訂點位自動轉為 GeoJSON 展點
+                // 將 auditRecords/{pointKey} 中的自訂點位自動轉為 GeoJSON 展點
                 const ns = window.mapNamespace;
                 if (ns) {
                     if (!Array.isArray(ns.allKmlFeatures)) ns.allKmlFeatures = [];
@@ -1361,12 +1361,22 @@
     function updateKmlSelectUI() {
         const select = document.getElementById('kmlLayerSelect');
         if (!select) return;
+
+        // 檢查目前使用者是否具備查看/參與清查的權限
+        const hasPermission = (typeof canSeeAuditColors === 'function') ? canSeeAuditColors() : false;
+
         Array.from(select.options).forEach(opt => {
             if (!opt.value) return;
             const config = window.globalAuditConfigs[opt.value];
             const baseName = opt.getAttribute('data-basename') || opt.textContent.split(' (')[0];
             if (!opt.getAttribute('data-basename')) opt.setAttribute('data-basename', baseName);
-            opt.textContent = config?.isAuditing ? `${baseName} (清查中:${config.targetPhotos}張)` : baseName;
+
+            // 只有當「具備權限」且「圖層開啟清查」時，才顯示清查標籤
+            if (hasPermission && config?.isAuditing) {
+                opt.textContent = `${baseName} (清查中:${config.targetPhotos}張)`;
+            } else {
+                opt.textContent = baseName;
+            }
         });
     }
 
@@ -1414,15 +1424,16 @@
             yellowDotControl = new YellowDotControl();
             yellowDotControl.addTo(map);
 
-            // 3. 📊 清查進度條 Control (放置於地圖縮放鈕左側)
+            // 3. 📊 清查進度條 Control (放置於右上角地圖縮放鈕左側)
             const ProgressControl = L.Control.extend({
-                options: { position: 'topleft' },
+                options: { position: 'topright' },
                 onAdd: function() {
                     this._container = L.DomUtil.create('div', 'leaflet-control-audit-progress');
-                    this._container.style.cssText = 'margin-top: 10px; margin-left: 50px; max-width: calc(100vw - 70px);box-sizing: border-box; z-index: 1000;';
+                    this._container.style.cssText = 'margin-top: 10px; margin-right: 10px; max-width: calc(100vw - 70px); box-sizing: border-box; z-index: 1000;';
                     return this._container;
                 }
             });
+            
             progressControl = new ProgressControl();
             progressControl.addTo(map);
             
