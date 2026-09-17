@@ -283,7 +283,7 @@
             if (progress) {
                 progressControl._container.style.display = window.showAuditedPoints !== false ? 'block' : 'none';
                 progressControl._container.innerHTML = `
-                    <div style="background: rgba(255, 255, 255, 0.95); color: #2c3e50; border: 2px solid rgba(0,0,0,0.2); padding: 5px 10px; border-radius: 4px; font-weight: bold; font-size: 12px; white-space: nowrap; box-shadow: 0 1px 5px rgba(0,0,0,0.4); pointer-events: auto;">
+                    <div style="background: rgba(255, 255, 255, 0.95); color: #2c3e50; border: 2px solid rgba(0,0,0,0.2); padding: 5px 10px; border-radius: 4px; font-weight: bold; font-size: 12px; white-space: nowrap;max-width: calc(100vw - 90px); box-sizing: border-box;overflow: hidden; text-overflow: ellipsis;">
                         未清查: ${progress.remaining} / ${progress.total}
                     </div>
                 `;
@@ -1320,7 +1320,7 @@
                 options: { position: 'topleft' },
                 onAdd: function() {
                     this._container = L.DomUtil.create('div', 'leaflet-control-audit-progress');
-                    this._container.style.cssText = 'margin-top: 10px; margin-right: 50px;; z-index: 1000;';
+                    this._container.style.cssText = 'margin-top: 10px; margin-left: 50px; max-width: calc(100vw - 70px);box-sizing: border-box; z-index: 1000;';
                     return this._container;
                 }
             });
