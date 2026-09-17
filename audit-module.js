@@ -1249,13 +1249,22 @@
 
     function startAuditDataListener(kmlId) {
         if (auditUnsubscribes[kmlId]) return;
-        auditUnsubscribes[kmlId] = firebase.firestore().collection(APP_PATH).doc(kmlId).collection('auditRecords')
+    
+        // 🟢 精確監聽路徑：artifacts/kmldata-d22fb/public/data/kmlLayers/{kmlId}/auditRecords
+        auditUnsubscribes[kmlId] = firebase.firestore()
+            .collection(APP_PATH)
+            .doc(kmlId)
+            .collection('auditRecords')
             .onSnapshot(snapshot => {
                 const updates = {};
-                snapshot.forEach(doc => updates[doc.id] = doc.data());
+                snapshot.forEach(doc => {
+                    // doc.id 即為 {pointKey}
+                    updates[doc.id] = doc.data();
+                });
+                
                 window.auditLayersState[kmlId] = updates;
     
-                // 🟢 將 Firestore 的自訂點位 (isCustomPoint) 自動轉換為地圖展點 Feature
+                // 🟢 將 auditRecords/{pointKey} 中的自訂點位自動轉為 GeoJSON 展點
                 const ns = window.mapNamespace;
                 if (ns) {
                     if (!Array.isArray(ns.allKmlFeatures)) ns.allKmlFeatures = [];
@@ -1290,7 +1299,7 @@
                                 }
                             };
     
-                            // 若 Feature 已存在則更新，不存在則新增至全域展點陣列
+                            // 避免重複展點，若已存在該 pointKey 則更新，否則加入
                             const idx = ns.allKmlFeatures.findIndex(f => getPointKey(f.properties) === pointKey);
                             if (idx >= 0) {
                                 ns.allKmlFeatures[idx] = customFeature;
@@ -1302,7 +1311,7 @@
                 }
     
                 forceMapRefresh(); 
-            }, err => {});
+            }, err => console.error("監聽 auditRecords 失敗:", err));
     }
 
     window.cleanupAuditListeners = function() {
