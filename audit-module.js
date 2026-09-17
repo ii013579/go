@@ -275,10 +275,6 @@
         if (yellowDotControl?._container) {
             const isAuditedVisible = window.showAuditedPoints !== false;
             yellowDotControl._container.style.display = 'block';
-            if (progressControl?._container) {
-                progressControl._container.style.display = 'block';
-            }
-            
             yellowDotControl._container.innerHTML = `
                 <button onclick="window.toggleAuditedPointsVisibility()" 
                         title="${isAuditedVisible ? '隱藏已清查黃點' : '顯示已清查黃點'}"
