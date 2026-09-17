@@ -1424,12 +1424,21 @@
             yellowDotControl = new YellowDotControl();
             yellowDotControl.addTo(map);
 
-            // 3. 📊 清查進度條 Control (放置於右上角地圖縮放鈕左側)
+            // 3. 📊 清查進度條 Control (放置於右上角縮放鈕左側紫框位置)
             const ProgressControl = L.Control.extend({
                 options: { position: 'topright' },
                 onAdd: function() {
                     this._container = L.DomUtil.create('div', 'leaflet-control-audit-progress');
-                    this._container.style.cssText = 'margin-top: 10px; margin-right: 10px; max-width: calc(100vw - 70px); box-sizing: border-box; z-index: 1000;';
+                    // 設定 absolute 定位：對齊頂端 10px，並往左推開 55px 避開 + / - 縮放按鈕
+                    this._container.style.cssText = `
+                        position: absolute;
+                        right: 55px;
+                        top: 10px;
+                        margin: 0;
+                        white-space: nowrap;
+                        z-index: 1000;
+                        pointer-events: auto;
+                    `;
                     return this._container;
                 }
             });
