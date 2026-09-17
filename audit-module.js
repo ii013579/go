@@ -1295,16 +1295,15 @@
             yellowDotControl = new YellowDotControl();
             yellowDotControl.addTo(map);
 
-            // 3. 📊 清查進度條 Control (緊貼在縮放鈕下方，與右上角控制項同側)
-// 3. 📊 清查進度條 Control (放置於地圖縮放鈕左側)
-const ProgressControl = L.Control.extend({
-    options: { position: 'topright' },
-    onAdd: function() {
-        this._container = L.DomUtil.create('div', 'leaflet-control-audit-progress');
-        this._container.style.cssText = 'margin-top: 10px; margin-right: 50px; z-index: 1000;';
-        return this._container;
-    }
-});
+            // 3. 📊 清查進度條 Control (放置於地圖縮放鈕左側)
+            const ProgressControl = L.Control.extend({
+                options: { position: 'topright' },
+                onAdd: function() {
+                    this._container = L.DomUtil.create('div', 'leaflet-control-audit-progress');
+                    this._container.style.cssText = 'margin-top: 10px; margin-right: 50px; z-index: 1000;';
+                    return this._container;
+                }
+            });
             progressControl = new ProgressControl();
             progressControl.addTo(map);
             
