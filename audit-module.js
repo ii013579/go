@@ -186,6 +186,7 @@
             ns.map.eachLayer(function(layer) {
                 const props = layer.feature?.properties || layer.options?.properties;
                 if (props && props.isAudited) {
+                    layer.options.interactive = isAuditedVisible;
                     if (typeof layer.setStyle === 'function') {
                         layer.setStyle({
                             fillColor: isAuditedVisible ? "#FCD770" : "transparent",
@@ -197,25 +198,37 @@
                     }
                     if (layer._path) {
                         layer._path.style.display = isAuditedVisible ? '' : 'none';
-                        layer._path.style.pointerEvents = isAuditedVisible ? 'auto' : 'none';
-                        layer._path.style.cursor = isAuditedVisible ? 'pointer' : 'default';
-                        
+                        layer._path.style.pointerEvents =
+                            isAuditedVisible ? 'auto' : 'none';
+                        layer._path.style.cursor =
+                            isAuditedVisible ? 'pointer' : 'default';
+
                         if (isAuditedVisible) {
                             layer._path.classList.add('leaflet-interactive');
                         } else {
                             layer._path.classList.remove('leaflet-interactive');
                         }
                     }
+                    
                     if (layer._icon) {
                         layer._icon.style.display = isAuditedVisible ? '' : 'none';
-                        layer._icon.style.pointerEvents = isAuditedVisible ? 'auto' : 'none';
-                        layer._icon.style.cursor = isAuditedVisible ? 'pointer' : 'default';
-                        
+                        layer._icon.style.pointerEvents =
+                            isAuditedVisible ? 'auto' : 'none';
+                        layer._icon.style.cursor =
+                            isAuditedVisible ? 'pointer' : 'default';
+
                         if (isAuditedVisible) {
                             layer._icon.classList.add('leaflet-interactive');
                         } else {
                             layer._icon.classList.remove('leaflet-interactive');
                         }
+                    }
+
+                    if (layer._shadow) {
+                        layer._shadow.style.display =
+                            isAuditedVisible ? '' : 'none';
+                        layer._shadow.style.pointerEvents =
+                            isAuditedVisible ? 'auto' : 'none';
                     }
                 }
             });
@@ -263,8 +276,7 @@
             const isAuditedVisible = window.showAuditedPoints !== false;
             yellowDotControl._container.style.display = 'block';
             if (progressControl?._container) {
-                progressControl._container.style.display =
-                    isAuditedVisible ? 'block' : 'none';
+                progressControl._container.style.display = 'block';
             }
             
             yellowDotControl._container.innerHTML = `
@@ -281,7 +293,7 @@
         if (progressControl?._container) {
             const progress = getAuditProgress();
             if (progress) {
-                progressControl._container.style.display = window.showAuditedPoints !== false ? 'block' : 'none';
+                progressControl._container.style.display = 'block';
                 progressControl._container.innerHTML = `
                     <div style="background: rgba(255, 255, 255, 0.95); color: #2c3e50; border: 2px solid rgba(0,0,0,0.2); padding: 5px 10px; border-radius: 4px; font-weight: bold; font-size: 12px; white-space: nowrap;max-width: calc(100vw - 90px); box-sizing: border-box;overflow: hidden; text-overflow: ellipsis;">
                         未清查: ${progress.remaining} / ${progress.total}
@@ -1305,10 +1317,10 @@
 
             // 2. 🟡 黃點隱藏/顯示開關 Control (右上角)
             const YellowDotControl = L.Control.extend({
-                options: { position: 'topleft' },
+                options: { position: 'topright' },
                 onAdd: function() {
                     this._container = L.DomUtil.create('div', 'leaflet-control-yellow-dot');
-                    this._container.style.cssText = 'margin-top:10px; margin-left:10px; z-index:1000;';
+                    this._container.style.cssText = 'margin-top:10px; margin-right:10px; z-index:1000;';
                     return this._container;
                 }
             });
