@@ -247,6 +247,11 @@
         if (yellowDotControl?._container) {
             const isAuditedVisible = window.showAuditedPoints !== false;
             yellowDotControl._container.style.display = 'block';
+            if (progressControl?._container) {
+                progressControl._container.style.display =
+                    isAuditedVisible ? 'block' : 'none';
+            }
+            
             yellowDotControl._container.innerHTML = `
                 <button onclick="window.toggleAuditedPointsVisibility()" 
                         title="${isAuditedVisible ? '隱藏已清查黃點' : '顯示已清查黃點'}"
@@ -261,7 +266,7 @@
         if (progressControl?._container) {
             const progress = getAuditProgress();
             if (progress) {
-                progressControl._container.style.display = 'block';
+                progressControl._container.style.display = window.showAuditedPoints !== false ? 'block' : 'none';
                 progressControl._container.innerHTML = `
                     <div style="background: rgba(255, 255, 255, 0.95); color: #2c3e50; border: 2px solid rgba(0,0,0,0.2); padding: 5px 10px; border-radius: 4px; font-weight: bold; font-size: 12px; white-space: nowrap; box-shadow: 0 1px 5px rgba(0,0,0,0.4); pointer-events: auto;">
                         未清查: ${progress.remaining} / ${progress.total}
