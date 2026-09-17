@@ -198,9 +198,24 @@
                     if (layer._path) {
                         layer._path.style.display = isAuditedVisible ? '' : 'none';
                         layer._path.style.pointerEvents = isAuditedVisible ? 'auto' : 'none';
+                        layer._path.style.cursor = isAuditedVisible ? 'pointer' : 'default';
+                        
+                        if (isAuditedVisible) {
+                            layer._path.classList.add('leaflet-interactive');
+                        } else {
+                            layer._path.classList.remove('leaflet-interactive');
+                        }
                     }
                     if (layer._icon) {
                         layer._icon.style.display = isAuditedVisible ? '' : 'none';
+                        layer._icon.style.pointerEvents = isAuditedVisible ? 'auto' : 'none';
+                        layer._icon.style.cursor = isAuditedVisible ? 'pointer' : 'default';
+                        
+                        if (isAuditedVisible) {
+                            layer._icon.classList.add('leaflet-interactive');
+                        } else {
+                            layer._icon.classList.remove('leaflet-interactive');
+                        }
                     }
                 }
             });
@@ -1290,10 +1305,10 @@
 
             // 2. 🟡 黃點隱藏/顯示開關 Control (右上角)
             const YellowDotControl = L.Control.extend({
-                options: { position: 'topright' },
+                options: { position: 'topleft' },
                 onAdd: function() {
                     this._container = L.DomUtil.create('div', 'leaflet-control-yellow-dot');
-                    this._container.style.cssText = 'margin-top:10px; margin-right:10px; z-index:1000;';
+                    this._container.style.cssText = 'margin-top:10px; margin-left:10px; z-index:1000;';
                     return this._container;
                 }
             });
@@ -1302,10 +1317,10 @@
 
             // 3. 📊 清查進度條 Control (放置於地圖縮放鈕左側)
             const ProgressControl = L.Control.extend({
-                options: { position: 'topright' },
+                options: { position: 'topleft' },
                 onAdd: function() {
                     this._container = L.DomUtil.create('div', 'leaflet-control-audit-progress');
-                    this._container.style.cssText = 'margin-top: 15px; margin-right: 50px;; z-index: 1000;';
+                    this._container.style.cssText = 'margin-top: 10px; margin-right: 50px;; z-index: 1000;';
                     return this._container;
                 }
             });
