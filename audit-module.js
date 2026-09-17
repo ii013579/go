@@ -1254,6 +1254,53 @@
                 const updates = {};
                 snapshot.forEach(doc => updates[doc.id] = doc.data());
                 window.auditLayersState[kmlId] = updates;
+    
+                // 🟢 將 Firestore 的自訂點位 (isCustomPoint) 自動轉換為地圖展點 Feature
+                const ns = window.mapNamespace;
+                if (ns) {
+                    if (!Array.isArray(ns.allKmlFeatures)) ns.allKmlFeatures = [];
+    
+                    Object.entries(updates).forEach(([pointKey, data]) => {
+                        // 判斷是否為新增自訂點位且具備經緯度座標
+                        if ((data.isCustomPoint || data.deviceStatus === "新增") && data.lat && data.lng) {
+                            const numLat = parseFloat(data.lat);
+                            const numLng = parseFloat(data.lng);
+    
+                            const customFeature = {
+                                type: "Feature",
+                                geometry: { 
+                                    type: "Point", 
+                                    coordinates: [numLng, numLat] 
+                                },
+                                properties: {
+                                    name: data.pointName || pointKey,
+                                    title: data.pointName || pointKey,
+                                    kmlId: kmlId,
+                                    auditPointKey: pointKey,
+                                    isCustomPoint: true,
+                                    isAudited: true,
+                                    deviceStatus: data.deviceStatus || "新增",
+                                    auditStatus: data.auditStatus || data.deviceStatus || "新增",
+                                    auditNote: data.note || "",
+                                    photos: data.photos || [],
+                                    fillColor: "#FCD770",
+                                    color: "#ffffff",
+                                    radius: 8,
+                                    fillOpacity: 0.85
+                                }
+                            };
+    
+                            // 若 Feature 已存在則更新，不存在則新增至全域展點陣列
+                            const idx = ns.allKmlFeatures.findIndex(f => getPointKey(f.properties) === pointKey);
+                            if (idx >= 0) {
+                                ns.allKmlFeatures[idx] = customFeature;
+                            } else {
+                                ns.allKmlFeatures.push(customFeature);
+                            }
+                        }
+                    });
+                }
+    
                 forceMapRefresh(); 
             }, err => {});
     }
