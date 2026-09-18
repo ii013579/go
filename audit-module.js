@@ -275,24 +275,49 @@
         const kmlId = ns?.currentKmlLayerId || window.currentActiveKmlId;
         if (!ns?.map || !kmlId) return;
 
-        // 🟢 1. 優先使用開啟表單「前」預存的原視角，避免抓到被鍵盤或彈窗擠壓後的座標
+        // 🟢 1. 優先採用開啟表單前記憶的視角
         const savedState = window.preAuditMapState;
         const targetCenter = savedState ? savedState.center : ns.map.getCenter();
         const targetZoom = savedState ? savedState.zoom : ns.map.getZoom();
 
-        // 🟢 2. 延遲 100ms 避開 SweetAlert2 關閉時的動畫與 DOM 恢復時間
+        // 🟢 2. 雙重微延遲，確保 SweetAlert2 DOM 徹底關閉並恢復頁面高度後再計算地圖
         setTimeout(() => {
             if (!ns.map) return;
 
-            // 強制重新計算 Leaflet 容器高寬，徹底消除底部灰邊
+            // 重新計算容器高寬，徹底消除底部灰邊
             ns.map.invalidateSize({ animate: false });
 
-            // 重繪點位（將已清查點位即時更新為藍/黃點）
+            // 重新載入 GeoJSON 數據
             if (typeof window.addGeoJsonLayers === 'function' && ns.allKmlFeatures) {
                 window.addGeoJsonLayers(ns.allKmlFeatures);
             }
 
-            // 精確還原至開啟彈窗前的座標與縮放層級
+            // 🟢 3. 強制走訪目前畫面上的所有向量點位，即時更新藍/黃填色
+            const records = window.auditLayersState?.[kmlId] || {};
+            const isAuditedVisible = window.showAuditedPoints !== false;
+
+            ns.map.eachLayer(layer => {
+                const props = layer.feature?.properties || layer.options?.properties;
+                if (props) {
+                    const pointKey = props.auditPointKey || props.name || props.title;
+                    const isAudited = !!records[pointKey];
+                    props.isAudited = isAudited;
+
+                    if (typeof layer.setStyle === 'function') {
+                        const targetColor = isAudited ? (isAuditedVisible ? "#FCD770" : "transparent") : "#2A00D2";
+                        const targetOpacity = isAudited ? (isAuditedVisible ? 0.85 : 0) : 0.85;
+                        layer.setStyle({
+                            fillColor: targetColor,
+                            color: isAuditedVisible ? "#ffffff" : "transparent",
+                            fillOpacity: targetOpacity,
+                            opacity: targetOpacity,
+                            stroke: isAudited ? isAuditedVisible : true
+                        });
+                    }
+                }
+            });
+
+            // 🟢 4. 精確還原至開啟彈窗前的座標與縮放層級
             ns.map.setView(targetCenter, targetZoom, { animate: false });
 
             // 清除暫存視角
@@ -301,7 +326,7 @@
             if (typeof syncAuditButtonVisibility === 'function') syncAuditButtonVisibility();
             if (typeof updateBottomBtnState === 'function') updateBottomBtnState();
             if (typeof updateAuditProgress === 'function') updateAuditProgress();
-        }, 100);
+        }, 150);
     }
     window.forceMapRefresh = forceMapRefresh;
 
