@@ -1,5 +1,5 @@
 ﻿/**
- * audit-module.js - 清查與修改覆蓋整合優化版 (v3.25 介面精簡優化版)
+ * audit-module.js - 清查與修改覆蓋整合優化版 (v3.26 重複點名阻擋優化版)
  */
 (function() {
     'use strict';
@@ -852,6 +852,18 @@
                 }
     
                 if (!name) return Swal.showValidationMessage('請填寫點位名稱！');
+
+                // 🟢【核心修復：攔截重複點名】不關閉彈窗，保留照片與輸入內容供使用者修正
+                const ns = window.mapNamespace;
+                const currentRecords = window.auditLayersState?.[kmlId] || {};
+                if (!isEditMode || (isEditMode && defaultName !== name)) {
+                    const isDuplicateInKml = ns?.allKmlFeatures?.some(f => getPointKey(f.properties) === name);
+                    const isDuplicateInState = !!currentRecords[name];
+                    if (isDuplicateInKml || isDuplicateInState) {
+                        return Swal.showValidationMessage(`點名「${name}」已存在，請修改點位名稱！`);
+                    }
+                }
+
                 if (photosArray.length < maxPhotos) return Swal.showValidationMessage(`請上傳完整 ${maxPhotos} 張現場照片！`);
     
                 return {
@@ -883,21 +895,6 @@
         if (isNaN(numLat) || isNaN(numLng)) return Swal.fire('錯誤', '請提供有效的經緯度座標', 'error');
     
         const ns = window.mapNamespace;
-        const currentRecords = window.auditLayersState?.[kmlId] || {};
-    
-        if (!isEditMode || (isEditMode && oldPointKey !== trimmedPointKey)) {
-            const isDuplicateInKml = ns?.allKmlFeatures?.some(f => getPointKey(f.properties) === trimmedPointKey);
-            const isDuplicateInState = !!currentRecords[trimmedPointKey];
-    
-            if (isDuplicateInKml || isDuplicateInState) {
-                return Swal.fire({
-                    icon: 'warning',
-                    title: '點位名稱重複',
-                    text: `點名「${trimmedPointKey}」已存在！請直接修改點名後重新送出。`,
-                    confirmButtonText: '返回修改點名'
-                });
-            }
-        }
     
         Swal.fire({ title: '正在處理並儲存資料...', didOpen: () => Swal.showLoading(), allowOutsideClick: false });
     
@@ -1346,7 +1343,7 @@
                 const data = doc.data();
                 window.globalAuditConfigs[doc.id] = data; 
                 
-                // 修正：取消 isAuditing 條件限制，所有人與所有圖層均即時監聽新增點位
+                // 所有人與所有圖層均即時監聽新增點位
                 startAuditDataListener(doc.id);
             });
             updateKmlSelectUI();
@@ -1365,7 +1362,6 @@
             .onSnapshot(snapshot => {
                 const updates = {};
                 snapshot.forEach(doc => {
-                    // doc.id 即為 {pointKey}
                     updates[doc.id] = doc.data();
                 });
                 
@@ -1377,7 +1373,6 @@
                     if (!Array.isArray(ns.allKmlFeatures)) ns.allKmlFeatures = [];
     
                     Object.entries(updates).forEach(([pointKey, data]) => {
-                        // 判斷是否為新增自訂點位且具備經緯度座標
                         if ((data.isCustomPoint || data.deviceStatus === "新增") && data.lat && data.lng) {
                             const numLat = parseFloat(data.lat);
                             const numLng = parseFloat(data.lng);
@@ -1405,8 +1400,7 @@
                                     fillOpacity: 0.85
                                 }
                             };
-    
-                            // 避免重複展點，若已存在該 pointKey 則更新，否則加入
+
                             const idx = ns.allKmlFeatures.findIndex(f => getPointKey(f.properties) === pointKey);
                             if (idx >= 0) {
                                 ns.allKmlFeatures[idx] = customFeature;
@@ -1434,7 +1428,6 @@
         const select = document.getElementById('kmlLayerSelect');
         if (!select) return;
 
-        // 檢查目前使用者是否具備查看/參與清查的權限
         const hasPermission = (typeof canSeeAuditColors === 'function') ? canSeeAuditColors() : false;
 
         Array.from(select.options).forEach(opt => {
@@ -1443,7 +1436,6 @@
             const baseName = opt.getAttribute('data-basename') || opt.textContent.split(' (')[0];
             if (!opt.getAttribute('data-basename')) opt.setAttribute('data-basename', baseName);
 
-            // 只有當「具備權限」且「圖層開啟清查」時，才顯示清查標籤
             if (hasPermission && config?.isAuditing) {
                 opt.textContent = `${baseName} (清查中:${config.targetPhotos}張)`;
             } else {
@@ -1496,12 +1488,11 @@
             yellowDotControl = new YellowDotControl();
             yellowDotControl.addTo(map);
 
-            // 3. 📊 清查進度條 Control (放置於右上角縮放鈕左側紫框位置)
+            // 3. 📊 清查進度條 Control (放置於右上角縮放鈕左側位置)
             const ProgressControl = L.Control.extend({
                 options: { position: 'topright' },
                 onAdd: function() {
                     this._container = L.DomUtil.create('div', 'leaflet-control-audit-progress');
-                    // 設定 absolute 定位：對齊頂端 10px，並往左推開 55px 避開 + / - 縮放按鈕
                     this._container.style.cssText = `
                         position: absolute;
                         right: 55px;
