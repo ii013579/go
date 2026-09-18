@@ -701,7 +701,7 @@
     };
     
     // =========================================================
-    // 5-2. 動態渲染獨立「新增點位」按鈕
+    // 5-2. 動態渲染獨立「新增點位」按鈕 (已修正為白底矩形框風格)
     // =========================================================
     (function renderStandaloneAddButton() {
         let btn = document.getElementById('btn-standalone-add-point');
@@ -712,11 +712,12 @@
             document.body.appendChild(btn);
         }
     
+        // 🔴 將 background-color 改為白底、border 改為灰色實線、border-radius 改為 4px，與清查進度一致
         btn.setAttribute('style', `
             position: fixed !important; bottom: 20px !important; right: 15px !important; z-index: 4000 !important;
-            background-color: #2ecc71 !important; color: #ffffff !important; border: none !important;
-            padding: 8px 20px !important; border-radius: 25px !important; font-weight: bold !important; font-size: 15px !important;
-            box-shadow: 0 3px 10px rgba(0,0,0,0.3) !important; cursor: pointer !important; display: none !important;
+            background-color: rgba(255, 255, 255, 0.95) !important; color: #2ecc71 !important; border: 2px solid rgba(0,0,0,0.2) !important;
+            padding: 5px 12px !important; border-radius: 4px !important; font-weight: bold !important; font-size: 13px !important;
+            box-shadow: 0 1px 5px rgba(0,0,0,0.4) !important; cursor: pointer !important; display: none !important;
             align-items: center !important; justify-content: center !important; gap: 6px !important; outline: none !important;
             line-height: 1.4 !important; white-space: nowrap !important;
         `);
@@ -728,12 +729,6 @@
     
         syncAuditButtonVisibility();
     })();
-    
-    document.addEventListener('change', (e) => {
-        if (e.target?.id === 'kmlLayerSelect') {
-            setTimeout(syncAuditButtonVisibility, 100);
-        }
-    });
     
     // =========================================================
     // 5-3. 彈窗 UI 介面與照片預覽
