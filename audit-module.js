@@ -275,23 +275,33 @@
         const kmlId = ns?.currentKmlLayerId || window.currentActiveKmlId;
         if (!ns?.map || !kmlId) return;
 
-        // 🟢 1. 紀錄當前地圖中心座標與縮放層級
-        const currentCenter = ns.map.getCenter();
-        const currentZoom = ns.map.getZoom();
+        // 🟢 1. 優先使用開啟表單「前」預存的原視角，避免抓到被鍵盤或彈窗擠壓後的座標
+        const savedState = window.preAuditMapState;
+        const targetCenter = savedState ? savedState.center : ns.map.getCenter();
+        const targetZoom = savedState ? savedState.zoom : ns.map.getZoom();
 
-        if (window.addGeoJsonLayers && ns.allKmlFeatures) {
-            window.addGeoJsonLayers(ns.allKmlFeatures);
-        }
+        // 🟢 2. 延遲 100ms 避開 SweetAlert2 關閉時的動畫與 DOM 恢復時間
+        setTimeout(() => {
+            if (!ns.map) return;
 
-        // 🟢 2. 圖層重繪後，強制維持在原視角，防止地圖自動移動或重置視野
-        ns.map.setView(currentCenter, currentZoom, { animate: false });
+            // 強制重新計算 Leaflet 容器高寬，徹底消除底部灰邊
+            ns.map.invalidateSize({ animate: false });
 
-        if (typeof syncAuditButtonVisibility === 'function') {
-            syncAuditButtonVisibility();
-        }
-        if (typeof updateBottomBtnState === 'function') {
-            updateBottomBtnState();
-        }
+            // 重繪點位（將已清查點位即時更新為藍/黃點）
+            if (typeof window.addGeoJsonLayers === 'function' && ns.allKmlFeatures) {
+                window.addGeoJsonLayers(ns.allKmlFeatures);
+            }
+
+            // 精確還原至開啟彈窗前的座標與縮放層級
+            ns.map.setView(targetCenter, targetZoom, { animate: false });
+
+            // 清除暫存視角
+            window.preAuditMapState = null;
+
+            if (typeof syncAuditButtonVisibility === 'function') syncAuditButtonVisibility();
+            if (typeof updateBottomBtnState === 'function') updateBottomBtnState();
+            if (typeof updateAuditProgress === 'function') updateAuditProgress();
+        }, 100);
     }
     window.forceMapRefresh = forceMapRefresh;
 
@@ -1012,6 +1022,14 @@
         if (!checkHasAuditPermission()) return;
         const activePoint = window.currentSelectedPoint;
         if (!activePoint) return;
+        
+        const map = window.mapNamespace?.map;
+        if (map) {
+            window.preAuditMapState = {
+                center: map.getCenter(),
+                zoom: map.getZoom()
+            };
+        }
 
         const layerProps = activePoint.feature?.properties || activePoint.properties || {};
         const pointKey = getPointKey(layerProps);
