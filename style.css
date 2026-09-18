@@ -777,84 +777,89 @@ canvas {
     -webkit-tap-highlight-color: transparent;
 }
 
-/* ---------- 清查按鈕 ---------- */
-/* 預設顏色 (灰或深橘) */
-.audit-btn {
-    background-color: #666; 
-    color: white;
-    transition: background-color 0.3s;
-}
 
-/* 啟動中的顏色 (亮橘) */
-.audit-btn.active {
-    background-color: #ff8533 !important;
-    box-shadow: 0 0 10px rgba(255, 133, 51, 0.5);
-}
-
-/* 下載按鈕 - 綠色 (預設隱藏) */
+/* ---------- 清查程式 ---------- */
+/* =========================================================
+   1. 統一按鈕與控制項風格 (微圓角 6px + 白底卡片陰影)
+   ========================================================= */
+/* 地圖控制項按鈕、底部選單按鈕與清查按鈕 */
+.leaflet-bottomcenter .audit-bottom-menu-container button,
+.leaflet-control-audit-progress,
+.leaflet-control-add-point-btn,
+.leaflet-control-toggle-audited,
+.audit-btn,
 .download-btn {
-    background: linear-gradient(135deg, #28a745, #218838);
-    color: white;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    display: none
-}
-.download-btn:hover {
-    filter: brightness(1.1);
+    -webkit-appearance: none;
+    touch-action: manipulation;
+    background: rgba(255, 255, 255, 0.95) !important;
+    color: #333333 !important;
+    border: 1px solid rgba(0, 0, 0, 0.15) !important;
+    border-radius: 6px !important;              /* 🔴 統一改為 6px 微圓角，不使用膠囊 */
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18) !important;
+    padding: 6px 14px !important;
+    font-size: 13px !important;
+    font-weight: bold !important;
+    cursor: pointer !important;
+    transition: all 0.2s ease;
 }
 
-.audit-bottom-menu {
-    position: fixed;
+/* 懸停與點擊狀態 */
+.audit-btn:hover,
+.download-btn:hover,
+.audit-bottom-menu-container button:hover {
+    background: #f8f9fa !important;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.22) !important;
+}
+
+/* 主按鈕 / 啟動狀態 (保持主題色顯眼) */
+.audit-btn.active,
+.audit-bottom-menu-container button.btn-primary {
+    background: #007bff !important;
+    color: #ffffff !important;
+    border: none !important;
+}
+
+/* 下載按鈕 (成功綠) */
+.download-btn {
+    background: #28a745 !important;
+    color: #ffffff !important;
+    border: none !important;
+    display: none;
+}
+
+
+/* =========================================================
+   2. 地圖底部置中容器 (不干擾地圖操作)
+   ========================================================= */
+.leaflet-bottomcenter {
+    position: absolute;
     bottom: 20px;
     left: 50%;
     transform: translateX(-50%);
-    z-index: 1000;
-}
-
-/* 確保自定義的置中容器不阻擋地圖操作 */
-.leaflet-bottomcenter {
-    position: absolute;
-    bottom: 20px; /* 稍微抬高，避免擋到手機系統導航列 */
-    left: 50%;
-    transform: translateX(-50%);
     z-index: 1000 !important;
-    pointer-events: none; 
+    pointer-events: none;
     display: flex;
     justify-content: center;
-    width: 100%; /* 寬度撐滿才能真正 translateX 置中 */
+    width: 100%;
 }
 
-/* 讓按鈕區塊恢復點擊功能 */
-.leaflet-bottomcenter .audit-bottom-menu-container {
-    pointer-events: auto !important;
-    display: inline-block;
-}
-
-/* 針對手機按鈕樣式優化 */
-.audit-bottom-menu-container button {
-    -webkit-appearance: none; /* 移除 iOS 預設樣式 */
-    touch-action: manipulation; /* 優化觸控反應 */
-    cursor: pointer;
-}
-
-/* 修改底部控制項容器，確保按鈕置中且可點擊 */
 .audit-bottom-menu-container {
     pointer-events: auto !important;
     display: flex;
+    gap: 8px;
     justify-content: center;
-    width: auto;
 }
 
-/* 讓 sweetalert 內的清單更美觀 */
+
+/* =========================================================
+   3. SweetAlert2 彈窗與現場拍照 4 格網格
+   ========================================================= */
 .swal2-html-container select.swal2-input {
     margin: 10px auto;
-    font-size: 16px;
+    font-size: 15px;
 }
 
-
-/* ---------- 照片 容器 ---------- */
-/* 1. 父容器：強制佔滿 100% 寬度，絕不縮小 */
+/* 照片 4 格網格容器 */
 .audit-photo-grid {
     display: grid !important;
     grid-template-columns: repeat(4, 1fr) !important;
@@ -863,17 +868,17 @@ canvas {
     min-width: 100% !important;
     box-sizing: border-box !important;
     margin-top: 12px !important;
-    margin-bottom: 20px !important;
+    margin-bottom: 18px !important;
 }
 
-/* 2. 個別照片方塊：直接給定固定高度 min-height: 85px */
+/* 個別照片方塊 (保底高度防壓扁) */
 .audit-photo-box {
     width: 100% !important;
-    min-height: 85px !important; /* 💡 核心保命設定：強制保底高度，絕不被彈窗擠壓 */
+    min-height: 85px !important;
     aspect-ratio: 1 / 1 !important;
     border: 1.5px dashed #a0a0a0 !important;
     background-color: #fafafa !important;
-    border-radius: 8px !important;
+    border-radius: 6px !important;
     position: relative !important;
     display: flex !important;
     flex-direction: column !important;
@@ -883,7 +888,7 @@ canvas {
     overflow: hidden !important;
 }
 
-/* 3. 圖示與文字容器 */
+/* 預設圖示與提示文字 */
 .audit-photo-placeholder {
     display: flex !important;
     flex-direction: column !important;
@@ -894,19 +899,19 @@ canvas {
 }
 
 .audit-photo-placeholder .icon {
-    font-size: 24px !important;
+    font-size: 22px !important;
     line-height: 1 !important;
 }
 
 .audit-photo-placeholder .text {
     font-size: 11px !important;
-    color: #444 !important;
+    color: #555 !important;
     font-weight: bold !important;
     margin-top: 4px !important;
     white-space: nowrap !important;
 }
 
-/* 4. 預覽圖 (全滿覆蓋) */
+/* 預覽圖覆蓋層 */
 .audit-photo-img {
     position: absolute !important;
     top: 0 !important;
@@ -917,7 +922,7 @@ canvas {
     z-index: 1 !important;
 }
 
-/* 5. 點擊上傳層 */
+/* 拍照/上傳觸發層 */
 .audit-photo-input-main {
     position: absolute !important;
     top: 0 !important;
@@ -929,11 +934,11 @@ canvas {
     cursor: pointer !important;
 }
 
-/* 6. 右下角：開啟舊檔按鈕 (收在方塊內側) */
+/* 右下角：選擇舊檔按鈕 */
 .audit-photo-btn-sub {
     position: absolute !important;
-    bottom: 2px !important;
-    right: 2px !important;
+    bottom: 3px !important;
+    right: 3px !important;
     z-index: 4 !important;
 }
 
@@ -947,12 +952,14 @@ canvas {
     background: rgba(255, 255, 255, 0.95) !important;
     padding: 2px 4px !important;
     border: 1px solid #888 !important;
-    border-radius: 3px !important;
+    border-radius: 4px !important;
     box-shadow: 0 1px 2px rgba(0,0,0,0.2) !important;
 }
 
-/* ---------- 修正地圖灰底與 Swal 擠壓問題 ---------- */
-/* 1. 強制地圖容器吃滿剩餘所有高度 */
+
+/* =========================================================
+   4. 版面與地圖容器防擠壓機制
+   ========================================================= */
 #map, .leaflet-container {
     flex: 1 1 auto !important;
     width: 100% !important;
@@ -961,7 +968,6 @@ canvas {
     z-index: 1;
 }
 
-/* 2. 避免 Swal 觸發全頁滾動條與推擠版面 */
 body.swal2-shown {
     padding-right: 0 !important;
     overflow: hidden !important;

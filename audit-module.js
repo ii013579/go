@@ -275,9 +275,16 @@
         const kmlId = ns?.currentKmlLayerId || window.currentActiveKmlId;
         if (!ns?.map || !kmlId) return;
 
+        // 🟢 1. 紀錄當前地圖中心座標與縮放層級
+        const currentCenter = ns.map.getCenter();
+        const currentZoom = ns.map.getZoom();
+
         if (window.addGeoJsonLayers && ns.allKmlFeatures) {
             window.addGeoJsonLayers(ns.allKmlFeatures);
         }
+
+        // 🟢 2. 圖層重繪後，強制維持在原視角，防止地圖自動移動或重置視野
+        ns.map.setView(currentCenter, currentZoom, { animate: false });
 
         if (typeof syncAuditButtonVisibility === 'function') {
             syncAuditButtonVisibility();
