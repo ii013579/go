@@ -946,9 +946,9 @@
                 await generateLayerCsvReport(kmlId, kmlLayerName || kmlId || 'default_layer', config.targetPhotos || 2);
             }
     
-            Swal.fire({ icon: 'success', title: isEditMode ? '修改點位成功' : '新增清查點位成功', timer: 1200, showConfirmButton: false });
+            await Swal.fire({ icon: 'success', title: isEditMode ? '修改點位成功' : '新增清查點位成功', timer: 800, showConfirmButton: false });
             forceMapRefresh();
-            setTimeout(updateBottomBtnState, 300);
+            setTimeout(updateBottomBtnState, 200);
     
         } catch (e) {
             Swal.fire('錯誤', e.message || '儲存失敗', 'error');
@@ -1209,7 +1209,7 @@
 
                 if (typeof generateLayerCsvReport === 'function') await generateLayerCsvReport(kmlId, kmlLayerName, maxPhotos);
 
-                Swal.fire({ icon: 'success', title: '更新成功', timer: 1000, showConfirmButton: false });
+                await Swal.fire({ icon: 'success', title: '更新成功', timer: 800, showConfirmButton: false });
                 forceMapRefresh();
                 setTimeout(updateBottomBtnState, 300);
             } catch (e) { 
