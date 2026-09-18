@@ -269,8 +269,8 @@
 
         return result;
     };
-
-    // 🟢 自動綁定 ResizeObserver：只要地圖容器 DOM 尺寸有變化，0 秒自動補滿 tile 地圖磚
+    
+    // 🟢 自動綁定 ResizeObserver：只要地圖容器 DOM 尺寸有變化，自動補滿 tile 地圖磚
     function initMapResizeObserver() {
         const map = window.mapNamespace?.map;
         if (map && !window._mapResizeObserver) {
@@ -288,17 +288,22 @@
         const kmlId = ns?.currentKmlLayerId || window.currentActiveKmlId;
         if (!map || !kmlId) return;
 
-        // 初始化容器尺寸自動補滿機制
+        // 1. 初始化容器尺寸自動補滿機制
         initMapResizeObserver();
 
-        // 1. 強制更新地圖尺寸（無動畫，不移動視野）
+        // 2. 強制更新地圖尺寸
         map.invalidateSize({ pan: false });
 
-        // 2. 取得最新 Firestore 紀錄與黃點顯示狀態
+        // 🟢【關鍵修復】必須先執行重新繪製，將全域陣列 (包含新點位) 轉化為 Leaflet 圖層物件
+        if (typeof window.addGeoJsonLayers === 'function' && ns.allKmlFeatures) {
+            window.addGeoJsonLayers(ns.allKmlFeatures);
+        }
+
+        // 3. 取得最新 Firestore 紀錄與黃點顯示狀態
         const records = window.auditLayersState?.[kmlId] || {};
         const isAuditedVisible = window.showAuditedPoints !== false;
 
-        // 3. 🟢 直接遍歷地圖上「所有點位圖層」，強制重繪藍/黃點顏色
+        // 4. 遍歷地圖上所有圖層，即時同步顏色與透明度
         map.eachLayer(layer => {
             const props = layer.feature?.properties || layer.options?.properties;
             if (props) {
@@ -331,7 +336,7 @@
             }
         });
 
-        // 4. 更新進度條與按鈕
+        // 5. 更新進度條與按鈕狀態
         if (typeof syncAuditButtonVisibility === 'function') syncAuditButtonVisibility();
         if (typeof updateBottomBtnState === 'function') updateBottomBtnState();
         if (typeof updateAuditProgress === 'function') updateAuditProgress();
