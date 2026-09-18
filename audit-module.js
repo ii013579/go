@@ -270,63 +270,71 @@
         return result;
     };
 
+    // 🟢 自動綁定 ResizeObserver：只要地圖容器 DOM 尺寸有變化，0 秒自動補滿 tile 地圖磚
+    function initMapResizeObserver() {
+        const map = window.mapNamespace?.map;
+        if (map && !window._mapResizeObserver) {
+            const container = map.getContainer();
+            window._mapResizeObserver = new ResizeObserver(() => {
+                map.invalidateSize({ pan: false });
+            });
+            window._mapResizeObserver.observe(container);
+        }
+    }
+
     function forceMapRefresh() {
         const ns = window.mapNamespace;
+        const map = ns?.map;
         const kmlId = ns?.currentKmlLayerId || window.currentActiveKmlId;
-        if (!ns?.map || !kmlId) return;
+        if (!map || !kmlId) return;
 
-        // 🟢 1. 優先採用開啟表單前記憶的視角
-        const savedState = window.preAuditMapState;
-        const targetCenter = savedState ? savedState.center : ns.map.getCenter();
-        const targetZoom = savedState ? savedState.zoom : ns.map.getZoom();
+        // 初始化容器尺寸自動補滿機制
+        initMapResizeObserver();
 
-        // 🟢 2. 雙重微延遲，確保 SweetAlert2 DOM 徹底關閉並恢復頁面高度後再計算地圖
-        setTimeout(() => {
-            if (!ns.map) return;
+        // 1. 強制更新地圖尺寸（無動畫，不移動視野）
+        map.invalidateSize({ pan: false });
 
-            // 重新計算容器高寬，徹底消除底部灰邊
-            ns.map.invalidateSize({ animate: false });
+        // 2. 取得最新 Firestore 紀錄與黃點顯示狀態
+        const records = window.auditLayersState?.[kmlId] || {};
+        const isAuditedVisible = window.showAuditedPoints !== false;
 
-            // 重新載入 GeoJSON 數據
-            if (typeof window.addGeoJsonLayers === 'function' && ns.allKmlFeatures) {
-                window.addGeoJsonLayers(ns.allKmlFeatures);
-            }
+        // 3. 🟢 直接遍歷地圖上「所有點位圖層」，強制重繪藍/黃點顏色
+        map.eachLayer(layer => {
+            const props = layer.feature?.properties || layer.options?.properties;
+            if (props) {
+                const pointKey = props.auditPointKey || props.name || props.title;
+                const isAudited = !!records[pointKey];
+                props.isAudited = isAudited;
 
-            // 🟢 3. 強制走訪目前畫面上的所有向量點位，即時更新藍/黃填色
-            const records = window.auditLayersState?.[kmlId] || {};
-            const isAuditedVisible = window.showAuditedPoints !== false;
-
-            ns.map.eachLayer(layer => {
-                const props = layer.feature?.properties || layer.options?.properties;
-                if (props) {
-                    const pointKey = props.auditPointKey || props.name || props.title;
-                    const isAudited = !!records[pointKey];
-                    props.isAudited = isAudited;
-
-                    if (typeof layer.setStyle === 'function') {
-                        const targetColor = isAudited ? (isAuditedVisible ? "#FCD770" : "transparent") : "#2A00D2";
-                        const targetOpacity = isAudited ? (isAuditedVisible ? 0.85 : 0) : 0.85;
+                if (typeof layer.setStyle === 'function') {
+                    if (isAudited) {
+                        // 已清查：黃點 (或隱藏)
                         layer.setStyle({
-                            fillColor: targetColor,
+                            fillColor: isAuditedVisible ? "#FCD770" : "transparent",
                             color: isAuditedVisible ? "#ffffff" : "transparent",
-                            fillOpacity: targetOpacity,
-                            opacity: targetOpacity,
-                            stroke: isAudited ? isAuditedVisible : true
+                            fillOpacity: isAuditedVisible ? 0.85 : 0,
+                            opacity: isAuditedVisible ? 1 : 0,
+                            stroke: isAuditedVisible
+                        });
+                    } else {
+                        // 未清查：藍點
+                        layer.setStyle({
+                            fillColor: "#2A00D2",
+                            color: "#ffffff",
+                            fillOpacity: 0.85,
+                            opacity: 1,
+                            stroke: true,
+                            weight: 2
                         });
                     }
                 }
-            });
+            }
+        });
 
-            // 🟢 4. 精確還原至開啟彈窗前的座標與縮放層級
-            ns.map.setView(targetCenter, targetZoom, { animate: false });
-
-            // 清除暫存視角
-            window.preAuditMapState = null;
-
-            if (typeof syncAuditButtonVisibility === 'function') syncAuditButtonVisibility();
-            if (typeof updateBottomBtnState === 'function') updateBottomBtnState();
-            if (typeof updateAuditProgress === 'function') updateAuditProgress();
-        }, 150);
+        // 4. 更新進度條與按鈕
+        if (typeof syncAuditButtonVisibility === 'function') syncAuditButtonVisibility();
+        if (typeof updateBottomBtnState === 'function') updateBottomBtnState();
+        if (typeof updateAuditProgress === 'function') updateAuditProgress();
     }
     window.forceMapRefresh = forceMapRefresh;
 

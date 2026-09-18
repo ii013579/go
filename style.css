@@ -4,19 +4,22 @@
    - 註解均為中文，段落以用途分類，盡量保留原始設計與行為
    ========================================================================== */
 
-/* ---------- 全局與  本佈局 ---------- */
+/* ---------- 全局與本佈局 (修正版) ---------- */
 html, body {
   margin: 0;
   padding: 0;
-  height: 100%;
+  height: 100% !important;
+  height: 100dvh !important; /* 優先使用動態視高，防止手機選單拉扯 */
   font-family: 'Inter', sans-serif;
   color: #333;
   background-color: #f0f2f5;
+  overflow: hidden !important; /* 鎖定全頁滾動條 */
 }
+
 body {
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  height: 100% !important;
 }
 
 /* ---------- 標題區域（頂部條） ---------- */
@@ -961,16 +964,17 @@ canvas {
    4. 版面與地圖容器防擠壓機制
    ========================================================= */
 #map, .leaflet-container {
-    flex: 1 1 auto !important;
-    width: 100% !important;
-    height: 100% !important;
-    position: relative !important;
-    z-index: 1;
+  flex: 1 1 auto !important; /* 自動填滿 Flex 剩餘空間 */
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 0 !important;   /* 關鍵：允許 Flex 子項目收縮，防止被擠出灰邊 */
+  background-color: #e5e3df !important; /* 設定地圖載入底色 */
 }
 
 body.swal2-shown {
-    padding-right: 0 !important;
-    overflow: hidden !important;
+  height: 100% !important;
+  padding-right: 0 !important;
+  overflow: hidden !important;
 }
 
 .swal2-container {
