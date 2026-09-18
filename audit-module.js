@@ -714,6 +714,15 @@
     };
     
     window.openAddPointModal = async function(param1, param2, param3) {
+    	
+    	const map = window.mapNamespace?.map;
+        if (map) {
+            window.preAuditMapState = {
+                center: map.getCenter(),
+                zoom: map.getZoom()
+            };
+        }
+        
         let kmlId, lat, lng, editData = null, isEditMode = false;
     
         if (typeof param1 === 'object' && param1 !== null) {
