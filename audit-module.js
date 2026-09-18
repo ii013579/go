@@ -398,7 +398,7 @@
                 const safePointKey = safeEscape(pointKey);
                 const isAudited = (window.auditLayersState[kmlId] || {})[pointKey] !== undefined;
 
-                const btnBaseStyle = `color: white; border: none; padding: 6px 16px; border-radius: 50px; font-weight: bold; font-size: 13px; box-shadow: 0 2px 8px rgba(0,0,0,0.3); cursor: pointer; outline: none; line-height: 1.4; white-space: nowrap;`;
+                const btnBaseStyle = `color: white; border: none; padding: 6px 14px; border-radius: 4px; font-weight: bold; font-size: 13px; box-shadow: 0 1px 3px rgba(0,0,0,0.3); cursor: pointer; outline: none; line-height: 1.4; white-space: nowrap;`;
 
                 const btnHtml = isAudited ? `
                     <button onclick="window.viewAuditDetailOnly('${safePointKey}')" style="background: #e91e63; ${btnBaseStyle}">🔍 查看</button>
@@ -409,7 +409,7 @@
 
                 bottomControl._container.style.display = 'block';
                 bottomControl._container.innerHTML = `
-                    <div style="text-align: center; pointer-events: auto; display: flex; gap: 6px; align-items: center; justify-content: center; background: rgba(0,0,0,0.8); padding: 6px 14px; border-radius: 50px; backdrop-filter: blur(5px); box-shadow: 0 4px 15px rgba(0,0,0,0.4);">
+                    <div style="text-align: center; pointer-events: auto; display: flex; gap: 6px; align-items: center; justify-content: center; background: rgba(255, 255, 255, 0.95); border: 2px solid rgba(0,0,0,0.2); padding: 5px 10px; border-radius: 4px; box-shadow: 0 1px 5px rgba(0,0,0,0.4);">
                         ${btnHtml}
                     </div>`;
             } else {
