@@ -367,7 +367,9 @@
                 <button onclick="window.toggleAuditedPointsVisibility()" 
                         title="${isAuditedVisible ? '隱藏已清查黃點' : '顯示已清查黃點'}"
                         style="background: #ffffff; color: #333; border: 2px solid rgba(0,0,0,0.2); width: 34px; height: 34px; border-radius: 4px; font-weight: bold; font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 1px 5px rgba(0,0,0,0.4); pointer-events: auto; padding: 0; position: relative;">
-                    <span style="display: inline-block; width: 14px; height: 14px; background: #f1c40f; border-radius: 50%; border: 1.5px solid #fff; box-shadow: 0 0 2px rgba(0,0,0,0.3);"></span>
+                    <span style="display: flex; align-items: center; justify-content: center; width: 16px; height: 16px; background: #ffffff; border-radius: 50%; box-shadow: 0 0 2px rgba(0,0,0,0.4);">
+                        <span style="display: block; width: 10px; height: 10px; background: #f1c40f; border-radius: 50%;"></span>
+                    </span>
                     ${!isAuditedVisible ? '<span style="position: absolute; color: #e74c3c; font-size: 18px; font-weight: 900; line-height: 1; text-shadow: 0 0 2px #fff;">❌</span>' : ''}
                 </button>
             `;
@@ -701,7 +703,7 @@
     };
     
     // =========================================================
-    // 5-2. 動態渲染獨立「新增點位」按鈕 (已修正為白底矩形框風格)
+    // 5-2. 動態渲染獨立「新增點位」按鈕 (取消綠色底色，改為白底黑字)
     // =========================================================
     (function renderStandaloneAddButton() {
         let btn = document.getElementById('btn-standalone-add-point');
@@ -712,11 +714,11 @@
             document.body.appendChild(btn);
         }
     
-        // 🔴 將 background-color 改為白底、border 改為灰色實線、border-radius 改為 4px，與清查進度一致
+        // 🔴 background 改為純白/半透明白，color 改為黑色 (#2c3e50)
         btn.setAttribute('style', `
             position: fixed !important; bottom: 20px !important; right: 15px !important; z-index: 4000 !important;
-            background-color: rgba(255, 255, 255, 0.95) !important; color: #2ecc71 !important; border: 2px solid rgba(0,0,0,0.2) !important;
-            padding: 5px 12px !important; border-radius: 4px !important; font-weight: bold !important; font-size: 13px !important;
+            background-color: rgba(255, 255, 255, 0.95) !important; color: #2c3e50 !important; border: 2px solid rgba(0,0,0,0.2) !important;
+            padding: 5px 10px !important; border-radius: 4px !important; font-weight: bold !important; font-size: 12px !important;
             box-shadow: 0 1px 5px rgba(0,0,0,0.4) !important; cursor: pointer !important; display: none !important;
             align-items: center !important; justify-content: center !important; gap: 6px !important; outline: none !important;
             line-height: 1.4 !important; white-space: nowrap !important;
