@@ -780,24 +780,161 @@ canvas {
     -webkit-tap-highlight-color: transparent;
 }
 
+/* ==================  清查模組專用  ======================= */
+@charset "UTF-8";
 
-/* ---------- 清查程式 ---------- */
 /* =========================================================
-   1. 統一按鈕與控制項風格 (微圓角 6px + 白底卡片陰影)
+   1. 填寫 / 編輯表單彈窗樣式 (SweetAlert2 內容對應)
    ========================================================= */
-/* 地圖控制項按鈕、底部選單按鈕與清查按鈕 */
-.leaflet-bottomcenter .audit-bottom-menu-container button,
-.leaflet-control-audit-progress,
-.leaflet-control-add-point-btn,
-.leaflet-control-toggle-audited,
+
+/* 彈窗主標題 */
+.audit-modal-title {
+    font-size: 1.25rem !important;
+    font-weight: 700 !important;
+    color: #2c3e50 !important;
+    margin-bottom: 12px !important;
+}
+
+/* 彈窗容器 */
+.audit-modal-container {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    text-align: left;
+    padding: 4px;
+    box-sizing: border-box;
+}
+
+/* 表單分組 */
+.audit-form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+/* 欄位標籤 */
+.audit-form-label {
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: #4a5568;
+    margin: 0;
+}
+
+/* 禁用狀態選單 */
+.audit-select-disabled {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid #cbd5e0;
+    border-radius: 6px;
+    background-color: #edf2f7;
+    color: #718096;
+    font-size: 0.95rem;
+    cursor: not-allowed;
+    box-sizing: border-box;
+}
+
+/* 備註輸入框 */
+.audit-textarea {
+    width: 100%;
+    min-height: 80px;
+    padding: 10px 12px;
+    border: 1px solid #dcdfe6;
+    border-radius: 6px;
+    font-size: 0.95rem;
+    color: #333333;
+    resize: vertical;
+    box-sizing: border-box;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.audit-textarea:focus {
+    outline: none;
+    border-color: #409eff;
+    box-shadow: 0 0 0 2px rgba(64, 158, 255, 0.2);
+}
+
+/* 2. 照片九宮格 (1:1 正方形微圓角) */
+.audit-photo-grid {
+    display: grid;
+    grid-template-columns: repeat( auto-fit, minmax(80px, 1fr) );
+    gap: 10px;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.audit-photo-box {
+    position: relative;
+    width: 100%;
+    padding-top: 100%; /* 強制 1:1 正方形比例 */
+    border: 2px dashed #cbd5e0;
+    border-radius: 8px;
+    background-color: #f7fafc;
+    overflow: hidden;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-sizing: border-box;
+}
+
+.audit-photo-box:hover {
+    border-color: #4299e1;
+    background-color: #ebf8ff;
+}
+
+/* 照片預覽圖片 */
+.audit-photo-img {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    z-index: 2;
+}
+
+/* 照片未上傳佔位圖示 */
+.audit-photo-placeholder {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #a0aec0;
+    font-size: 1.5rem;
+    z-index: 1;
+}
+
+/* 透明相機 Input 上傳層 */
+.audit-photo-input-main {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    cursor: pointer;
+    z-index: 3;
+}
+
+
+/* =========================================================
+   2. 地圖按鈕與控制項風格 (復原 6px 微圓角 + 卡片陰影)
+   ========================================================= */
+
+/* 通用按鈕與控制項基礎樣式 */
 .audit-btn,
-.download-btn {
+.download-btn,
+.leaflet-bottomcenter .audit-bottom-menu-container button,
+.leaflet-control-add-point-btn,
+.leaflet-control-toggle-audited {
     -webkit-appearance: none;
     touch-action: manipulation;
     background: rgba(255, 255, 255, 0.95) !important;
     color: #333333 !important;
     border: 1px solid rgba(0, 0, 0, 0.15) !important;
-    border-radius: 6px !important;              /* 🔴 統一改為 6px 微圓角，不使用膠囊 */
+    border-radius: 6px !important;
     box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18) !important;
     padding: 6px 14px !important;
     font-size: 13px !important;
@@ -806,7 +943,7 @@ canvas {
     transition: all 0.2s ease;
 }
 
-/* 懸停與點擊狀態 */
+/* 懸停狀態 */
 .audit-btn:hover,
 .download-btn:hover,
 .audit-bottom-menu-container button:hover {
@@ -814,174 +951,128 @@ canvas {
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.22) !important;
 }
 
-/* 主按鈕 / 啟動狀態 (保持主題色顯眼) */
-.audit-btn.active,
-.audit-bottom-menu-container button.btn-primary {
-    background: #007bff !important;
-    color: #ffffff !important;
-    border: none !important;
-}
-
-/* 下載按鈕 (成功綠) */
-.download-btn {
-    background: #28a745 !important;
-    color: #ffffff !important;
-    border: none !important;
-    display: none;
-}
-
-
-/* =========================================================
-   2. 地圖底部置中容器 (不干擾地圖操作)
-   ========================================================= */
-.leaflet-bottomcenter {
-    position: absolute;
-    bottom: 20px;
-    left: 50%;
-    transform: translateX(-50%);
-    z-index: 1000 !important;
-    pointer-events: none;
-    display: flex;
-    justify-content: center;
-    width: 100%;
-}
-
+/* 底部按鈕區容器 */
 .audit-bottom-menu-container {
-    pointer-events: auto !important;
     display: flex;
     gap: 8px;
     justify-content: center;
+    padding: 4px;
 }
 
-
-/* =========================================================
-   3. SweetAlert2 彈窗與現場拍照 4 格網格
-   ========================================================= */
-.swal2-html-container select.swal2-input {
-    margin: 10px auto;
-    font-size: 15px;
+/* 底部動作按鈕專屬配色 */
+.audit-btn-view {
+    background: #e91e63 !important;
+    color: #ffffff !important;
+    border: none !important;
 }
 
-/* 照片 4 格網格容器 */
-.audit-photo-grid {
-    display: grid !important;
-    grid-template-columns: repeat(4, 1fr) !important;
-    gap: 10px !important;
-    width: 100% !important;
-    min-width: 100% !important;
-    box-sizing: border-box !important;
-    margin-top: 12px !important;
-    margin-bottom: 18px !important;
+.audit-btn-edit {
+    background: #f39c12 !important;
+    color: #ffffff !important;
+    border: none !important;
 }
 
-/* 個別照片方塊 (保底高度防壓扁) */
-.audit-photo-box {
-    width: 100% !important;
-    min-height: 85px !important;
-    aspect-ratio: 1 / 1 !important;
-    border: 1.5px dashed #a0a0a0 !important;
-    background-color: #fafafa !important;
-    border-radius: 6px !important;
-    position: relative !important;
-    display: flex !important;
-    flex-direction: column !important;
-    align-items: center !important;
-    justify-content: center !important;
-    box-sizing: border-box !important;
-    overflow: hidden !important;
+.audit-btn-audit {
+    background: #2ecc71 !important;
+    color: #ffffff !important;
+    border: none !important;
 }
 
-/* 預設圖示與提示文字 */
-.audit-photo-placeholder {
-    display: flex !important;
-    flex-direction: column !important;
-    align-items: center !important;
-    justify-content: center !important;
-    pointer-events: none !important;
-    z-index: 1 !important;
-}
-
-.audit-photo-placeholder .icon {
-    font-size: 22px !important;
-    line-height: 1 !important;
-}
-
-.audit-photo-placeholder .text {
-    font-size: 11px !important;
-    color: #555 !important;
-    font-weight: bold !important;
-    margin-top: 4px !important;
-    white-space: nowrap !important;
-}
-
-/* 預覽圖覆蓋層 */
-.audit-photo-img {
+/* 3. 清查進度徽章 (定位在縮放鈕左側、無外框白邊) */
+.leaflet-control-audit-progress {
     position: absolute !important;
-    top: 0 !important;
-    left: 0 !important;
-    width: 100% !important;
-    height: 100% !important;
-    object-fit: cover !important;
-    z-index: 1 !important;
-}
-
-/* 拍照/上傳觸發層 */
-.audit-photo-input-main {
-    position: absolute !important;
-    top: 0 !important;
-    left: 0 !important;
-    width: 100% !important;
-    height: 100% !important;
-    opacity: 0 !important;
-    z-index: 2 !important;
-    cursor: pointer !important;
-}
-
-/* 右下角：選擇舊檔按鈕 */
-.audit-photo-btn-sub {
-    position: absolute !important;
-    bottom: 3px !important;
-    right: 3px !important;
-    z-index: 4 !important;
-}
-
-.audit-photo-btn-sub label {
-    display: block !important;
-    font-size: 9px !important;
-    line-height: 1.2 !important;
-    white-space: nowrap !important;
-    color: #333 !important;
-    cursor: pointer !important;
+    top: 10px !important;
+    right: 50px !important; /* 避開右上角的 Leaflet 縮放鈕 (寬度約 34px + 間距) */
+    z-index: 1000 !important;
+    -webkit-appearance: none;
+    touch-action: manipulation;
     background: rgba(255, 255, 255, 0.95) !important;
-    padding: 2px 4px !important;
-    border: 1px solid #888 !important;
-    border-radius: 4px !important;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.2) !important;
+    color: #333333 !important;
+    border: none !important;                 /* 徹底移除外框白邊 */
+    outline: none !important;                /* 移除 Focus 外框 */
+    border-radius: 6px !important;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18) !important;
+    padding: 6px 14px !important;
+    font-size: 13px !important;
+    font-weight: bold !important;
+    white-space: nowrap !important;
+    cursor: default !important;
+    transition: all 0.2s ease;
 }
 
-
-/* =========================================================
-   4. 版面與地圖容器防擠壓機制
-   ========================================================= */
-#map, .leaflet-container {
-  flex: 1 1 auto !important; /* 自動填滿 Flex 剩餘空間 */
-  width: 100% !important;
-  height: 100% !important;
-  min-height: 0 !important;   /* 關鍵：允許 Flex 子項目收縮，防止被擠出灰邊 */
-  background-color: #e5e3df !important; /* 設定地圖載入底色 */
+/* 4. 右上角黃點顯示 / 隱藏切換鈕 */
+.audit-yellow-dot-btn {
+    background: rgba(255, 255, 255, 0.95) !important;
+    color: #333333 !important;
+    border: 1px solid rgba(0, 0, 0, 0.15) !important;
+    width: 34px !important;
+    height: 34px !important;
+    border-radius: 6px !important;
+    font-weight: bold !important;
+    font-size: 14px !important;
+    cursor: pointer !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18) !important;
+    pointer-events: auto !important;
+    padding: 0 !important;
+    position: relative !important;
 }
 
-body.swal2-shown {
-  height: 100% !important;
-  padding-right: 0 !important;
-  overflow: hidden !important;
+.audit-dot-outer {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    background: #ffffff;
+    border-radius: 50%;
+    box-shadow: 0 0 2px rgba(0,0,0,0.4);
 }
 
-.swal2-container {
+.audit-dot-inner {
+    display: block;
+    width: 10px;
+    height: 10px;
+    background: #f1c40f;
+    border-radius: 50%;
+}
+
+.audit-cross-icon {
+    position: absolute;
+    color: #e74c3c;
+    font-size: 18px;
+    font-weight: 900;
+    line-height: 1;
+    text-shadow: 0 0 2px #ffffff;
+}
+
+/* 5. 右下角獨立新增點位浮動按鈕 */
+#btn-standalone-add-point {
     position: fixed !important;
-    top: 0;
-    left: 0;
-    width: 100vw;
-    height: 100vh;
-    z-index: 9999 !important;
+    bottom: 20px !important;
+    right: 15px !important;
+    z-index: 4000 !important;
+    background-color: rgba(255, 255, 255, 0.95) !important;
+    color: #2c3e50 !important;
+    border: 1px solid rgba(0,0,0,0.15) !important;
+    padding: 6px 14px !important;
+    border-radius: 6px !important;
+    font-weight: bold !important;
+    font-size: 13px !important;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.18) !important;
+    cursor: pointer !important;
+    display: none;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 6px !important;
+    outline: none !important;
+    line-height: 1.4 !important;
+    white-space: nowrap !important;
+}
+
+#btn-standalone-add-point.is-active {
+    background-color: #e74c3c !important;
+    color: #ffffff !important;
 }
