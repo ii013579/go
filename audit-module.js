@@ -1,5 +1,5 @@
 ﻿/**
- * audit-module.js - 單檔極致精簡優化版
+ * audit-module.js - 整合未開啟清查僅顯示紅點與全域介面修復
  */
 (function() {
     'use strict';
@@ -13,7 +13,7 @@
     const auditUnsubs = {};
     let controls = {}, activeCleanup = null;
 
-    // --- 1. 工具函式 ---
+    // --- 1. 工具函式與狀態判斷 ---
     const getRole = () => (window.currentUserData?.role || window.currentUserRole || localStorage.getItem('userRole') || 'guest').toLowerCase();
     const canAudit = () => !['guest', 'unapproved'].includes(getRole());
     const canSeeColor = () => ['owner', 'editor', 'user'].includes(getRole());
@@ -23,6 +23,12 @@
         return (opt?.getAttribute('data-basename') || opt?.textContent.split(' (')[0] || window.currentActiveKmlName || '預設區域').replace(/\.kml$/i, '').trim();
     };
 
+    // 判斷當前 KML 是否處於「開啟清查」狀態
+    function isAuditActive(kmlId) {
+        const cfg = kmlId ? window.globalAuditConfigs[kmlId] : null;
+        return !!(cfg?.isAuditing && canAudit() && canSeeColor());
+    }
+
     // --- 2. 核心 UI & 地圖重繪 ---
     function refreshMap() {
         const ns = window.mapNamespace, kmlId = ns?.currentKmlLayerId || window.currentActiveKmlId;
@@ -31,13 +37,34 @@
         ns.map.invalidateSize({ pan: false });
         if (ns.allKmlFeatures) window.addGeoJsonLayers?.(ns.allKmlFeatures);
 
+        const auditActive = isAuditActive(kmlId);
         const records = window.auditLayersState[kmlId] || {}, isVis = window.showAuditedPoints !== false;
+
         ns.map.eachLayer(l => {
             const props = l.feature?.properties || l.options?.properties;
             if (props && l.setStyle) {
+                // 🔴 1. 未開啟清查或無權限：一律保持預設紅點
+                if (!auditActive) {
+                    l.setStyle({ fillColor: "#E74C3C", color: "#ffffff", fillOpacity: 0.85, opacity: 1, stroke: true, weight: 2 });
+                    if (l.getElement()) l.getElement().style.pointerEvents = 'auto';
+                    return;
+                }
+
+                // 🟡🔵 2. 已開啟清查：切換藍點 (未清查) / 黃點 (已清查)
                 const audited = !!records[getPk(props)];
-                l.setStyle(audited ? { fillColor: isVis ? "#FCD770" : "transparent", color: isVis ? "#fff" : "transparent", fillOpacity: isVis ? 0.85 : 0, opacity: isVis ? 1 : 0, stroke: isVis }
-                                   : { fillColor: "#2A00D2", color: "#fff", fillOpacity: 0.85, opacity: 1, stroke: true, weight: 2 });
+                if (audited) {
+                    if (isVis) {
+                        l.setStyle({ fillColor: "#FCD770", color: "#ffffff", fillOpacity: 0.85, opacity: 1, stroke: true });
+                        if (l.getElement()) l.getElement().style.pointerEvents = 'auto';
+                    } else {
+                        // 隱藏黃點時點擊穿透（留文字）
+                        l.setStyle({ fillColor: "transparent", color: "transparent", fillOpacity: 0, opacity: 0, stroke: false });
+                        if (l.getElement()) l.getElement().style.pointerEvents = 'none';
+                    }
+                } else {
+                    l.setStyle({ fillColor: "#2A00D2", color: "#ffffff", fillOpacity: 0.85, opacity: 1, stroke: true, weight: 2 });
+                    if (l.getElement()) l.getElement().style.pointerEvents = 'auto';
+                }
             }
         });
         updateUI();
@@ -45,18 +72,20 @@
     window.forceMapRefresh = refreshMap;
 
     function updateUI() {
-        const kmlId = window.mapNamespace?.currentKmlLayerId, cfg = kmlId ? window.globalAuditConfigs[kmlId] : null;
-        const isAuditing = cfg?.isAuditing && canAudit() && canSeeColor();
+        const kmlId = window.mapNamespace?.currentKmlLayerId;
+        const auditActive = isAuditActive(kmlId);
+
         const addBtn = document.getElementById('btn-standalone-add-point');
-        if (addBtn) addBtn.style.setProperty('display', isAuditing ? 'inline-flex' : 'none', 'important');
+        if (addBtn) addBtn.style.setProperty('display', auditActive ? 'inline-flex' : 'none', 'important');
 
-        if (!isAuditing) return Object.values(controls).forEach(c => c?._container && (c._container.style.display = 'none'));
+        if (!auditActive) return Object.values(controls).forEach(c => c?._container && (c._container.style.display = 'none'));
 
-        // 黃點切換 & 進度
+        // 右上角黃點切換按鈕
         if (controls.yellow?._container) {
             controls.yellow._container.style.display = 'block';
             controls.yellow._container.innerHTML = `<button class="audit-yellow-dot-btn" onclick="window.toggleAuditedPointsVisibility()"><span class="audit-dot-outer"><span class="audit-dot-inner"></span></span>${!window.showAuditedPoints ? '<span class="audit-cross-icon">❌</span>' : ''}</button>`;
         }
+        // 清查進度徽章
         if (controls.progress?._container) {
             const feats = (window.mapNamespace?.allKmlFeatures || []).filter(f => !f.geometry || f.geometry.type === 'Point');
             const recs = window.auditLayersState[kmlId] || {}, done = feats.filter(f => recs[getPk(f.properties, f.id)]).length;
@@ -78,20 +107,37 @@
     const origAddLayers = window.addGeoJsonLayers;
     window.addGeoJsonLayers = function(features) {
         const kmlId = window.mapNamespace?.currentKmlLayerId || window.currentActiveKmlId;
+        const auditActive = isAuditActive(kmlId);
+
         if (kmlId && Array.isArray(features)) {
             const recs = window.auditLayersState[kmlId] || {}, isVis = window.showAuditedPoints !== false;
-            Object.entries(recs).forEach(([k, r]) => {
-                if ((r.isCustomPoint || r.deviceStatus === "新增") && r.lat && r.lng && !features.some(f => getPk(f.properties) === (r.pointName || k))) {
-                    features.push({ type: "Feature", geometry: { type: "Point", coordinates: [+r.lng, +r.lat] }, properties: { name: r.pointName || k, kmlId, isCustomPoint: true, isAudited: true, deviceStatus: r.deviceStatus || "新增", photos: r.photos || [] } });
-                }
-            });
+
+            // 僅在開啟清查時，才注入自訂新增點位
+            if (auditActive) {
+                Object.entries(recs).forEach(([k, r]) => {
+                    if ((r.isCustomPoint || r.deviceStatus === "新增") && r.lat && r.lng && !features.some(f => getPk(f.properties) === (r.pointName || k))) {
+                        features.push({ type: "Feature", geometry: { type: "Point", coordinates: [+r.lng, +r.lat] }, properties: { name: r.pointName || k, kmlId, isCustomPoint: true, isAudited: true, deviceStatus: r.deviceStatus || "新增", photos: r.photos || [] } });
+                    }
+                });
+            }
+
             features.forEach(f => {
                 f.properties = f.properties || {}; f.properties.kmlId = kmlId;
                 const pk = getPk(f.properties, f.id), rec = recs[pk];
                 f.properties.auditPointKey = pk; f.properties.isAudited = !!rec;
-                f.properties.fillColor = rec ? (isVis ? "#FCD770" : "transparent") : "#2A00D2";
-                f.properties.fillOpacity = rec ? (isVis ? 0.85 : 0) : 0.85;
-                f.properties.stroke = rec ? isVis : true;
+
+                // 🔴 未開啟清查時，預設填色全部設為紅點 (#E74C3C)
+                if (!auditActive) {
+                    f.properties.fillColor = "#E74C3C";
+                    f.properties.fillOpacity = 0.85;
+                    f.properties.stroke = true;
+                    f.properties.color = "#ffffff";
+                } else {
+                    f.properties.fillColor = rec ? (isVis ? "#FCD770" : "transparent") : "#2A00D2";
+                    f.properties.fillOpacity = rec ? (isVis ? 0.85 : 0) : 0.85;
+                    f.properties.stroke = rec ? isVis : true;
+                    f.properties.color = rec ? (isVis ? "#ffffff" : "transparent") : "#ffffff";
+                }
             });
         }
         return origAddLayers?.apply(this, arguments);
@@ -127,7 +173,7 @@
         } catch (e) { Swal.fire('錯誤', e.message, 'error'); }
     }
 
-    // --- 5. 編輯 / 新增視窗 (精簡版) ---
+    // --- 5. 編輯 / 新增視窗 ---
     window.openAuditEditor = async function(isModify = false) {
         const pt = window.currentSelectedPoint; if (!pt || !canAudit()) return;
         const props = pt.feature?.properties || pt.properties || {}, pk = getPk(props), kmlId = props.kmlId || window.mapNamespace?.currentKmlLayerId;
@@ -155,14 +201,17 @@
             showCancelButton: true, showDenyButton: isNew, denyButtonText: '🗑️ 刪除', confirmButtonText: '儲存',
             didOpen: (el) => {
                 for (let i = 0; i < maxP; i++) {
-                    el.querySelector(`#p-input-${i}`).onchange = (e) => {
-                        const file = e.target.files[0];
-                        if (file) {
-                            const r = new FileReader();
-                            r.onload = (ev) => { photos[i] = ev.target.result; el.querySelector(`#p-prev-${i}`).src = ev.target.result; el.querySelector(`#p-prev-${i}`).style.display = 'block'; el.querySelector(`#p-icon-${i}`).style.display = 'none'; };
-                            r.readAsDataURL(file);
-                        }
-                    };
+                    const input = el.querySelector(`#p-input-${i}`);
+                    if (input) {
+                        input.onchange = (e) => {
+                            const file = e.target.files[0];
+                            if (file) {
+                                const r = new FileReader();
+                                r.onload = (ev) => { photos[i] = ev.target.result; el.querySelector(`#p-prev-${i}`).src = ev.target.result; el.querySelector(`#p-prev-${i}`).style.display = 'block'; el.querySelector(`#p-icon-${i}`).style.display = 'none'; };
+                                r.readAsDataURL(file);
+                            }
+                        };
+                    }
                 }
             },
             preConfirm: () => {
@@ -223,5 +272,13 @@
         const r = window.auditLayersState[window.mapNamespace?.currentKmlLayerId]?.[pk];
         if (!r) return;
         Swal.fire({ title: `紀錄：${pk}`, html: `<p><b>狀態：</b>${r.deviceStatus}</p><p><b>備註：</b>${r.note || '無'}</p><div>${(r.photos || []).map(p => `<img src="${p}" style="width:45%;margin:2%;">`).join('')}</div>` });
+    };
+
+    // 🔴 匯出全域模組介面，防範主選單找不到 auditModule 物件
+    window.auditModule = {
+        isReady: true,
+        refresh: refreshMap,
+        updateUI: updateUI,
+        openEditor: window.openAuditEditor
     };
 })();
