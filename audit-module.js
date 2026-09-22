@@ -1,12 +1,12 @@
 ﻿/**
- * audit-module.js - 清查與修改覆蓋整合優化版 (v3.27 CSS分離乾淨版)
+ * audit-module.js - 清查與修改覆蓋整合優化版 (v3.26 重複點名阻擋優化版)
  */
 (function() {
     'use strict';
 
     window.auditLayersState = window.auditLayersState || {};
     window.globalAuditConfigs = {}; 
-    window.showAuditedPoints = window.showAuditedPoints ?? true;
+    window.showAuditedPoints = window.showAuditedPoints ?? true; // 🟡 預設顯示已清查黃點
 
     const auditUnsubscribes = {};
     let bottomControl = null;
@@ -119,7 +119,7 @@
     window.syncAuditButtonVisibility = syncAuditButtonVisibility;
 
     // ---------------------------------------------------------
-    // 1. 樣式攔截器與強力重繪機制
+    // 1. 樣式攔截器與強力重繪機制 (含黃點隱藏過濾與新增點位展點)
     // ---------------------------------------------------------
     const originalAddLayers = window.addGeoJsonLayers;
     window.addGeoJsonLayers = function(features) {
@@ -130,6 +130,7 @@
             const config = window.globalAuditConfigs?.[kmlId];
             const records = window.auditLayersState?.[kmlId] || {};
             
+            // 🟢【所有使用者皆生效】自動將 Firestore auditRecords 中的自訂點位補入 features 展點陣列
             Object.entries(records).forEach(([key, record]) => {
                 if ((record.isCustomPoint || record.deviceStatus === "新增") && record.lat && record.lng) {
                     const pointKey = record.pointName || key;
@@ -182,7 +183,7 @@
                         f.properties.auditStatus = record.deviceStatus || "正常";
                         f.properties.auditNote = record.note;
                         f.properties.photos = record.photos || [];
-                        f.properties.fillColor = isAuditedVisible ? "#FCD770" : "transparent";
+                        f.properties.fillColor = isAuditedVisible ? "#FCD770" : "transparent"; // 🟡 已清查/新增點位：黃色
                         
                         f.properties.fillOpacity = isAuditedVisible ? 0.85 : 0;
                         f.properties.opacity = isAuditedVisible ? 1 : 0;
@@ -190,7 +191,7 @@
                         f.properties.weight = isAuditedVisible ? 2 : 0;
                     } else {
                         f.properties.auditStatus = null;
-                        f.properties.fillColor = "#2A00D2";
+                        f.properties.fillColor = "#2A00D2"; // 🔵 未清查：藍色
                         f.properties.fillOpacity = 0.85;
                         f.properties.opacity = 1;
                         f.properties.stroke = true;
@@ -199,7 +200,7 @@
                     f.properties.color = isAuditedVisible ? "#ffffff" : "transparent";
                     f.properties.radius = 8;
                 } else {
-                    f.properties.fillColor = "#e74c3c";
+                    f.properties.fillColor = "#e74c3c"; // 🔴 未開啟清查模式或訪客：預設紅色標示 (所有人均可見)
                     f.properties.radius = 8;
                     f.properties.isAudited = false;
                     f.properties.fillOpacity = 0.85;
@@ -230,25 +231,37 @@
                     }
                     if (layer._path) {
                         layer._path.style.display = isAuditedVisible ? '' : 'none';
-                        layer._path.style.pointerEvents = isAuditedVisible ? 'auto' : 'none';
-                        layer._path.style.cursor = isAuditedVisible ? 'pointer' : 'default';
+                        layer._path.style.pointerEvents =
+                            isAuditedVisible ? 'auto' : 'none';
+                        layer._path.style.cursor =
+                            isAuditedVisible ? 'pointer' : 'default';
 
-                        if (isAuditedVisible) layer._path.classList.add('leaflet-interactive');
-                        else layer._path.classList.remove('leaflet-interactive');
+                        if (isAuditedVisible) {
+                            layer._path.classList.add('leaflet-interactive');
+                        } else {
+                            layer._path.classList.remove('leaflet-interactive');
+                        }
                     }
                     
                     if (layer._icon) {
                         layer._icon.style.display = isAuditedVisible ? '' : 'none';
-                        layer._icon.style.pointerEvents = isAuditedVisible ? 'auto' : 'none';
-                        layer._icon.style.cursor = isAuditedVisible ? 'pointer' : 'default';
+                        layer._icon.style.pointerEvents =
+                            isAuditedVisible ? 'auto' : 'none';
+                        layer._icon.style.cursor =
+                            isAuditedVisible ? 'pointer' : 'default';
 
-                        if (isAuditedVisible) layer._icon.classList.add('leaflet-interactive');
-                        else layer._icon.classList.remove('leaflet-interactive');
+                        if (isAuditedVisible) {
+                            layer._icon.classList.add('leaflet-interactive');
+                        } else {
+                            layer._icon.classList.remove('leaflet-interactive');
+                        }
                     }
 
                     if (layer._shadow) {
-                        layer._shadow.style.display = isAuditedVisible ? '' : 'none';
-                        layer._shadow.style.pointerEvents = isAuditedVisible ? 'auto' : 'none';
+                        layer._shadow.style.display =
+                            isAuditedVisible ? '' : 'none';
+                        layer._shadow.style.pointerEvents =
+                            isAuditedVisible ? 'auto' : 'none';
                     }
                 }
             });
@@ -257,6 +270,7 @@
         return result;
     };
     
+    // 🟢 自動綁定 ResizeObserver：只要地圖容器 DOM 尺寸有變化，自動補滿 tile 地圖磚
     function initMapResizeObserver() {
         const map = window.mapNamespace?.map;
         if (map && !window._mapResizeObserver) {
@@ -274,16 +288,22 @@
         const kmlId = ns?.currentKmlLayerId || window.currentActiveKmlId;
         if (!map || !kmlId) return;
 
+        // 1. 初始化容器尺寸自動補滿機制
         initMapResizeObserver();
+
+        // 2. 強制更新地圖尺寸
         map.invalidateSize({ pan: false });
 
+        // 🟢【關鍵修復】必須先執行重新繪製，將全域陣列 (包含新點位) 轉化為 Leaflet 圖層物件
         if (typeof window.addGeoJsonLayers === 'function' && ns.allKmlFeatures) {
             window.addGeoJsonLayers(ns.allKmlFeatures);
         }
 
+        // 3. 取得最新 Firestore 紀錄與黃點顯示狀態
         const records = window.auditLayersState?.[kmlId] || {};
         const isAuditedVisible = window.showAuditedPoints !== false;
 
+        // 4. 遍歷地圖上所有圖層，即時同步顏色與透明度
         map.eachLayer(layer => {
             const props = layer.feature?.properties || layer.options?.properties;
             if (props) {
@@ -293,6 +313,7 @@
 
                 if (typeof layer.setStyle === 'function') {
                     if (isAudited) {
+                        // 已清查：黃點 (或隱藏)
                         layer.setStyle({
                             fillColor: isAuditedVisible ? "#FCD770" : "transparent",
                             color: isAuditedVisible ? "#ffffff" : "transparent",
@@ -301,6 +322,7 @@
                             stroke: isAuditedVisible
                         });
                     } else {
+                        // 未清查：藍點
                         layer.setStyle({
                             fillColor: "#2A00D2",
                             color: "#ffffff",
@@ -314,6 +336,7 @@
             }
         });
 
+        // 5. 更新進度條與按鈕狀態
         if (typeof syncAuditButtonVisibility === 'function') syncAuditButtonVisibility();
         if (typeof updateBottomBtnState === 'function') updateBottomBtnState();
         if (typeof updateAuditProgress === 'function') updateAuditProgress();
@@ -321,7 +344,7 @@
     window.forceMapRefresh = forceMapRefresh;
 
     // ---------------------------------------------------------
-    // 2. 底部控制按鈕面板與右上角元件
+    // 2. 底部控制按鈕面板與右上角元件 (無文字黃點鈕、進度條在縮放鈕下方)
     // ---------------------------------------------------------
     function updateBottomBtnState() {
         const canAudit = checkHasAuditPermission() && canSeeAuditColors();
@@ -336,27 +359,29 @@
             return;
         }
 
-        // 1. 🟡 黃點切換按鈕
+        // 1. 🟡 黃點切換按鈕（無文字，隱藏時帶有 ❌ 標示）
         if (yellowDotControl?._container) {
             const isAuditedVisible = window.showAuditedPoints !== false;
             yellowDotControl._container.style.display = 'block';
             yellowDotControl._container.innerHTML = `
-                <button class="audit-yellow-dot-btn" onclick="window.toggleAuditedPointsVisibility()" title="${isAuditedVisible ? '隱藏已清查黃點' : '顯示已清查黃點'}">
-                    <span class="audit-dot-outer">
-                        <span class="audit-dot-inner"></span>
+                <button onclick="window.toggleAuditedPointsVisibility()" 
+                        title="${isAuditedVisible ? '隱藏已清查黃點' : '顯示已清查黃點'}"
+                        style="background: #ffffff; color: #333; border: 2px solid rgba(0,0,0,0.2); width: 34px; height: 34px; border-radius: 4px; font-weight: bold; font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 1px 5px rgba(0,0,0,0.4); pointer-events: auto; padding: 0; position: relative;">
+                    <span style="display: flex; align-items: center; justify-content: center; width: 16px; height: 16px; background: #ffffff; border-radius: 50%; box-shadow: 0 0 2px rgba(0,0,0,0.4);">
+                        <span style="display: block; width: 10px; height: 10px; background: #f1c40f; border-radius: 50%;"></span>
                     </span>
-                    ${!isAuditedVisible ? '<span class="audit-cross-icon">❌</span>' : ''}
+                    ${!isAuditedVisible ? '<span style="position: absolute; color: #e74c3c; font-size: 18px; font-weight: 900; line-height: 1; text-shadow: 0 0 2px #fff;">❌</span>' : ''}
                 </button>
             `;
         }
 
-        // 2. 📊 清查進度條
+        // 2. 📊 清查進度條（放置於縮放鈕下方，無漏斗圖示）
         if (progressControl?._container) {
             const progress = getAuditProgress();
             if (progress) {
                 progressControl._container.style.display = 'block';
                 progressControl._container.innerHTML = `
-                    <div class="audit-progress-badge">
+                    <div style="background: rgba(255, 255, 255, 0.95); color: #2c3e50; border: 2px solid rgba(0,0,0,0.2); padding: 5px 10px; border-radius: 4px; font-weight: bold; font-size: 12px; white-space: nowrap;max-width: calc(100vw - 90px); box-sizing: border-box;overflow: hidden; text-overflow: ellipsis;">
                         未清查: ${progress.remaining} / ${progress.total}
                     </div>
                 `;
@@ -375,16 +400,18 @@
                 const safePointKey = safeEscape(pointKey);
                 const isAudited = (window.auditLayersState[kmlId] || {})[pointKey] !== undefined;
 
+                const btnBaseStyle = `color: white; border: none; padding: 6px 14px; border-radius: 4px; font-weight: bold; font-size: 13px; box-shadow: 0 1px 3px rgba(0,0,0,0.3); cursor: pointer; outline: none; line-height: 1.4; white-space: nowrap;`;
+
                 const btnHtml = isAudited ? `
-                    <button onclick="window.viewAuditDetailOnly('${safePointKey}')" class="audit-btn audit-btn-view">🔍 查看</button>
-                    <button onclick="window.openAuditEditor(true)" class="audit-btn audit-btn-edit">✏️ 修改</button>
+                    <button onclick="window.viewAuditDetailOnly('${safePointKey}')" style="background: #e91e63; ${btnBaseStyle}">🔍 查看</button>
+                    <button onclick="window.openAuditEditor(true)" style="background: #f39c12; ${btnBaseStyle}">✏️ 修改</button>
                 ` : `
-                    <button onclick="window.openAuditEditor(false)" class="audit-btn audit-btn-audit">📋 清查點位</button>
+                    <button onclick="window.openAuditEditor(false)" style="background: #2ecc71; ${btnBaseStyle}">📋 清查點位</button>
                 `;
 
                 bottomControl._container.style.display = 'block';
                 bottomControl._container.innerHTML = `
-                    <div class="audit-bottom-container">
+                    <div style="text-align: center; pointer-events: auto; display: flex; gap: 6px; align-items: center; justify-content: center; background: rgba(255, 255, 255, 0.95); border: 2px solid rgba(0,0,0,0.2); padding: 5px 10px; border-radius: 4px; box-shadow: 0 1px 5px rgba(0,0,0,0.4);">
                         ${btnHtml}
                     </div>`;
             } else {
@@ -498,7 +525,7 @@
         const select = document.getElementById('kmlLayerSelect');
         if (!select || select.options.length <= 1) return;
 
-        let listHtml = '<div class="audit-layer-list">';
+        let listHtml = '<div style="max-height: 380px; overflow-y: auto; text-align: left;">';
         Array.from(select.options).forEach(opt => {
             if (!opt.value) return;
             const config = window.globalAuditConfigs?.[opt.value] || {};
@@ -508,14 +535,14 @@
             const safeValue = safeEscape(opt.value);
 
             listHtml += `
-                <div class="audit-layer-item">
+                <div style="display:flex; align-items:center; justify-content:space-between; padding:12px; border-bottom:1px solid #eee;">
                     <div>
-                        <div class="audit-layer-title">${safeEscape(baseName)}</div>
-                        ${isAuditing ? `<div class="audit-layer-status-on">清查中：需照片 ${targetPhotos} 張</div>` : `<div class="audit-layer-status-off">未開啟清查</div>`}
+                        <div style="font-weight:bold; font-size:14px;">${safeEscape(baseName)}</div>
+                        ${isAuditing ? `<div style="color: #e67e22; font-size:12px;">清查中：需照片 ${targetPhotos} 張</div>` : `<div style="color: #999; font-size: 12px;">未開啟清查</div>`}
                     </div>
-                    <div class="audit-layer-btn-group">
-                        ${isAuditing ? `<button onclick="window.downloadAuditPhotosZip('${safeValue}')" title="下載此圖層所有照片為 ZIP" class="audit-btn-download">下載照片</button>` : ''}
-                        <button onclick="window.toggleAuditStatus('${safeValue}', ${!isAuditing})" class="audit-btn-toggle ${isAuditing ? 'active' : 'inactive'}">
+                    <div style="display:flex; gap:6px;">
+                        ${isAuditing ? `<button onclick="window.downloadAuditPhotosZip('${safeValue}')" title="下載此圖層所有照片為 ZIP" style="background:#8e44ad; color:white; border:none; padding:6px 10px; border-radius:4px; cursor:pointer; font-size:12px;">下載照片</button>` : ''}
+                        <button onclick="window.toggleAuditStatus('${safeValue}', ${!isAuditing})" style="background:${isAuditing ? '#666' : '#3498db'}; color:white; border:none; padding:6px 12px; border-radius:4px; cursor:pointer; font-size:12px;">
                             ${isAuditing ? '關閉' : '開啟'}
                         </button>
                     </div>
@@ -539,14 +566,14 @@
                 const { value: formValues } = await Swal.fire({
                     title: '⚙️ 清查模式設定',
                     html: `
-                        <div class="audit-modal-container">
-                            <div class="audit-form-group">
-                                <label class="audit-form-label">1. 設定必填照片張數 (1~12 張)</label>
-                                <input id="swal-input-count" type="number" class="swal2-input audit-input-text" value="2" min="1" max="12" step="1">
+                        <div style="text-align:left; font-size:14px;">
+                            <div style="margin-bottom: 16px;">
+                                <label style="font-weight:bold; display:block; margin-bottom:6px;">1. 設定必填照片張數 (1~12 張)</label>
+                                <input id="swal-input-count" type="number" class="swal2-input" value="2" min="1" max="12" step="1" style="width:100%; margin:0; box-sizing:border-box;">
                             </div>
                             <div>
-                                <label class="audit-form-label">2. 設定設備狀態選項 (用逗號或換行分隔)</label>
-                                <textarea id="swal-input-status" class="swal2-textarea audit-textarea">${defaultStatusStr}</textarea>
+                                <label style="font-weight:bold; display:block; margin-bottom:6px;">2. 設定設備狀態選項 (用逗號或換行分隔)</label>
+                                <textarea id="swal-input-status" class="swal2-textarea" style="width:100%; height:80px; margin:0; box-sizing:border-box; resize:vertical;">${defaultStatusStr}</textarea>
                             </div>
                         </div>`,
                     showCancelButton: true,
@@ -622,7 +649,7 @@
         const btn = document.getElementById('btn-standalone-add-point');
         if (!btn) return;
         btn.innerHTML = isActive ? '❌ 取消新增' : '➕ 新增點位';
-        btn.classList.toggle('is-active', isActive);
+        btn.style.setProperty('background-color', isActive ? '#e74c3c' : '#2ecc71', 'important');
     }
     
     window.startAddCustomPoint = function(kmlId) {
@@ -676,7 +703,7 @@
     };
     
     // =========================================================
-    // 5-2. 動態渲染獨立「新增點位」按鈕
+    // 5-2. 動態渲染獨立「新增點位」按鈕 (取消綠色底色，改為白底黑字)
     // =========================================================
     (function renderStandaloneAddButton() {
         let btn = document.getElementById('btn-standalone-add-point');
@@ -686,6 +713,16 @@
             btn.innerHTML = '➕ 新增點位';
             document.body.appendChild(btn);
         }
+    
+        // 🔴 background 改為純白/半透明白，color 改為黑色 (#2c3e50)
+        btn.setAttribute('style', `
+            position: fixed !important; bottom: 20px !important; right: 15px !important; z-index: 4000 !important;
+            background-color: rgba(255, 255, 255, 0.95) !important; color: #2c3e50 !important; border: 2px solid rgba(0,0,0,0.2) !important;
+            padding: 5px 10px !important; border-radius: 4px !important; font-weight: bold !important; font-size: 12px !important;
+            box-shadow: 0 1px 5px rgba(0,0,0,0.4) !important; cursor: pointer !important; display: none !important;
+            align-items: center !important; justify-content: center !important; gap: 6px !important; outline: none !important;
+            line-height: 1.4 !important; white-space: nowrap !important;
+        `);
     
         btn.onclick = function(e) {
             e.stopPropagation();
@@ -712,7 +749,8 @@
     };
     
     window.openAddPointModal = async function(param1, param2, param3) {
-        const map = window.mapNamespace?.map;
+    	
+    	const map = window.mapNamespace?.map;
         if (map) {
             window.preAuditMapState = {
                 center: map.getCenter(),
@@ -741,13 +779,13 @@
             const hasPhoto = !!existingSrc;
     
             photoHtml += `
-                <div class="audit-photo-box-wrapper">
-                    <div class="audit-photo-box">
-                        <img id="add-prev-${i}" src="${existingSrc}" class="audit-photo-preview" style="display:${hasPhoto ? 'block' : 'none'};">
-                        <span id="add-icon-${i}" class="audit-photo-icon" style="display:${hasPhoto ? 'none' : 'block'};">📷</span>
-                        <input type="file" id="add-photo-input-${i}" accept="image/*" capture="environment" onchange="window.handleAddPhotoPreview(this, ${i})" class="audit-photo-file-input" title="現場拍照">
+                <div style="position:relative; margin-bottom:15px; width:80px;">
+                    <div style="border:2px dashed #ccc; height:80px; width:80px; position:relative; display:flex; align-items:center; justify-content:center; background:#fafafa; border-radius:12px; overflow:hidden; cursor:pointer;">
+                        <img id="add-prev-${i}" src="${existingSrc}" style="width:100%; height:100%; object-fit:cover; display:${hasPhoto ? 'block' : 'none'}; position:absolute; top:0; left:0; z-index:1;">
+                        <span id="add-icon-${i}" style="font-size:24px; color:#bbb; display:${hasPhoto ? 'none' : 'block'}; z-index:1;">📷</span>
+                        <input type="file" id="add-photo-input-${i}" accept="image/*" capture="environment" onchange="window.handleAddPhotoPreview(this, ${i})" style="position:absolute; width:100%; height:100%; opacity:0; z-index:2; cursor:pointer;" title="現場拍照">
                     </div>
-                    <label for="add-photo-input-${i}" class="audit-photo-tag-label">
+                    <label for="add-photo-input-${i}" style="position:absolute; left:50%; transform:translateX(-50%); bottom:-10px; z-index:3; background:#555; color:#fff; font-size:11px; padding:2px 8px; border-radius:12px; cursor:pointer; display:flex; align-items:center; gap:4px; box-shadow:0 2px 4px rgba(0,0,0,0.2); white-space:nowrap; border:1px solid #777;">
                         <span>🖼️</span> <span id="add-tag-text-${i}">${hasPhoto ? '已選取' : '圖庫'}</span>
                     </label>
                 </div>`;
@@ -758,28 +796,28 @@
         const confirmBtnText = isEditMode ? '確認並儲存修改' : '確認並新增上傳';
     
         const modalHtml = `
-        <div class="audit-modal-container">
-            <div class="audit-modal-title">
-                <span class="audit-modal-title-icon">${isEditMode ? '✏️' : '➕'}</span>
+        <div style="text-align: left; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #333; padding: 0 5px;">
+            <div style="text-align: center; font-size: 20px; font-weight: bold; color: #4a4a4a; margin-bottom: 20px; display: flex; align-items: center; justify-content: center; gap: 8px;">
+                <span style="color: #2ecc71; font-size: 24px; font-weight: 900;">${isEditMode ? '✏️' : '➕'}</span>
                 <span>${modalTitle}</span>
             </div>
-            <div class="audit-form-group">
-                <label class="audit-form-label">點位名稱 / 點名 <span class="required">*必填</span></label>
-                <input type="text" id="add-point-name" value="${defaultName}" placeholder="例如：新設電桿-01" class="audit-input-text">
+            <div style="margin-bottom: 16px;">
+                <label style="display: block; font-size: 15px; font-weight: bold; color: #4a4a4a; margin-bottom: 8px;">點位名稱 / 點名 <span style="color: #e74c3c;">*必填</span></label>
+                <input type="text" id="add-point-name" value="${defaultName}" placeholder="例如：新設電桿-01" style="width: 100%; padding: 10px 14px; font-size: 15px; border: 1px solid #dcdfe6; border-radius: 8px; outline: none; box-sizing: border-box; color: #333; background-color: #fff;">
             </div>
-            <div class="audit-form-group">
-                <label class="audit-form-label">設備狀態</label>
-                <select id="add-device-status" disabled class="audit-select-disabled">
+            <div style="margin-bottom: 16px;">
+                <label style="display: block; font-size: 15px; font-weight: bold; color: #4a4a4a; margin-bottom: 8px;">設備狀態</label>
+                <select id="add-device-status" disabled style="width: 100%; padding: 10px 14px; font-size: 15px; font-weight: bold; color: #6c757d; background-color: #e9ecef; border: 1px solid #dcdfe6; border-radius: 8px; outline: none; box-sizing: border-box; cursor: not-allowed;">
                     <option value="新增" selected>新增</option>
                 </select>
             </div>
-            <div class="audit-form-group">
-                <label class="audit-form-label">現場照片 (需拍 ${maxPhotos} 張) <span class="required">*必填</span></label>
-                <div class="audit-photo-grid">${photoHtml}</div>
+            <div style="margin-bottom: 16px;">
+                <label style="display: block; font-size: 15px; font-weight: bold; color: #4a4a4a; margin-bottom: 8px;">現場照片 (需拍 ${maxPhotos} 張) <span style="color: #e74c3c;">*必填</span></label>
+                <div style="display: flex; gap: 15px; flex-wrap: wrap;">${photoHtml}</div>
             </div>
-            <div>
-                <label class="audit-form-label">備註事項 <span class="optional">(選填)</span></label>
-                <textarea id="add-point-remark" placeholder="輸入備註事項..." class="audit-textarea">${defaultRemark}</textarea>
+            <div style="margin-bottom: 0px;">
+                <label style="display: block; font-size: 15px; font-weight: bold; color: #4a4a4a; margin-bottom: 8px;">備註事項 <span style="color: #909399; font-weight: normal;">(選填)</span></label>
+                <textarea id="add-point-remark" placeholder="輸入備註事項..." style="width: 100%; height: 80px; padding: 10px 14px; font-size: 15px; border: 1px solid #dcdfe6; border-radius: 8px; outline: none; box-sizing: border-box; resize: vertical; color: #333; font-family: inherit;">${defaultRemark}</textarea>
             </div>
         </div>`;
     
@@ -812,6 +850,7 @@
     
                 if (!name) return Swal.showValidationMessage('請填寫點位名稱！');
 
+                // 🟢【核心修復：攔截重複點名】不關閉彈窗，保留照片與輸入內容供使用者修正
                 const ns = window.mapNamespace;
                 const currentRecords = window.auditLayersState?.[kmlId] || {};
                 if (!isEditMode || (isEditMode && defaultName !== name)) {
@@ -1057,10 +1096,10 @@
                                   (localStorage.getItem('audit_status_options') ? JSON.parse(localStorage.getItem('audit_status_options')) : ['正常','損壞','遺失']);
 
         let statusSelectHtml = isUserCreatedPoint ? `
-            <select id="swal-status" class="swal2-input audit-select-disabled" disabled>
+            <select id="swal-status" class="swal2-input" disabled style="width:100%; margin:6px 0 16px 0; background-color:#e9ecef; color:#495057; cursor:not-allowed;">
                 <option value="新增" selected>新增</option>
             </select>` : `
-            <select id="swal-status" class="swal2-input">
+            <select id="swal-status" class="swal2-input" style="width:100%; margin:6px 0 16px 0;">
                 <option value="" ${!currentStatus ? 'selected' : ''}>--- 請選擇設備狀態 ---</option>
                 ${baseStatusOptions.filter(opt => opt !== '新增').map(opt => `<option value="${opt}" ${currentStatus === opt ? 'selected' : ''}>${opt}</option>`).join('')}
             </select>`;
@@ -1071,28 +1110,28 @@
             const isUrl = photoData.startsWith('http');
             
             photoHtml += `
-                <div class="audit-photo-box-wrapper">
-                    <div class="audit-photo-box">
-                        <img id="audit-prev-${i}" src="${photoData}" class="audit-photo-preview" style="display:${photoData ? 'block' : 'none'};">
-                        <span id="audit-icon-${i}" class="audit-photo-icon" style="display:${photoData ? 'none' : 'block'};">📷</span>
-                        <input type="file" id="audit-file-input-${i}" data-index="${i}" accept="image/*" capture="environment" class="audit-photo-file-input" title="直接拍照">
+                <div style="position:relative; margin-bottom:18px;">
+                    <div style="border:2px dashed #ccc; height:85px; position:relative; display:flex; align-items:center; justify-content:center; background:#fafafa; border-radius:8px; overflow:hidden;">
+                        <img id="audit-prev-${i}" src="${photoData}" style="width:100%; height:100%; object-fit:cover; display:${photoData ? 'block' : 'none'}; position:absolute; top:0; left:0; z-index:1;">
+                        <span id="audit-icon-${i}" style="font-size:24px; color:#bbb; display:${photoData ? 'none' : 'block'}; z-index:1;">📷</span>
+                        <input type="file" id="audit-file-input-${i}" data-index="${i}" accept="image/*" capture="environment" style="position:absolute; width:100%; height:100%; opacity:0; z-index:2; cursor:pointer;" title="直接拍照">
                     </div>
                     <input type="file" id="audit-gallery-input-${i}" data-index="${i}" accept="image/*" style="display:none;">
-                    <label for="audit-gallery-input-${i}" id="audit-tag-${i}" class="audit-photo-tag-label">
+                    <label for="audit-gallery-input-${i}" id="audit-tag-${i}" style="position:absolute; left:50%; transform:translateX(-50%); bottom:-10px; z-index:3; background:#444; color:#fff; font-size:11px; padding:2px 8px; border-radius:10px; display:flex; align-items:center; gap:3px; white-space:nowrap; cursor:pointer; box-shadow:0 2px 4px rgba(0,0,0,0.2);">
                         ${isUrl ? '<span>🖼️</span> 舊照片' : (photoData ? '<span>🖼️</span> 新選擇' : '<span>📁</span> 開啟舊檔')}
                     </label>
                 </div>`;
         }
 
         const { value: res, isDenied } = await Swal.fire({
-            title: `<div>${isModifyMode ? '修改' : '填寫'}清查紀錄：${safeEscape(pointKey)}</div>`,
-            html: `<div class="audit-modal-container">
-                <label class="audit-form-label">設備狀態 <span class="required">*必選</span></label>
+            title: `<div style="font-size:18px;">${isModifyMode ? '修改' : '填寫'}清查紀錄：${safeEscape(pointKey)}</div>`,
+            html: `<div style="text-align:left;">
+                <label style="font-size:14px; font-weight:bold;">設備狀態 <span style="color:red;">*必選</span></label>
                 ${statusSelectHtml}
-                <label class="audit-form-label">現場照片 (需滿 ${maxPhotos} 張) <span class="required">*必填</span></label>
-                <div class="audit-photo-grid">${photoHtml}</div>
-                <label class="audit-form-label">備註事項 <span class="optional">(選填)</span></label>
-                <textarea id="swal-note" class="swal2-textarea audit-textarea" placeholder="輸入備註事項...">${safeEscape(currentNote)}</textarea>
+                <label style="font-size:14px; font-weight:bold;">現場照片 (需滿 ${maxPhotos} 張) <span style="color:red;">*必填</span></label>
+                <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(95px, 1fr)); gap:10px; margin:8px 0 16px 0;">${photoHtml}</div>
+                <label style="font-size:14px; font-weight:bold;">備註事項 <span style="color:#888; font-weight:normal;">(選填)</span></label>
+                <textarea id="swal-note" class="swal2-textarea" style="width:100%; height:70px; margin:6px 0 0 0; resize:vertical;" placeholder="輸入備註事項...">${safeEscape(currentNote)}</textarea>
             </div>`,
             showCancelButton: true,
             showDenyButton: isUserCreatedPoint,
@@ -1197,17 +1236,17 @@
         let imagesHtml = '';
         if (Array.isArray(record.photos)) {
             record.photos.forEach(url => {
-                if (url) imagesHtml += `<img src="${safeEscape(url)}" class="audit-detail-img">`;
+                if (url) imagesHtml += `<img src="${safeEscape(url)}" style="width:45%; margin:2%; max-height:120px; object-fit:cover; border-radius:6px; border:1px solid #ccc;">`;
             });
         }
 
         Swal.fire({
             title: `清查紀錄：${safeEscape(pointKey)}`,
-            html: `<div class="audit-modal-container">
-                <p><b>設備狀況：</b><span class="audit-detail-status">🟢 ${safeEscape(record.deviceStatus || '正常')}</span></p>
+            html: `<div style="text-align: left; font-size:14px;">
+                <p><b>設備狀況：</b><span style="color:#e91e63; font-weight:bold;">🟢 ${safeEscape(record.deviceStatus || '正常')}</span></p>
                 <p><b>現場備註：</b><br>${safeEscape(record.note || '無備註')}</p>
                 <p><b>現場照片：</b></p>
-                <div class="audit-detail-photos">${imagesHtml || '無照片'}</div>
+                <div style="display:flex; flex-wrap:wrap;">${imagesHtml || '無照片'}</div>
             </div>`,
             confirmButtonText: '關閉'
         });
@@ -1300,6 +1339,8 @@
             snapshot.forEach(doc => { 
                 const data = doc.data();
                 window.globalAuditConfigs[doc.id] = data; 
+                
+                // 所有人與所有圖層均即時監聽新增點位
                 startAuditDataListener(doc.id);
             });
             updateKmlSelectUI();
@@ -1310,6 +1351,7 @@
     function startAuditDataListener(kmlId) {
         if (auditUnsubscribes[kmlId]) return;
     
+        // 精確監聽路徑：artifacts/kmldata-d22fb/public/data/kmlLayers/{kmlId}/auditRecords
         auditUnsubscribes[kmlId] = firebase.firestore()
             .collection(APP_PATH)
             .doc(kmlId)
@@ -1322,6 +1364,7 @@
                 
                 window.auditLayersState[kmlId] = updates;
     
+                // 將 auditRecords/{pointKey} 中的自訂點位自動轉為 GeoJSON 展點
                 const ns = window.mapNamespace;
                 if (ns) {
                     if (!Array.isArray(ns.allKmlFeatures)) ns.allKmlFeatures = [];
@@ -1399,7 +1442,7 @@
     }
 
     // ---------------------------------------------------------
-    // 10. Leaflet 地圖初始化掛載
+    // 10. Leaflet 地圖初始化掛載 (破圖修復機制)
     // ---------------------------------------------------------
     let checkAttempts = 0;
     const checkMapInterval = setInterval(() => {
@@ -1419,29 +1462,43 @@
                 }
             });
 
+            // 1. 底部選單 Control
             const AuditMenu = L.Control.extend({
                 onAdd: function() {
                     this._container = L.DomUtil.create('div', 'audit-bottom-menu');
+                    this._container.style.cssText = 'display:none; position:fixed; bottom:35px; left:50%; transform:translateX(-50%); z-index:5000; pointer-events:none; background:transparent; padding:0; box-shadow:none; gap:12px;';
                     return this._container;
                 }
             });
             bottomControl = new AuditMenu();
             bottomControl.addTo(map);
 
+            // 2. 🟡 黃點隱藏/顯示開關 Control (右上角)
             const YellowDotControl = L.Control.extend({
                 options: { position: 'topright' },
                 onAdd: function() {
                     this._container = L.DomUtil.create('div', 'leaflet-control-yellow-dot');
+                    this._container.style.cssText = 'margin-top:10px; margin-right:10px; z-index:1000;';
                     return this._container;
                 }
             });
             yellowDotControl = new YellowDotControl();
             yellowDotControl.addTo(map);
 
+            // 3. 📊 清查進度條 Control (放置於右上角縮放鈕左側位置)
             const ProgressControl = L.Control.extend({
                 options: { position: 'topright' },
                 onAdd: function() {
                     this._container = L.DomUtil.create('div', 'leaflet-control-audit-progress');
+                    this._container.style.cssText = `
+                        position: absolute;
+                        right: 55px;
+                        top: 10px;
+                        margin: 0;
+                        white-space: nowrap;
+                        z-index: 1000;
+                        pointer-events: auto;
+                    `;
                     return this._container;
                 }
             });
