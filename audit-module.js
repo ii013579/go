@@ -1,5 +1,5 @@
 ﻿/**
- * audit-module.js - 完整修復與整合版
+ * audit-module.js - 完整穩定修正版
  */
 (function() {
     'use strict';
@@ -11,7 +11,7 @@
     const APP_PATH = 'artifacts/kmldata-d22fb/public/data/kmlLayers';
     const STORAGE_ROOT = 'kmldata-d22fb/storage';
     const auditUnsubs = {};
-    let controls = {}, activeCleanup = null;
+    let controls = {};
 
     // --- 1. 工具函式與權限狀態判斷 ---
     const getRole = () => (window.currentUserData?.role || window.currentUserRole || localStorage.getItem('userRole') || 'guest').toLowerCase();
@@ -23,7 +23,6 @@
         return (opt?.getAttribute('data-basename') || opt?.textContent.split(' (')[0] || window.currentActiveKmlName || '預設區域').replace(/\.kml$/i, '').trim();
     };
 
-    // 判斷當前 KML 是否開啟清查機制
     function isAuditActive(kmlId) {
         const cfg = kmlId ? window.globalAuditConfigs[kmlId] : null;
         return !!(cfg?.isAuditing && canAudit() && canSeeColor());
@@ -43,21 +42,20 @@
         ns.map.eachLayer(l => {
             const props = l.feature?.properties || l.options?.properties;
             if (props && l.setStyle) {
-                // 🔴 未開啟清查或無權限：預設保持紅點
+                // 未開啟清查：預設呈現紅點
                 if (!auditActive) {
                     l.setStyle({ fillColor: "#E74C3C", color: "#ffffff", fillOpacity: 0.85, opacity: 1, stroke: true, weight: 2 });
                     if (l.getElement()) l.getElement().style.pointerEvents = 'auto';
                     return;
                 }
 
-                // 🟡🔵 已開啟清查：切換黃點 (已清查) / 藍點 (未清查)
+                // 開啟清查：黃點 (已清查) / 藍點 (未清查)
                 const audited = !!records[getPk(props)];
                 if (audited) {
                     if (isVis) {
                         l.setStyle({ fillColor: "#FCD770", color: "#ffffff", fillOpacity: 0.85, opacity: 1, stroke: true });
                         if (l.getElement()) l.getElement().style.pointerEvents = 'auto';
                     } else {
-                        // 隱藏黃點時點擊穿透（保留文字）
                         l.setStyle({ fillColor: "transparent", color: "transparent", fillOpacity: 0, opacity: 0, stroke: false });
                         if (l.getElement()) l.getElement().style.pointerEvents = 'none';
                     }
@@ -80,19 +78,16 @@
 
         if (!auditActive) return Object.values(controls).forEach(c => c?._container && (c._container.style.display = 'none'));
 
-        // 右上角黃點按鈕
         if (controls.yellow?._container) {
             controls.yellow._container.style.display = 'block';
             controls.yellow._container.innerHTML = `<button class="audit-yellow-dot-btn" onclick="window.toggleAuditedPointsVisibility()"><span class="audit-dot-outer"><span class="audit-dot-inner"></span></span>${!window.showAuditedPoints ? '<span class="audit-cross-icon">❌</span>' : ''}</button>`;
         }
-        // 進度條
         if (controls.progress?._container) {
             const feats = (window.mapNamespace?.allKmlFeatures || []).filter(f => !f.geometry || f.geometry.type === 'Point');
             const recs = window.auditLayersState[kmlId] || {}, done = feats.filter(f => recs[getPk(f.properties, f.id)]).length;
             controls.progress._container.style.display = feats.length ? 'block' : 'none';
             controls.progress._container.innerHTML = `<div class="audit-progress-badge">未清查: ${feats.length - done} / ${feats.length}</div>`;
         }
-        // 底部點位點擊選單
         if (controls.bottom?._container) {
             const pt = window.currentSelectedPoint;
             if (pt) {
@@ -171,7 +166,7 @@
         } catch (e) { Swal.fire('錯誤', e.message, 'error'); }
     }
 
-    // --- 5. 編輯 / 新增視窗 ---
+    // --- 5. 編輯 / 新增視窗 (含 null 安全檢查) ---
     window.openAuditEditor = async function(isModify = false) {
         const pt = window.currentSelectedPoint; if (!pt || !canAudit()) return;
         const props = pt.feature?.properties || pt.properties || {}, pk = getPk(props), kmlId = props.kmlId || window.mapNamespace?.currentKmlLayerId;
@@ -199,13 +194,19 @@
             showCancelButton: true, showDenyButton: isNew, denyButtonText: '🗑️ 刪除', confirmButtonText: '儲存',
             didOpen: (el) => {
                 for (let i = 0; i < maxP; i++) {
-                    const input = el.querySelector(`#p-input-${i}`);
-                    if (input) {
-                        input.onchange = (e) => {
+                    const inputEl = el.querySelector(`#p-input-${i}`);
+                    if (inputEl) {
+                        inputEl.onchange = (e) => {
                             const file = e.target.files[0];
                             if (file) {
                                 const r = new FileReader();
-                                r.onload = (ev) => { photos[i] = ev.target.result; el.querySelector(`#p-prev-${i}`).src = ev.target.result; el.querySelector(`#p-prev-${i}`).style.display = 'block'; el.querySelector(`#p-icon-${i}`).style.display = 'none'; };
+                                r.onload = (ev) => { 
+                                    photos[i] = ev.target.result; 
+                                    const prev = el.querySelector(`#p-prev-${i}`);
+                                    const icon = el.querySelector(`#p-icon-${i}`);
+                                    if (prev) { prev.src = ev.target.result; prev.style.display = 'block'; }
+                                    if (icon) { icon.style.display = 'none'; }
+                                };
                                 r.readAsDataURL(file);
                             }
                         };
@@ -241,7 +242,7 @@
         });
     }
 
-    // --- 7. 地圖掛載初始化 ---
+    // --- 7. 地圖掛載與初始化 ---
     const timer = setInterval(() => {
         if (window.mapNamespace?.map && window.L) {
             clearInterval(timer);
@@ -271,7 +272,7 @@
         Swal.fire({ title: `紀錄：${pk}`, html: `<p><b>狀態：</b>${r.deviceStatus}</p><p><b>備註：</b>${r.note || '無'}</p><div>${(r.photos || []).map(p => `<img src="${p}" style="width:45%;margin:2%;">`).join('')}</div>` });
     };
 
-    // 🔴 核心修復：匯出全域 auditModule 物件介面，解決「清查模組尚未準備就緒」彈窗
+    // 關鍵修復：宣告並導出全域 auditModule 物件，避免主程式判斷未載入
     window.auditModule = {
         isReady: true,
         refresh: refreshMap,
