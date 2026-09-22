@@ -1,5 +1,5 @@
 ﻿/**
- * audit-module.js - 整合未開啟清查僅顯示紅點與全域介面修復
+ * audit-module.js - 完整修復與整合版
  */
 (function() {
     'use strict';
@@ -13,7 +13,7 @@
     const auditUnsubs = {};
     let controls = {}, activeCleanup = null;
 
-    // --- 1. 工具函式與狀態判斷 ---
+    // --- 1. 工具函式與權限狀態判斷 ---
     const getRole = () => (window.currentUserData?.role || window.currentUserRole || localStorage.getItem('userRole') || 'guest').toLowerCase();
     const canAudit = () => !['guest', 'unapproved'].includes(getRole());
     const canSeeColor = () => ['owner', 'editor', 'user'].includes(getRole());
@@ -23,7 +23,7 @@
         return (opt?.getAttribute('data-basename') || opt?.textContent.split(' (')[0] || window.currentActiveKmlName || '預設區域').replace(/\.kml$/i, '').trim();
     };
 
-    // 判斷當前 KML 是否處於「開啟清查」狀態
+    // 判斷當前 KML 是否開啟清查機制
     function isAuditActive(kmlId) {
         const cfg = kmlId ? window.globalAuditConfigs[kmlId] : null;
         return !!(cfg?.isAuditing && canAudit() && canSeeColor());
@@ -43,21 +43,21 @@
         ns.map.eachLayer(l => {
             const props = l.feature?.properties || l.options?.properties;
             if (props && l.setStyle) {
-                // 🔴 1. 未開啟清查或無權限：一律保持預設紅點
+                // 🔴 未開啟清查或無權限：預設保持紅點
                 if (!auditActive) {
                     l.setStyle({ fillColor: "#E74C3C", color: "#ffffff", fillOpacity: 0.85, opacity: 1, stroke: true, weight: 2 });
                     if (l.getElement()) l.getElement().style.pointerEvents = 'auto';
                     return;
                 }
 
-                // 🟡🔵 2. 已開啟清查：切換藍點 (未清查) / 黃點 (已清查)
+                // 🟡🔵 已開啟清查：切換黃點 (已清查) / 藍點 (未清查)
                 const audited = !!records[getPk(props)];
                 if (audited) {
                     if (isVis) {
                         l.setStyle({ fillColor: "#FCD770", color: "#ffffff", fillOpacity: 0.85, opacity: 1, stroke: true });
                         if (l.getElement()) l.getElement().style.pointerEvents = 'auto';
                     } else {
-                        // 隱藏黃點時點擊穿透（留文字）
+                        // 隱藏黃點時點擊穿透（保留文字）
                         l.setStyle({ fillColor: "transparent", color: "transparent", fillOpacity: 0, opacity: 0, stroke: false });
                         if (l.getElement()) l.getElement().style.pointerEvents = 'none';
                     }
@@ -80,19 +80,19 @@
 
         if (!auditActive) return Object.values(controls).forEach(c => c?._container && (c._container.style.display = 'none'));
 
-        // 右上角黃點切換按鈕
+        // 右上角黃點按鈕
         if (controls.yellow?._container) {
             controls.yellow._container.style.display = 'block';
             controls.yellow._container.innerHTML = `<button class="audit-yellow-dot-btn" onclick="window.toggleAuditedPointsVisibility()"><span class="audit-dot-outer"><span class="audit-dot-inner"></span></span>${!window.showAuditedPoints ? '<span class="audit-cross-icon">❌</span>' : ''}</button>`;
         }
-        // 清查進度徽章
+        // 進度條
         if (controls.progress?._container) {
             const feats = (window.mapNamespace?.allKmlFeatures || []).filter(f => !f.geometry || f.geometry.type === 'Point');
             const recs = window.auditLayersState[kmlId] || {}, done = feats.filter(f => recs[getPk(f.properties, f.id)]).length;
             controls.progress._container.style.display = feats.length ? 'block' : 'none';
             controls.progress._container.innerHTML = `<div class="audit-progress-badge">未清查: ${feats.length - done} / ${feats.length}</div>`;
         }
-        // 底部選單
+        // 底部點位點擊選單
         if (controls.bottom?._container) {
             const pt = window.currentSelectedPoint;
             if (pt) {
@@ -112,7 +112,6 @@
         if (kmlId && Array.isArray(features)) {
             const recs = window.auditLayersState[kmlId] || {}, isVis = window.showAuditedPoints !== false;
 
-            // 僅在開啟清查時，才注入自訂新增點位
             if (auditActive) {
                 Object.entries(recs).forEach(([k, r]) => {
                     if ((r.isCustomPoint || r.deviceStatus === "新增") && r.lat && r.lng && !features.some(f => getPk(f.properties) === (r.pointName || k))) {
@@ -126,7 +125,6 @@
                 const pk = getPk(f.properties, f.id), rec = recs[pk];
                 f.properties.auditPointKey = pk; f.properties.isAudited = !!rec;
 
-                // 🔴 未開啟清查時，預設填色全部設為紅點 (#E74C3C)
                 if (!auditActive) {
                     f.properties.fillColor = "#E74C3C";
                     f.properties.fillOpacity = 0.85;
@@ -256,7 +254,6 @@
             controls.progress = new (Ctrl.extend({ options: { className: 'leaflet-control-audit-progress' } }))().addTo(map);
             controls.bottom = new (L.Control.extend({ onAdd: () => L.DomUtil.create('div', 'audit-bottom-menu') }))().addTo(map);
 
-            // 獨立新增點位按鈕事件
             let btn = document.getElementById('btn-standalone-add-point') || document.createElement('button');
             btn.id = 'btn-standalone-add-point'; btn.innerHTML = '➕ 新增點位';
             document.body.appendChild(btn);
@@ -274,11 +271,12 @@
         Swal.fire({ title: `紀錄：${pk}`, html: `<p><b>狀態：</b>${r.deviceStatus}</p><p><b>備註：</b>${r.note || '無'}</p><div>${(r.photos || []).map(p => `<img src="${p}" style="width:45%;margin:2%;">`).join('')}</div>` });
     };
 
-    // 🔴 匯出全域模組介面，防範主選單找不到 auditModule 物件
+    // 🔴 核心修復：匯出全域 auditModule 物件介面，解決「清查模組尚未準備就緒」彈窗
     window.auditModule = {
         isReady: true,
         refresh: refreshMap,
         updateUI: updateUI,
-        openEditor: window.openAuditEditor
+        openEditor: window.openAuditEditor,
+        toggleAuditedPointsVisibility: window.toggleAuditedPointsVisibility
     };
 })();
