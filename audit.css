@@ -42,13 +42,8 @@
 .audit-bottom-menu,
 .leaflet-control-yellow-dot,
 .leaflet-control-audit-progress {
-    position: absolute !important;
-    top: 10px;          /* 對齊頂部 Margin */
-    right: 55px;        /* 向左偏移，避開寬度約 34px~40px 的縮放按鈕 */
-    margin: 0 !important;
+    margin: 10px !important;
     pointer-events: auto;
-    z-index: 1000;
-    white-space: nowrap;
 }
 
 /* --------------------------------------------------------------------------
@@ -108,7 +103,7 @@
     backdrop-filter: blur(4px);
     border: 1px solid #cbd5e1;
     padding: 6px 14px;
-    border-radius: 20px;
+    border-radius: 4px;
     font-size: 13px;
     font-weight: 600;
     color: #2c3e50;
