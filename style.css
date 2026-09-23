@@ -788,426 +788,414 @@ canvas {
 /* ---------------------------------------------------------
    1. 獨立版面與地圖容器防擠壓機制 (保留舊版穩定度)
    --------------------------------------------------------- */
+/* 地圖容器與防擠壓機制 */
 #map, .leaflet-container {
-    flex: 1 1 auto !important;             /* 自動填滿 Flex 剩餘空間 */
-    width: 100% !important;
-    height: 100% !important;
-    min-height: 0 !important;              /* 關鍵：允許 Flex 子項目收縮，防止被擠出灰邊 */
-    background-color: #e5e3df !important;    /* 地圖載入預設底色 */
+  flex: 1 1 auto !important;
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  background-color: #e5e3df !important;
 }
 
+/* =========================================================
+   2. SweetAlert2 彈窗修正
+   ========================================================= */
 body.swal2-shown {
-    height: 100% !important;
-    padding-right: 0 !important;
-    overflow: hidden !important;
+  height: 100% !important;
+  padding-right: 0 !important;
+  overflow: hidden !important;
 }
 
 .swal2-container {
-    position: fixed !important;
-    top: 0;
-    left: 0;
-    width: 100vw;
-    height: 100vh;
-    z-index: 9999 !important;
+  position: fixed !important;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 9999 !important;
 }
 
 .swal2-html-container select.swal2-input {
-    margin: 10px auto;
-    font-size: 15px;
+  margin: 10px auto;
+  font-size: 15px;
 }
 
-/* ---------------------------------------------------------
-   2. 地圖懸浮控制項與容器 (統一微圓角 6px + 輕陰影)
-   --------------------------------------------------------- */
+/* =========================================================
+   3. 地圖懸浮選單與控制項佈局
+   ========================================================= */
 .leaflet-control-yellow-dot {
-    margin-top: 10px;
-    margin-right: 10px;
-    z-index: 1000;
+  margin-top: 10px;
+  margin-right: 10px;
+  z-index: 1000;
 }
 
 .leaflet-control-audit-progress {
-    position: absolute;
-    right: 55px;
-    top: 10px;
-    margin: 0;
-    white-space: nowrap;
-    z-index: 1000;
-    pointer-events: auto;
+  position: absolute;
+  right: 55px;
+  top: 10px;
+  margin: 0;
+  white-space: nowrap;
+  z-index: 1000;
+  pointer-events: auto;
 }
 
-/* 地圖底部置中容器 */
+/* 置中底部選單容器 */
 .leaflet-bottomcenter {
-    position: absolute;
-    bottom: 20px;
-    left: 50%;
-    transform: translateX(-50%);
-    z-index: 1000 !important;
-    pointer-events: none;
-    display: flex;
-    justify-content: center;
-    width: 100%;
+  position: absolute;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000 !important;
+  pointer-events: none;
+  display: flex;
+  justify-content: center;
+  width: 100%;
 }
 
 .audit-bottom-menu-container {
-    pointer-events: auto !important;
-    display: flex;
-    gap: 8px;
-    justify-content: center;
+  pointer-events: auto !important;
+  display: flex;
+  gap: 8px;
+  justify-content: center;
 }
 
 .audit-bottom-menu {
-    display: none;
-    position: fixed;
-    bottom: 35px;
-    left: 50%;
-    transform: translateX(-50%);
-    z-index: 5000;
-    pointer-events: none;
-    background: transparent;
-    padding: 0;
-    box-shadow: none;
-    gap: 12px;
+  display: none;
+  position: fixed;
+  bottom: 35px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5000;
+  pointer-events: none;
+  background: transparent;
+  padding: 0;
+  box-shadow: none;
+  gap: 12px;
 }
 
-/* ---------------------------------------------------------
-   3. 通用按鈕與控制項風格 (6px 微圓角規範)
-   --------------------------------------------------------- */
+.audit-bottom-container {
+  text-align: center;
+  pointer-events: auto;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  padding: 5px 10px;
+  border-radius: 6px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
+}
+
+/* 獨立右下角「新增點位」按鈕 */
+#btn-standalone-add-point {
+  position: fixed !important;
+  bottom: 20px !important;
+  right: 15px !important;
+  z-index: 4000 !important;
+  background-color: rgba(255, 255, 255, 0.95);
+  color: #2c3e50;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-weight: bold;
+  font-size: 13px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
+  cursor: pointer;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  outline: none;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+#btn-standalone-add-point.is-active {
+  background-color: #e74c3c !important;
+  color: #ffffff !important;
+}
+
+/* =========================================================
+   4. 通用按鈕風格與互動 (統一 6px 微圓角)
+   ========================================================= */
 .leaflet-bottomcenter .audit-bottom-menu-container button,
 .leaflet-control-audit-progress,
 .leaflet-control-add-point-btn,
 .leaflet-control-toggle-audited,
 .audit-btn,
 .download-btn {
-    -webkit-appearance: none;
-    touch-action: manipulation;
-    background: rgba(255, 255, 255, 0.95) !important;
-    color: #333333 !important;
-    border: 1px solid rgba(0, 0, 0, 0.15) !important;
-    border-radius: 6px !important;              /* 統一 6px 微圓角 */
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18) !important;
-    padding: 6px 14px !important;
-    font-size: 13px !important;
-    font-weight: bold !important;
-    cursor: pointer !important;
-    transition: all 0.2s ease;
+  -webkit-appearance: none;
+  touch-action: manipulation;
+  background: rgba(255, 255, 255, 0.95);
+  color: #333333;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  border-radius: 6px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.2s ease;
 }
 
-/* 懸停與點擊互動 */
 .audit-btn:hover,
 .download-btn:hover,
 .audit-bottom-menu-container button:hover {
-    background: #f8f9fa !important;
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.22) !important;
+  background: #f8f9fa;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.22);
 }
 
-/* 主按鈕 / 啟動狀態 */
 .audit-btn.active,
 .audit-bottom-menu-container button.btn-primary {
-    background: #007bff !important;
-    color: #ffffff !important;
-    border: none !important;
+  background: #007bff;
+  color: #ffffff;
+  border: none;
 }
 
-/* 下載與清查按鈕特定顏色覆蓋 */
 .download-btn {
-    background: #28a745 !important;
-    color: #ffffff !important;
-    border: none !important;
-    display: none;
+  background: #28a745;
+  color: #ffffff;
+  border: none;
+  display: none;
 }
 
-.audit-btn-view { background: #e91e63 !important; color: #fff !important; }
-.audit-btn-edit { background: #f39c12 !important; color: #fff !important; }
-.audit-btn-audit { background: #2ecc71 !important; color: #fff !important; }
+.audit-btn-view { background: #e91e63; color: #fff; }
+.audit-btn-edit { background: #f39c12; color: #fff; }
+.audit-btn-audit { background: #2ecc71; color: #fff; }
 
-/* ---------------------------------------------------------
-   4. 右上角切換按鈕與清查進度
-   --------------------------------------------------------- */
+/* =========================================================
+   5. 清查圖標與進度元件
+   ========================================================= */
 .audit-yellow-dot-btn {
-    background: #ffffff;
-    color: #333;
-    border: 1px solid rgba(0,0,0,0.15);
-    width: 34px;
-    height: 34px;
-    border-radius: 6px;
-    font-weight: bold;
-    font-size: 14px;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.18);
-    pointer-events: auto;
-    padding: 0;
-    position: relative;
+  background: #ffffff;
+  color: #333;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  width: 34px;
+  height: 34px;
+  border-radius: 6px;
+  font-weight: bold;
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
+  pointer-events: auto;
+  padding: 0;
+  position: relative;
 }
 
 .audit-dot-outer {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 16px;
-    height: 16px;
-    background: #ffffff;
-    border-radius: 50%;
-    box-shadow: 0 0 2px rgba(0,0,0,0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  background: #ffffff;
+  border-radius: 50%;
+  box-shadow: 0 0 2px rgba(0, 0, 0, 0.4);
 }
 
 .audit-dot-inner {
-    display: block;
-    width: 10px;
-    height: 10px;
-    background: #f1c40f;
-    border-radius: 50%;
+  display: block;
+  width: 10px;
+  height: 10px;
+  background: #f1c40f;
+  border-radius: 50%;
 }
 
 .audit-cross-icon {
-    position: absolute;
-    color: #e74c3c;
-    font-size: 18px;
-    font-weight: 900;
-    line-height: 1;
-    text-shadow: 0 0 2px #fff;
+  position: absolute;
+  color: #e74c3c;
+  font-size: 18px;
+  font-weight: 900;
+  line-height: 1;
+  text-shadow: 0 0 2px #fff;
 }
 
 .audit-progress-badge {
-    background: rgba(255, 255, 255, 0.95);
-    color: #2c3e50;
-    border: 1px solid rgba(0,0,0,0.15);
-    padding: 5px 10px;
-    border-radius: 6px;
-    font-weight: bold;
-    font-size: 12px;
-    white-space: nowrap;
-    max-width: calc(100vw - 90px);
-    box-sizing: border-box;
-    overflow: hidden;
-    text-overflow: ellipsis;
+  background: rgba(255, 255, 255, 0.95);
+  color: #2c3e50;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  padding: 5px 10px;
+  border-radius: 6px;
+  font-weight: bold;
+  font-size: 12px;
+  white-space: nowrap;
+  max-width: calc(100vw - 90px);
+  box-sizing: border-box;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.audit-bottom-container {
-    text-align: center;
-    pointer-events: auto;
-    display: flex;
-    gap: 6px;
-    align-items: center;
-    justify-content: center;
-    background: rgba(255, 255, 255, 0.95);
-    border: 1px solid rgba(0,0,0,0.15);
-    padding: 5px 10px;
-    border-radius: 6px;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.18);
-}
-
-/* 獨立右下角「新增點位」按鈕 */
-#btn-standalone-add-point {
-    position: fixed !important;
-    bottom: 20px !important;
-    right: 15px !important;
-    z-index: 4000 !important;
-    background-color: rgba(255, 255, 255, 0.95) !important;
-    color: #2c3e50 !important;
-    border: 1px solid rgba(0,0,0,0.15) !important;
-    padding: 6px 14px !important;
-    border-radius: 6px !important;
-    font-weight: bold !important;
-    font-size: 13px !important;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.18) !important;
-    cursor: pointer !important;
-    display: none !important;
-    align-items: center !important;
-    justify-content: center !important;
-    gap: 6px !important;
-    outline: none !important;
-    line-height: 1.4 !important;
-    white-space: nowrap !important;
-}
-
-#btn-standalone-add-point.is-active {
-    background-color: #e74c3c !important;
-    color: #ffffff !important;
-}
-
-/* ---------------------------------------------------------
-   5. SweetAlert 彈窗與照片 4 格網格佈局 (強化版)
-   --------------------------------------------------------- */
+/* =========================================================
+   6. 模態表單與照片 4 格網格 (Audit Modal & Photo Grid)
+   ========================================================= */
 .audit-modal-container {
-    text-align: left;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    color: #333;
-    padding: 0 5px;
+  text-align: left;
+  font-family: inherit;
+  color: #333;
+  padding: 0 5px;
 }
 
 .audit-modal-title {
-    text-align: center;
-    font-size: 20px;
-    font-weight: bold;
-    color: #4a4a4a;
-    margin-bottom: 20px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
+  text-align: center;
+  font-size: 20px;
+  font-weight: bold;
+  color: #4a4a4a;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
 }
 
 .audit-modal-title-icon {
-    color: #2ecc71;
-    font-size: 24px;
-    font-weight: 900;
+  color: #2ecc71;
+  font-size: 24px;
+  font-weight: 900;
 }
 
 .audit-form-group {
-    margin-bottom: 16px;
+  margin-bottom: 16px;
 }
 
 .audit-form-label {
-    display: block;
-    font-size: 15px;
-    font-weight: bold;
-    color: #4a4a4a;
-    margin-bottom: 8px;
+  display: block;
+  font-size: 15px;
+  font-weight: bold;
+  color: #4a4a4a;
+  margin-bottom: 8px;
 }
 
 .audit-form-label .required { color: #e74c3c; }
 .audit-form-label .optional { color: #909399; font-weight: normal; }
 
-.audit-input-text {
-    width: 100%;
-    padding: 10px 14px;
-    font-size: 15px;
-    border: 1px solid #dcdfe6;
-    border-radius: 6px;
-    outline: none;
-    box-sizing: border-box;
-    color: #333;
-    background-color: #fff;
+/* 合併輸入框公共樣式 */
+.audit-input-text,
+.audit-select-disabled,
+.audit-textarea {
+  width: 100%;
+  padding: 10px 14px;
+  font-size: 15px;
+  border: 1px solid #dcdfe6;
+  border-radius: 6px;
+  outline: none;
+  box-sizing: border-box;
+  color: #333;
+  background-color: #fff;
 }
 
 .audit-select-disabled {
-    width: 100%;
-    padding: 10px 14px;
-    font-size: 15px;
-    font-weight: bold;
-    color: #6c757d;
-    background-color: #e9ecef;
-    border: 1px solid #dcdfe6;
-    border-radius: 6px;
-    outline: none;
-    box-sizing: border-box;
-    cursor: not-allowed;
+  font-weight: bold;
+  color: #6c757d;
+  background-color: #e9ecef;
+  cursor: not-allowed;
 }
 
 .audit-textarea {
-    width: 100%;
-    height: 80px;
-    padding: 10px 14px;
-    font-size: 15px;
-    border: 1px solid #dcdfe6;
-    border-radius: 6px;
-    outline: none;
-    box-sizing: border-box;
-    resize: vertical;
-    color: #333;
-    font-family: inherit;
+  height: 80px;
+  resize: vertical;
+  font-family: inherit;
 }
 
-/* 照片 4 格強化網格 */
+/* 照片 4 格網格佈局 */
 .audit-photo-grid {
-    display: grid !important;
-    grid-template-columns: repeat(4, 1fr) !important;
-    gap: 10px !important;
-    width: 100% !important;
-    min-width: 100% !important;
-    box-sizing: border-box !important;
-    margin-top: 12px !important;
-    margin-bottom: 18px !important;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: 12px;
+  margin-bottom: 18px;
 }
 
 .audit-photo-box-wrapper {
-    position: relative;
-    width: 100%;
+  position: relative;
+  width: 100%;
 }
 
 .audit-photo-box {
-    width: 100% !important;
-    min-height: 85px !important;
-    aspect-ratio: 1 / 1 !important;
-    border: 1.5px dashed #a0a0a0 !important;
-    background-color: #fafafa !important;
-    border-radius: 6px !important;
-    position: relative !important;
-    display: flex !important;
-    flex-direction: column !important;
-    align-items: center !important;
-    justify-content: center !important;
-    box-sizing: border-box !important;
-    overflow: hidden !important;
+  width: 100%;
+  min-height: 85px;
+  aspect-ratio: 1 / 1;
+  border: 1.5px dashed #a0a0a0;
+  background-color: #fafafa;
+  border-radius: 6px;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  overflow: hidden;
 }
 
 .audit-photo-preview {
-    position: absolute !important;
-    top: 0 !important;
-    left: 0 !important;
-    width: 100% !important;
-    height: 100% !important;
-    object-fit: cover !important;
-    display: none;
-    z-index: 1 !important;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: none;
+  z-index: 1;
 }
 
 .audit-photo-icon {
-    font-size: 22px !important;
-    color: #bbb;
-    z-index: 1;
-    line-height: 1 !important;
+  font-size: 22px;
+  color: #bbb;
+  z-index: 1;
+  line-height: 1;
 }
 
 .audit-photo-file-input {
-    position: absolute !important;
-    top: 0 !important;
-    left: 0 !important;
-    width: 100% !important;
-    height: 100% !important;
-    opacity: 0 !important;
-    z-index: 2 !important;
-    cursor: pointer !important;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  z-index: 2;
+  cursor: pointer;
 }
 
 .audit-photo-tag-label {
-    position: absolute;
-    left: 50%;
-    transform: translateX(-50%);
-    bottom: -8px;
-    z-index: 3;
-    background: rgba(255, 255, 255, 0.95);
-    color: #333;
-    font-size: 10px;
-    padding: 2px 6px;
-    border-radius: 4px;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    gap: 2px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
-    white-space: nowrap;
-    border: 1px solid #888;
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: -8px;
+  z-index: 3;
+  background: rgba(255, 255, 255, 0.95);
+  color: #333;
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  white-space: nowrap;
+  border: 1px solid #888;
 }
 
-/* ---------------------------------------------------------
-   6. 圖層管理對話框與清查詳情
-   --------------------------------------------------------- */
+/* =========================================================
+   7. 圖層管理對話框與詳情頁展示
+   ========================================================= */
 .audit-layer-list {
-    max-height: 380px;
-    overflow-y: auto;
-    text-align: left;
+  max-height: 380px;
+  overflow-y: auto;
+  text-align: left;
 }
 
 .audit-layer-item {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 12px;
-    border-bottom: 1px solid #eee;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px;
+  border-bottom: 1px solid #eee;
 }
 
 .audit-layer-title { font-weight: bold; font-size: 14px; }
@@ -1216,34 +1204,27 @@ body.swal2-shown {
 
 .audit-layer-btn-group { display: flex; gap: 6px; }
 
-.audit-btn-download {
-    background: #8e44ad;
-    color: white;
-    border: none;
-    padding: 6px 10px;
-    border-radius: 6px;
-    cursor: pointer;
-    font-size: 12px;
+.audit-btn-download,
+.audit-btn-toggle {
+  color: #ffffff;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
 }
 
-.audit-btn-toggle {
-    color: white;
-    border: none;
-    padding: 6px 12px;
-    border-radius: 6px;
-    cursor: pointer;
-    font-size: 12px;
-}
+.audit-btn-download { background: #8e44ad; padding: 6px 10px; }
 .audit-btn-toggle.active { background: #666; }
 .audit-btn-toggle.inactive { background: #3498db; }
 
-/* 詳細記錄頁面圖片預覽 */
+/* 詳細記錄圖片預覽 */
 .audit-detail-status { color: #e91e63; font-weight: bold; }
 .audit-detail-photos { display: flex; flex-wrap: wrap; gap: 8px; }
 .audit-detail-img {
-    width: calc(50% - 4px);
-    max-height: 120px;
-    object-fit: cover;
-    border-radius: 6px;
-    border: 1px solid #ccc;
+  width: calc(50% - 4px);
+  max-height: 120px;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid #ccc;
 }
