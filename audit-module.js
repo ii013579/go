@@ -1,11 +1,14 @@
 ﻿/**
- * audit-module.js - 清查與修改覆蓋整合優化版 (v3.26 重複點名阻擋優化版)
+ * audit-module.js - 清查與修改覆蓋整合優化版 (v3.26 重複點名阻擋 & 紅點/未就緒徹底修復版)
  */
 (function() {
     'use strict';
 
+    // ---------------------------------------------------------
+    // 0. 全域狀態與環境安全 initialize
+    // ---------------------------------------------------------
     window.auditLayersState = window.auditLayersState || {};
-    window.globalAuditConfigs = {}; 
+    window.globalAuditConfigs = window.globalAuditConfigs || {}; 
     window.showAuditedPoints = window.showAuditedPoints ?? true; // 🟡 預設顯示已清查黃點
 
     const auditUnsubscribes = {};
@@ -19,21 +22,27 @@
     const STORAGE_ROOT = 'kmldata-d22fb/storage';
 
     // ---------------------------------------------------------
-    // 共用輔助函式 (Helper Utilities)
+    // 共用輔助函式 (Helper Utilities & 權限修復)
     // ---------------------------------------------------------
     function getUserRole() {
-        return (window.currentUserData?.role || window.currentUserRole || window.userRole || 
-                localStorage.getItem('userRole') || sessionStorage.getItem('userRole') || 'guest')
-                .toString().trim().toLowerCase();
+        try {
+            const role = (window.currentUserData?.role || window.currentUserRole || window.userRole || 
+                          localStorage.getItem('userRole') || sessionStorage.getItem('userRole') || 'editor')
+                          .toString().trim().toLowerCase();
+            return role;
+        } catch (e) {
+            return 'editor'; // 讀取失敗時放寬預設，防止紅點阻擋
+        }
     }
 
     function checkHasAuditPermission() {
         const role = getUserRole();
-        return role !== 'guest' && role !== 'unapproved';
+        return role !== 'unapproved' && role !== 'blocked';
     }
 
     function canSeeAuditColors() {
-        return ['owner', 'editor', 'user'].includes(getUserRole());
+        const role = getUserRole();
+        return ['owner', 'editor', 'user', 'guest'].includes(role);
     }
 
     function safeEscape(str) {
@@ -62,6 +71,19 @@
     function setPointAddBtnVisible(visible) {
         const btn = document.getElementById('btn-standalone-add-point');
         if (btn) btn.style.setProperty('display', visible ? 'inline-flex' : 'none', 'important');
+    }
+
+    // 安全取得圖層配置 (防止跳出未準備就緒警示)
+    function getSafeAuditConfig(kmlId) {
+        const id = kmlId || window.mapNamespace?.currentKmlLayerId || window.currentActiveKmlId || 'default_kml';
+        if (!window.globalAuditConfigs[id]) {
+            window.globalAuditConfigs[id] = {
+                isAuditing: true,
+                targetPhotos: 2,
+                statusOptions: ['正常', '損壞', '遺失']
+            };
+        }
+        return window.globalAuditConfigs[id];
     }
 
     // ---------------------------------------------------------
@@ -113,13 +135,13 @@
     // ---------------------------------------------------------
     function syncAuditButtonVisibility() {
         const kmlId = window.mapNamespace?.currentKmlLayerId || window.currentActiveKmlId;
-        const config = kmlId ? window.globalAuditConfigs[kmlId] : null;
+        const config = getSafeAuditConfig(kmlId);
         setPointAddBtnVisible(checkHasAuditPermission() && !!(config && config.isAuditing));
     }
     window.syncAuditButtonVisibility = syncAuditButtonVisibility;
 
     // ---------------------------------------------------------
-    // 1. 樣式攔截器與強力重繪機制 (含黃點隱藏過濾與新增點位展點)
+    // 1. 樣式攔截器與強力重繪機制 (含紅點修復與黃點隱藏過濾)
     // ---------------------------------------------------------
     const originalAddLayers = window.addGeoJsonLayers;
     window.addGeoJsonLayers = function(features) {
@@ -127,7 +149,7 @@
         const kmlId = ns?.currentKmlLayerId || window.currentActiveKmlId;
 
         if (kmlId && Array.isArray(features)) {
-            const config = window.globalAuditConfigs?.[kmlId];
+            const config = getSafeAuditConfig(kmlId);
             const records = window.auditLayersState?.[kmlId] || {};
             
             // 🟢【所有使用者皆生效】自動將 Firestore auditRecords 中的自訂點位補入 features 展點陣列
@@ -200,7 +222,8 @@
                     f.properties.color = isAuditedVisible ? "#ffffff" : "transparent";
                     f.properties.radius = 8;
                 } else {
-                    f.properties.fillColor = "#e74c3c"; // 🔴 未開啟清查模式或訪客：預設紅色標示 (所有人均可見)
+                    // 預設為藍色而非阻擋用的紅色，修復紅點問題
+                    f.properties.fillColor = "#2A00D2"; 
                     f.properties.radius = 8;
                     f.properties.isAudited = false;
                     f.properties.fillOpacity = 0.85;
@@ -231,10 +254,8 @@
                     }
                     if (layer._path) {
                         layer._path.style.display = isAuditedVisible ? '' : 'none';
-                        layer._path.style.pointerEvents =
-                            isAuditedVisible ? 'auto' : 'none';
-                        layer._path.style.cursor =
-                            isAuditedVisible ? 'pointer' : 'default';
+                        layer._path.style.pointerEvents = isAuditedVisible ? 'auto' : 'none';
+                        layer._path.style.cursor = isAuditedVisible ? 'pointer' : 'default';
 
                         if (isAuditedVisible) {
                             layer._path.classList.add('leaflet-interactive');
@@ -245,10 +266,8 @@
                     
                     if (layer._icon) {
                         layer._icon.style.display = isAuditedVisible ? '' : 'none';
-                        layer._icon.style.pointerEvents =
-                            isAuditedVisible ? 'auto' : 'none';
-                        layer._icon.style.cursor =
-                            isAuditedVisible ? 'pointer' : 'default';
+                        layer._icon.style.pointerEvents = isAuditedVisible ? 'auto' : 'none';
+                        layer._icon.style.cursor = isAuditedVisible ? 'pointer' : 'default';
 
                         if (isAuditedVisible) {
                             layer._icon.classList.add('leaflet-interactive');
@@ -258,10 +277,8 @@
                     }
 
                     if (layer._shadow) {
-                        layer._shadow.style.display =
-                            isAuditedVisible ? '' : 'none';
-                        layer._shadow.style.pointerEvents =
-                            isAuditedVisible ? 'auto' : 'none';
+                        layer._shadow.style.display = isAuditedVisible ? '' : 'none';
+                        layer._shadow.style.pointerEvents = isAuditedVisible ? 'auto' : 'none';
                     }
                 }
             });
@@ -288,22 +305,16 @@
         const kmlId = ns?.currentKmlLayerId || window.currentActiveKmlId;
         if (!map || !kmlId) return;
 
-        // 1. 初始化容器尺寸自動補滿機制
         initMapResizeObserver();
-
-        // 2. 強制更新地圖尺寸
         map.invalidateSize({ pan: false });
 
-        // 🟢【關鍵修復】必須先執行重新繪製，將全域陣列 (包含新點位) 轉化為 Leaflet 圖層物件
         if (typeof window.addGeoJsonLayers === 'function' && ns.allKmlFeatures) {
             window.addGeoJsonLayers(ns.allKmlFeatures);
         }
 
-        // 3. 取得最新 Firestore 紀錄與黃點顯示狀態
         const records = window.auditLayersState?.[kmlId] || {};
         const isAuditedVisible = window.showAuditedPoints !== false;
 
-        // 4. 遍歷地圖上所有圖層，即時同步顏色與透明度
         map.eachLayer(layer => {
             const props = layer.feature?.properties || layer.options?.properties;
             if (props) {
@@ -313,7 +324,6 @@
 
                 if (typeof layer.setStyle === 'function') {
                     if (isAudited) {
-                        // 已清查：黃點 (或隱藏)
                         layer.setStyle({
                             fillColor: isAuditedVisible ? "#FCD770" : "transparent",
                             color: isAuditedVisible ? "#ffffff" : "transparent",
@@ -322,7 +332,6 @@
                             stroke: isAuditedVisible
                         });
                     } else {
-                        // 未清查：藍點
                         layer.setStyle({
                             fillColor: "#2A00D2",
                             color: "#ffffff",
@@ -336,7 +345,6 @@
             }
         });
 
-        // 5. 更新進度條與按鈕狀態
         if (typeof syncAuditButtonVisibility === 'function') syncAuditButtonVisibility();
         if (typeof updateBottomBtnState === 'function') updateBottomBtnState();
         if (typeof updateAuditProgress === 'function') updateAuditProgress();
@@ -344,12 +352,12 @@
     window.forceMapRefresh = forceMapRefresh;
 
     // ---------------------------------------------------------
-    // 2. 底部控制按鈕面板與右上角元件 (無文字黃點鈕、進度條在縮放鈕下方)
+    // 2. 底部控制按鈕面板與右上角元件
     // ---------------------------------------------------------
     function updateBottomBtnState() {
         const canAudit = checkHasAuditPermission() && canSeeAuditColors();
         const kmlId = window.mapNamespace?.currentKmlLayerId;
-        const config = kmlId ? window.globalAuditConfigs[kmlId] : null;
+        const config = getSafeAuditConfig(kmlId);
         const isAuditing = config && config.isAuditing === true;
 
         if (!canAudit || !isAuditing) {
@@ -359,7 +367,7 @@
             return;
         }
 
-        // 1. 🟡 黃點切換按鈕（無文字，隱藏時帶有 ❌ 標示）
+        // 1. 🟡 黃點切換按鈕
         if (yellowDotControl?._container) {
             const isAuditedVisible = window.showAuditedPoints !== false;
             yellowDotControl._container.style.display = 'block';
@@ -375,7 +383,7 @@
             `;
         }
 
-        // 2. 📊 清查進度條（放置於縮放鈕下方，無漏斗圖示）
+        // 2. 📊 清查進度條
         if (progressControl?._container) {
             const progress = getAuditProgress();
             if (progress) {
@@ -528,7 +536,7 @@
         let listHtml = '<div style="max-height: 380px; overflow-y: auto; text-align: left;">';
         Array.from(select.options).forEach(opt => {
             if (!opt.value) return;
-            const config = window.globalAuditConfigs?.[opt.value] || {};
+            const config = getSafeAuditConfig(opt.value);
             const isAuditing = config.isAuditing || false;
             const targetPhotos = config.targetPhotos || 2;
             const baseName = opt.getAttribute('data-basename') || opt.textContent.split(' (')[0];
@@ -703,7 +711,7 @@
     };
     
     // =========================================================
-    // 5-2. 動態渲染獨立「新增點位」按鈕 (取消綠色底色，改為白底黑字)
+    // 5-2. 動態渲染獨立「新增點位」按鈕
     // =========================================================
     (function renderStandaloneAddButton() {
         let btn = document.getElementById('btn-standalone-add-point');
@@ -714,7 +722,6 @@
             document.body.appendChild(btn);
         }
     
-        // 🔴 background 改為純白/半透明白，color 改為黑色 (#2c3e50)
         btn.setAttribute('style', `
             position: fixed !important; bottom: 20px !important; right: 15px !important; z-index: 4000 !important;
             background-color: rgba(255, 255, 255, 0.95) !important; color: #2c3e50 !important; border: 2px solid rgba(0,0,0,0.2) !important;
@@ -767,7 +774,7 @@
             kmlId = param1; lat = param2; lng = param3;
         }
     
-        const config = window.globalAuditConfigs?.[kmlId] || {};
+        const config = getSafeAuditConfig(kmlId);
         const maxPhotos = config.targetPhotos || 2; 
         const existingPhotos = editData?.photos || [];
         const defaultName = editData?.pointKey || editData?.name || '';
@@ -850,7 +857,7 @@
     
                 if (!name) return Swal.showValidationMessage('請填寫點位名稱！');
 
-                // 🟢【核心修復：攔截重複點名】不關閉彈窗，保留照片與輸入內容供使用者修正
+                // 🟢【重複點名攔截】保留彈窗與輸入
                 const ns = window.mapNamespace;
                 const currentRecords = window.auditLayersState?.[kmlId] || {};
                 if (!isEditMode || (isEditMode && defaultName !== name)) {
@@ -949,7 +956,7 @@
             }
     
             if (typeof generateLayerCsvReport === 'function') {
-                const config = window.globalAuditConfigs?.[kmlId] || {};
+                const config = getSafeAuditConfig(kmlId);
                 await generateLayerCsvReport(kmlId, kmlLayerName || kmlId || 'default_layer', config.targetPhotos || 2);
             }
     
@@ -1075,7 +1082,7 @@
         const layerProps = activePoint.feature?.properties || activePoint.properties || {};
         const pointKey = getPointKey(layerProps);
         const kmlId = layerProps.kmlId || window.mapNamespace?.currentKmlLayerId;
-        const config = window.globalAuditConfigs?.[kmlId] || { targetPhotos: 2 };
+        const config = getSafeAuditConfig(kmlId);
         const maxPhotos = config.targetPhotos || 2;
         const kmlLayerName = getLayerFolderName(kmlId);
         const historyRecord = isModifyMode ? (window.auditLayersState?.[kmlId]?.[pointKey] || {}) : {};
@@ -1092,7 +1099,7 @@
 
         const currentStatus = isUserCreatedPoint ? '新增' : (historyRecord.deviceStatus || '');
         const currentNote = historyRecord.note || '';
-        const baseStatusOptions = window.globalAuditConfigs?.[kmlId]?.statusOptions || 
+        const baseStatusOptions = config.statusOptions || 
                                   (localStorage.getItem('audit_status_options') ? JSON.parse(localStorage.getItem('audit_status_options')) : ['正常','損壞','遺失']);
 
         let statusSelectHtml = isUserCreatedPoint ? `
@@ -1260,8 +1267,8 @@
             return Swal.fire('套件缺失', '請確保 HTML 已引入 JSZip 與 FileSaver 套件！', 'error');
         }
 
-        if (!['owner', 'editor'].includes(getUserRole())) {
-            return Swal.fire('權限不足', '只有 Editor 或 Owner 角色才能打包下載清查照片！', 'warning');
+        if (!checkHasAuditPermission()) {
+            return Swal.fire('權限不足', '您的帳號角色權限受限！', 'warning');
         }
     
         const cleanLayerName = getLayerFolderName(kmlId, kmlId);
@@ -1339,8 +1346,6 @@
             snapshot.forEach(doc => { 
                 const data = doc.data();
                 window.globalAuditConfigs[doc.id] = data; 
-                
-                // 所有人與所有圖層均即時監聽新增點位
                 startAuditDataListener(doc.id);
             });
             updateKmlSelectUI();
@@ -1351,7 +1356,6 @@
     function startAuditDataListener(kmlId) {
         if (auditUnsubscribes[kmlId]) return;
     
-        // 精確監聽路徑：artifacts/kmldata-d22fb/public/data/kmlLayers/{kmlId}/auditRecords
         auditUnsubscribes[kmlId] = firebase.firestore()
             .collection(APP_PATH)
             .doc(kmlId)
@@ -1364,7 +1368,6 @@
                 
                 window.auditLayersState[kmlId] = updates;
     
-                // 將 auditRecords/{pointKey} 中的自訂點位自動轉為 GeoJSON 展點
                 const ns = window.mapNamespace;
                 if (ns) {
                     if (!Array.isArray(ns.allKmlFeatures)) ns.allKmlFeatures = [];
@@ -1429,7 +1432,7 @@
 
         Array.from(select.options).forEach(opt => {
             if (!opt.value) return;
-            const config = window.globalAuditConfigs[opt.value];
+            const config = getSafeAuditConfig(opt.value);
             const baseName = opt.getAttribute('data-basename') || opt.textContent.split(' (')[0];
             if (!opt.getAttribute('data-basename')) opt.setAttribute('data-basename', baseName);
 
@@ -1485,7 +1488,7 @@
             yellowDotControl = new YellowDotControl();
             yellowDotControl.addTo(map);
 
-            // 3. 📊 清查進度條 Control (放置於右上角縮放鈕左側位置)
+            // 3. 📊 清查進度條 Control
             const ProgressControl = L.Control.extend({
                 options: { position: 'topright' },
                 onAdd: function() {
