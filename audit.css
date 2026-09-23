@@ -16,7 +16,7 @@
     color: #ffffff;
     background-color: #2ecc71 !important;
     border: none;
-    border-radius: 50px;
+    border-radius: 4px;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
     cursor: pointer;
     display: none; /* 由 JS 控制動態顯示 */
