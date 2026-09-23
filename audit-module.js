@@ -287,16 +287,28 @@
         if (progressControl?._container) {
             const progress = window.getAuditProgress();
             if (progress) {
-                progressControl._container.style.display = 'block';
-                progressControl._container.innerHTML = `
-                    <div style="background:rgba(255,255,255,0.95); color:#2c3e50; border:2px solid rgba(0,0,0,0.2); padding:5px 10px; border-radius:4px; font-weight:bold; font-size:12px; white-space:nowrap; max-width:calc(100vw - 90px); overflow:hidden; text-overflow:ellipsis;">
-                        未清查: ${progress.remaining} / ${progress.total}
-                    </div>`;
+                // 🔴 將外框與內距樣式直接套用在 _container 上
+                Object.assign(progressControl._container.style, {
+                    display: 'block',
+                    background: 'rgba(255, 255, 255, 0.95)',
+                    color: '#2c3e50',
+                    border: '2px solid rgba(0, 0, 0, 0.2)',
+                    padding: '5px 10px',
+                    borderRadius: '4px',
+                    fontWeight: 'bold',
+                    fontSize: '12px',
+                    whiteSpace: 'nowrap',
+                    maxWidth: 'calc(100vw - 90px)',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    boxShadow: '0 1px 5px rgba(0, 0, 0, 0.4)'
+                });
+        
+                progressControl._container.innerHTML = `未清查: ${progress.remaining} / ${progress.total}`;
             } else {
                 progressControl._container.style.display = 'none';
             }
         }
-
         // 3. 底部點位操作按鈕
         if (bottomControl?._container) {
             const active = window.currentSelectedPoint;
