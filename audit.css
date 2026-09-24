@@ -1,9 +1,9 @@
 /* ==========================================================================
-   audit-module.css - æ¸…æŸ¥æ¨¡çµ„å®Œæ•´æ¨£å¼è¡¨ (v4.0 æ•´åˆç‰ˆ)
+   audit-module.css - ²M¬d¼Ò²Õ§¹¾ã¼Ë¦¡ªí (v4.1 ¾ã¦X­×­qª©)
    ========================================================================== */
 
 /* --------------------------------------------------------------------------
-   1. å³ä¸‹è§’ç¨ç«‹æ–°å¢é»ä½æŒ‰éˆ• (Standalone Add Point Button)
+   1. ¥k¤U¨¤¿W¥ß·s¼WÂI¦ì«ö¶s (Standalone Add Point Button)
    -------------------------------------------------------------------------- */
 #btn-standalone-add-point {
     position: fixed;
@@ -19,7 +19,7 @@
     border-radius: 4px !important;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
     cursor: pointer;
-    display: none; /* ç”± JS æ§åˆ¶å‹•æ…‹é¡¯ç¤º */
+    display: none; /* ¥Ñ JS ±±¨î°ÊºAÅã¥Ü */
     align-items: center;
     justify-content: center;
     gap: 6px;
@@ -37,7 +37,34 @@
 }
 
 /* --------------------------------------------------------------------------
-   2. é»ƒé»é¡¯ç¤º/éš±è—åˆ‡æ›æŒ‰éˆ• (Yellow Dot Control)
+   2. Leaflet ¦a¹Ï±±¨î¶µ®e¾¹»P¶i«×´£¥Ü¥d¤ù (Leaflet Custom Controls)
+   -------------------------------------------------------------------------- */
+.leaflet-control-audit-progress {
+    position: absolute !important;
+    top: 10px;          /* ¹ï»ô³»³¡ Margin */
+    right: 55px;        /* ¦V¥ª°¾²¾¡AÁ×¶}¼e«×¬ù 34px~40px ªºÁY©ñ«ö¶s */
+    margin: 0 !important;
+    pointer-events: auto;
+    z-index: 1000;
+    white-space: nowrap;
+}
+
+.audit-progress-card {
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(4px);
+    border: 1px solid #cbd5e1;
+    padding: 6px 14px;
+    border-radius: 4px !important;
+    font-size: 13px;
+    font-weight: 600;
+    color: #2c3e50;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+    display: inline-block;
+    white-space: nowrap;
+}
+
+/* --------------------------------------------------------------------------
+   3. ¶ÀÂIÅã¥Ü/ÁôÂÃ¤Á´««ö¶s (Yellow Dot Control - §¹¥ş²¾°£³±¼v)
    -------------------------------------------------------------------------- */
 .leaflet-control-yellow-dot {
     margin: 6px 10px 0 0 !important;
@@ -56,7 +83,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    box-shadow: none !important; /* å®Œå…¨ç§»é™¤é™°å½± */
+    box-shadow: none !important; /* §¹¥ş²¾°£³±¼v */
     padding: 0;
     transition: background-color 0.2s;
 }
@@ -92,38 +119,13 @@
 }
 
 /* --------------------------------------------------------------------------
-   3. æ¸…æŸ¥é€²åº¦æç¤ºå¡ç‰‡ (Audit Progress Control - ç½®æ–¼ç¸®æ”¾æŒ‰éˆ•å·¦å´)
-   -------------------------------------------------------------------------- */
-.leaflet-control-audit-progress {
-    position: absolute !important;
-    top: 10px;
-    right: 55px;        /* å‘å·¦é¿é–‹ç¸®æ”¾æŒ‰éˆ• */
-    margin: 0 !important;
-    pointer-events: auto;
-    z-index: 1000;
-    white-space: nowrap;
-}
-
-.audit-progress-card {
-    background: rgba(255, 255, 255, 0.95);
-    backdrop-filter: blur(4px);
-    border: 1px solid #cbd5e1;
-    padding: 6px 14px;
-    border-radius: 4px !important;
-    font-size: 13px;
-    font-weight: 600;
-    color: #2c3e50;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
-    display: inline-block;
-}
-
-/* --------------------------------------------------------------------------
-   4. åœ°åœ–åº•éƒ¨é»ä½æ“ä½œåˆ— (Bottom Action Bar - å›ºå®šæ–¼å·¦ä¸‹è§’)
+   4. ¦a¹Ï©³³¡ÂI¦ì¾Ş§@¦C (Bottom Action Bar - ©T©w©ó©³³¡¤¤¥¡¡B¥ÕÃä´î¥b)
    -------------------------------------------------------------------------- */
 .audit-bottom-menu {
     position: fixed !important;
-    bottom: 24px !important;  /* èˆ‡å³ä¸‹è§’æ–°å¢é»ä½æŒ‰éˆ•åŒé«˜åº¦ */
-    left: 16px !important;
+    bottom: 24px !important;
+    left: 50% !important;
+    transform: translateX(-50%) !important; /* ºë½T¸m¤¤¹ï»ô */
     margin: 0 !important;
     z-index: 1000 !important;
     pointer-events: auto;
@@ -131,9 +133,9 @@
 
 .audit-bottom-action-bar {
     display: flex;
-    gap: 8px;
+    gap: 6px;
     background: rgba(255, 255, 255, 0.95);
-    padding: 6px 12px;
+    padding: 4px 8px !important;          /* ¥ÕÃä´î¥b */
     border-radius: 4px !important;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
     border: 1px solid #eee;
@@ -141,7 +143,7 @@
 }
 
 .audit-btn-action {
-    padding: 8px 16px;
+    padding: 6px 12px;                    /* «ö¶s¤º¶Z¾A«×½Õ¾ã */
     font-size: 14px;
     font-weight: 600;
     border: none;
@@ -174,7 +176,7 @@
 .audit-btn-action.btn-audit:hover { background-color: #27ae60; }
 
 /* --------------------------------------------------------------------------
-   5. åœ–å±¤æ¸…æŸ¥ç®¡ç†æ¸…å–® (Show Audit Action Modal)
+   5. ¹Ï¼h²M¬dºŞ²z²M³æ (Show Audit Action Modal)
    -------------------------------------------------------------------------- */
 .audit-action-list {
     display: flex;
@@ -246,7 +248,7 @@
 }
 
 /* --------------------------------------------------------------------------
-   6. SweetAlert2 è¡¨å–®èˆ‡é€šç”¨æ§åˆ¶é … (Form Layout & Controls)
+   6. SweetAlert2 ªí³æ»P³q¥Î±±¨î¶µ (Form Layout & Controls)
    -------------------------------------------------------------------------- */
 .audit-form-container {
     display: flex;
@@ -329,7 +331,7 @@
 }
 
 /* --------------------------------------------------------------------------
-   7. ç…§ç‰‡é¸æ“‡èˆ‡é è¦½å€åŸŸ (Photo Grid - Add Point Modal)
+   7. ·Ó¤ù¿ï¾Ü»P¹wÄı°Ï°ì (Photo Grid - Add Point Modal)
    -------------------------------------------------------------------------- */
 .audit-photo-grid {
     display: grid;
@@ -401,7 +403,7 @@
 }
 
 /* --------------------------------------------------------------------------
-   8. ç…§ç‰‡é¸æ“‡èˆ‡é è¦½å€åŸŸ (Photo Grid - Edit Audit Modal)
+   8. ·Ó¤ù¿ï¾Ü»P¹wÄı°Ï°ì (Photo Grid - Edit Audit Modal)
    -------------------------------------------------------------------------- */
 .audit-photo-grid-editor {
     display: grid;
@@ -449,7 +451,7 @@
 }
 
 /* --------------------------------------------------------------------------
-   9. è©³ç´°ç´€éŒ„ Modal (Detail Modal Images)
+   9. ¸Ô²Ó¬ö¿ı Modal (Detail Modal Images)
    -------------------------------------------------------------------------- */
 .audit-detail-img {
     width: 90px;
