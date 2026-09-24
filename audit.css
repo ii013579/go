@@ -112,10 +112,16 @@
 
 .audit-yellow-dot-off-badge {
     position: absolute;
-    top: -4px;
-    right: -4px;
-    font-size: 10px;
+    top: 50% !important;
+    left: 50% !important;
+    right: auto !important;
+    transform: translate(-50%, -50%) !important;
+    font-size: 22px !important;                 
+    font-weight: bold;
+    color: #e74c3c;
     line-height: 1;
+    z-index: 2;
+    pointer-events: none;
 }
 
 /* --------------------------------------------------------------------------
