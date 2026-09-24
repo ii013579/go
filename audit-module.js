@@ -432,7 +432,7 @@
         Swal.fire({ title: '圖層清查管理', html: listHtml, showConfirmButton: false, showCloseButton: true });
     };
 
-    window.toggleAuditStatus = async function(kmlId, status) {
+Window.toggleAuditStatus = async function(kmlId, status) {
         if (!checkHasAuditPermission()) return;
         
         try {
@@ -488,9 +488,8 @@
 
                     forceMapRefresh();
                     Swal.fire({ icon: 'success', title: '已成功開啟清查模式', timer: 1200, showConfirmButton: false });
-                } else {
-                    window.showAuditActionModal();
                 }
+                // 按下取消時直接結束，不執行任何程式碼以關閉介面
             } else {
                 Swal.fire({ title: '正在關閉清查...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
                 
@@ -506,6 +505,7 @@
             Swal.fire({ icon: 'error', title: '同步失敗', text: error.message }).then(() => window.showAuditActionModal());
         }
     };
+
         
     // ---------------------------------------------------------
     // 5. 新增自訂點位與編輯 UI
