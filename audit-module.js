@@ -432,7 +432,7 @@
         Swal.fire({ title: '圖層清查管理', html: listHtml, showConfirmButton: false, showCloseButton: true });
     };
 
-Window.toggleAuditStatus = async function(kmlId, status) {
+    window.toggleAuditStatus = async function(kmlId, status) {
         if (!checkHasAuditPermission()) return;
         
         try {
@@ -489,7 +489,7 @@ Window.toggleAuditStatus = async function(kmlId, status) {
                     forceMapRefresh();
                     Swal.fire({ icon: 'success', title: '已成功開啟清查模式', timer: 1200, showConfirmButton: false });
                 }
-                // 按下取消時直接結束，不執行任何程式碼以關閉介面
+                // 按下取消時直接關閉彈窗，不開啟管理介面
             } else {
                 Swal.fire({ title: '正在關閉清查...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
                 
