@@ -1,5 +1,5 @@
 /* ==========================================================================
-   audit-module.css - 清查模組完整樣式表 (v4.2 整合維護版)
+   audit-module.css - 清查模組完整樣式表 (v4.3 點位獨立顯隱修正版)
    ========================================================================== */
 
 /* --------------------------------------------------------------------------
@@ -64,7 +64,7 @@
 }
 
 /* --------------------------------------------------------------------------
-   3. 黃點顯示/隱藏切換按鈕與地圖點位隱藏規則 (Yellow Dot Control & Marker Visibility)
+   3. 黃點切換按鈕與點位顯隱/樣式 (Yellow/Blue Dot Control & Marker Styles)
    -------------------------------------------------------------------------- */
 .leaflet-control-yellow-dot {
     margin: 6px 10px 0 0 !important;
@@ -110,20 +110,19 @@
     background-color: #FCD770;
 }
 
-/* 關閉按鈕時，將按鈕內的黃心隱藏 */
+/* 按鈕切換為關閉狀態時，僅隱藏按鈕內的黃心 */
 .audit-yellow-dot-btn.off .audit-yellow-dot-icon-inner,
 .audit-yellow-dot-btn.is-off .audit-yellow-dot-icon-inner {
     display: none !important;
 }
 
-/* 按鈕中央的紅色大 X 標誌 */
 .audit-yellow-dot-off-badge {
     position: absolute;
     top: 50% !important;
     left: 50% !important;
     right: auto !important;
     transform: translate(-50%, -50%) !important;
-    font-size: 22px !important;                 /* 大號紅色 X */
+    font-size: 22px !important;                 /* 紅色大 X */
     font-weight: bold;
     color: #e74c3c;
     line-height: 1;
@@ -131,15 +130,24 @@
     pointer-events: none;
 }
 
-/* 地圖點位隱藏：完全隱藏黃點，藍點維持原樣 */
-.leaflet-marker-icon.hide-yellow-dot,
-.leaflet-marker-icon.yellow-dot-marker.is-hidden,
-.layer-yellow-dot-hidden {
-    display: none !important;
+/* --- 藍點樣式：恆定保持「藍底白圈」 --- */
+.leaflet-marker-icon.blue-dot-marker,
+.audit-blue-dot-marker {
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    background-color: #3498db !important;      /* 藍底 */
+    border: 2px solid #ffffff !important;       /* 白圈 */
+    border-radius: 50% !important;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3) !important;
 }
 
-.leaflet-marker-icon.blue-dot-marker {
-    display: block !important;                  /* 確保藍點不受影響 */
+/* --- 關閉黃點：僅精確隱藏黃點 Marker，藍點不受影響 --- */
+.leaflet-marker-icon.yellow-dot-marker.hide-yellow,
+.leaflet-marker-icon.yellow-dot-marker.is-hidden,
+.hide-yellow-dot .yellow-dot-marker,
+.layer-yellow-dot-hidden {
+    display: none !important;
 }
 
 /* --------------------------------------------------------------------------
