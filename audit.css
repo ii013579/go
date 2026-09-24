@@ -1,5 +1,5 @@
 /* ==========================================================================
-   audit-module.css - 清查模組完整樣式表 (v4.1 整合修訂版)
+   audit-module.css - 清查模組完整樣式表 (v4.2 整合維護版)
    ========================================================================== */
 
 /* --------------------------------------------------------------------------
@@ -10,8 +10,8 @@
     bottom: 24px;
     right: 20px;
     z-index: 1000;
-    padding: 6px 12px !important;    /* 內邊距由 10px 18px 縮減至 6px 12px */
-    font-size: 13px !important;     /* 字體微調為 13px */
+    padding: 6px 12px !important;    /* 內邊距縮減 */
+    font-size: 13px !important;     /* 字體縮小為 13px */
     font-weight: 600;
     color: #ffffff;
     background-color: #2ecc71 !important;
@@ -42,7 +42,7 @@
 .leaflet-control-audit-progress {
     position: absolute !important;
     top: 10px;          /* 對齊頂部 Margin */
-    right: 55px;        /* 向左偏移，避開寬度約 34px~40px 的縮放按鈕 */
+    right: 55px;        /* 向左偏移，避開縮放按鈕 */
     margin: 0 !important;
     pointer-events: auto;
     z-index: 1000;
@@ -64,7 +64,7 @@
 }
 
 /* --------------------------------------------------------------------------
-   3. 黃點顯示/隱藏切換按鈕 (Yellow Dot Control - 完全移除陰影)
+   3. 黃點顯示/隱藏切換按鈕與地圖點位隱藏規則 (Yellow Dot Control & Marker Visibility)
    -------------------------------------------------------------------------- */
 .leaflet-control-yellow-dot {
     margin: 6px 10px 0 0 !important;
@@ -110,18 +110,36 @@
     background-color: #FCD770;
 }
 
+/* 關閉按鈕時，將按鈕內的黃心隱藏 */
+.audit-yellow-dot-btn.off .audit-yellow-dot-icon-inner,
+.audit-yellow-dot-btn.is-off .audit-yellow-dot-icon-inner {
+    display: none !important;
+}
+
+/* 按鈕中央的紅色大 X 標誌 */
 .audit-yellow-dot-off-badge {
     position: absolute;
     top: 50% !important;
     left: 50% !important;
     right: auto !important;
     transform: translate(-50%, -50%) !important;
-    font-size: 22px !important;                 
+    font-size: 22px !important;                 /* 大號紅色 X */
     font-weight: bold;
     color: #e74c3c;
     line-height: 1;
     z-index: 2;
     pointer-events: none;
+}
+
+/* 地圖點位隱藏：完全隱藏黃點，藍點維持原樣 */
+.leaflet-marker-icon.hide-yellow-dot,
+.leaflet-marker-icon.yellow-dot-marker.is-hidden,
+.layer-yellow-dot-hidden {
+    display: none !important;
+}
+
+.leaflet-marker-icon.blue-dot-marker {
+    display: block !important;                  /* 確保藍點不受影響 */
 }
 
 /* --------------------------------------------------------------------------
@@ -131,7 +149,7 @@
     position: fixed !important;
     bottom: 24px !important;
     left: 50% !important;
-    transform: translateX(-50%) !important; /* 精確置中對齊 */
+    transform: translateX(-50%) !important;    /* 精確置中對齊 */
     margin: 0 !important;
     z-index: 1000 !important;
     pointer-events: auto;
@@ -141,7 +159,7 @@
     display: flex;
     gap: 6px;
     background: rgba(255, 255, 255, 0.95);
-    padding: 4px 8px !important;          /* 白邊減半 */
+    padding: 4px 8px !important;             /* 白邊減半 */
     border-radius: 4px !important;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
     border: 1px solid #eee;
@@ -149,7 +167,7 @@
 }
 
 .audit-btn-action {
-    padding: 6px 12px;                    /* 按鈕內距適度調整 */
+    padding: 6px 12px;
     font-size: 14px;
     font-weight: 600;
     border: none;
