@@ -971,9 +971,10 @@
             html: `<div class="audit-form-container">
                 <p><b>設備狀況：</b><span style="color:#e91e63; font-weight:bold;">🟢 ${safeEscape(record.deviceStatus || '正常')}</span></p>
                 <p><b>現場照片：</b></p>
+                	<div style="display:flex; flex-wrap:wrap;">${imagesHtml || '無照片'}</div>
+                  </div>`,
                 <p><b>現場備註：</b><br>${safeEscape(record.note || '無備註')}</p>
-                <div style="display:flex; flex-wrap:wrap;">${imagesHtml || '無照片'}</div>
-            </div>`,
+                
             confirmButtonText: '關閉'
         });
     };
