@@ -290,7 +290,7 @@
     margin-top: 8px;
 }
 
-/* 新增：設備狀態並排樣式 */
+/* 設備狀態並排樣式 */
 .audit-form-group-inline {
     display: flex !important;
     align-items: center !important;
@@ -309,11 +309,13 @@
     margin: 0 !important;
 }
 
+/* 1. 最上方大標題 (固定 16px) */
+.swal2-title,
 .audit-modal-title {
     display: flex;
     align-items: center;
     gap: 8px;
-    font-size: 18px;
+    font-size: 16px !important;
     font-weight: 700;
     color: #2c3e50;
     padding-bottom: 8px;
@@ -321,9 +323,10 @@
 }
 
 .audit-modal-icon {
-    font-size: 20px;
+    font-size: 16px !important;
 }
 
+/* 2. 標題以下的所有內容與欄位 (統一 14px) */
 .audit-form-group {
     display: flex;
     flex-direction: column;
@@ -331,20 +334,20 @@
 }
 
 .audit-form-label {
-    font-size: 13px;
+    font-size: 14px !important;
     font-weight: 600;
     color: #34495e;
 }
 
 .audit-form-label .required {
     color: #e74c3c;
-    font-size: 11px;
+    font-size: 14px !important;
     margin-left: 4px;
 }
 
 .audit-form-label .optional {
     color: #95a5a6;
-    font-size: 11px;
+    font-size: 14px !important;
     margin-left: 4px;
 }
 
@@ -381,6 +384,10 @@
     cursor: not-allowed;
 }
 
+/* 3. 底部按鈕區 (統一 14px) */
+.swal2-actions button {
+    font-size: 14px !important;
+}
 /* --------------------------------------------------------------------------
    7. 照片選擇與預覽區域 (Photo Grid - Add Point Modal)
    -------------------------------------------------------------------------- */
