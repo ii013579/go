@@ -641,17 +641,18 @@
         const modalTitle = isEditMode ? '修改點位清查紀錄' : '新增點位清查紀錄';
         const confirmBtnText = isEditMode ? '確認並儲存修改' : '確認並新增上傳';
     
+        // 調整為單行對齊配置 (audit-form-group-inline) 並更名為「點位名稱」
         const modalHtml = `
         <div class="audit-form-container">
             <div class="audit-modal-title">
                 <span class="audit-modal-icon">${isEditMode ? '✏️' : '➕'}</span>
                 <span>${modalTitle}</span>
             </div>
-            <div class="audit-form-group">
-                <label class="audit-form-label">點位名稱 / 點名 <span class="required">*必填</span></label>
+            <div class="audit-form-group-inline">
+                <label class="audit-form-label">點位名稱 <span class="required">*必填</span></label>
                 <input type="text" id="add-point-name" value="${defaultName}" placeholder="例如：新設電桿-01" class="audit-form-input">
             </div>
-            <div class="audit-form-group">
+            <div class="audit-form-group-inline">
                 <label class="audit-form-label">設備狀態</label>
                 <select id="add-device-status" disabled class="audit-form-select">
                     <option value="新增" selected>新增</option>
