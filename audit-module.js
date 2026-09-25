@@ -974,188 +974,76 @@
     };
       
     // ---------------------------------------------------------
-    // 7. 詳細紀錄與批次打包下載 (修復 KML ID Fallback 與雙軌照片收集機制)
+    // 7. 打包 Firebase Storage 照片
     // ---------------------------------------------------------
-    window.viewAuditDetailOnly = function(pointKey) {
-        const kmlId = window.mapNamespace?.currentKmlLayerId || window.currentActiveKmlId;
-        const record = window.auditLayersState?.[kmlId]?.[pointKey];
-        if (!record) {
-            return Swal.fire('提示', '找不到該點位的清查紀錄', 'warning');
-        }
-    
-        let photoList = [];
-        if (Array.isArray(record.photos)) {
-            photoList = record.photos;
-        } else if (record.photos && typeof record.photos === 'object') {
-            photoList = Object.values(record.photos);
-        }
-    
-        photoList = photoList.filter(url => url && typeof url === 'string');
-    
-        const photosHtml = photoList.length > 0
-            ? photoList.map((url, idx) => `
-                <div class="audit-photo-item-editor">
-                    <div class="audit-photo-box-editor">
-                        <img src="${safeEscape(url)}" class="audit-detail-img" style="width:100%; height:100%; object-fit:cover; cursor:pointer;" onclick="window.open('${safeEscape(url)}', '_blank')">
-                    </div>
-                    <span class="audit-photo-tag-editor">照片 ${idx + 1}</span>
-                </div>
-            `).join('')
-            : `<div style="color:#94a3b8; font-size:14px; padding:4px;">無現場照片</div>`;
-    
-        Swal.fire({
-            title: `查看清查紀錄：${safeEscape(pointKey)}`,
-            html: `
-                <div class="audit-form-container">
-                    <div class="audit-form-group-inline">
-                        <label class="audit-form-label">設備狀態</label>
-                        <input type="text" class="audit-form-input" value="${safeEscape(record.deviceStatus || record.status || '正常')}" style="font-weight:600; color:#2c3e50;" readonly disabled>
-                    </div>
-    
-                    <div class="audit-form-group">
-                        <label class="audit-form-label">現場照片 (${photoList.length} 張)</label>
-                        <div class="audit-photo-grid-editor">
-                            ${photosHtml}
-                        </div>
-                    </div>
-    
-                    <div class="audit-form-group">
-                        <label class="audit-form-label">備註事項</label>
-                        <textarea class="audit-form-textarea" readonly disabled>${safeEscape(record.note || record.remark || '無')}</textarea>
-                    </div>
-                </div>
-            `,
-            confirmButtonText: '關閉'
-        });
-    };
-
     window.downloadAuditPhotosZip = async function(kmlId) {
         if (typeof JSZip === 'undefined' || typeof saveAs === 'undefined') {
-            return Swal.fire('套件缺失', '缺少 JSZip / FileSaver 套件', 'error');
-        }
-        if (!checkHasAuditPermission()) {
-            return Swal.fire('權限不足', '您的帳號角色權限受限！', 'warning');
+            return Swal.fire('套件缺失', '請確保 HTML 已引入 JSZip 與 FileSaver 套件！', 'error');
         }
 
-        const targetKmlId = kmlId || window.mapNamespace?.currentKmlLayerId || window.currentActiveKmlId;
-        const cleanLayerName = getLayerFolderName(targetKmlId, targetKmlId);
-        
-        Swal.fire({ 
-            title: '正在打包清查成果...', 
-            html: `<div id="zip-progress-text" style="font-size:14px; margin-top:10px;">正在產出 CSV 與收集照片...</div>`, 
-            allowOutsideClick: false, 
-            didOpen: () => Swal.showLoading() 
+        if (!['owner', 'editor'].includes(getUserRole())) {
+            return Swal.fire('權限不足', '只有 Editor 或 Owner 角色才能打包下載清查照片！', 'warning');
+        }
+    
+        const cleanLayerName = getLayerFolderName(kmlId, kmlId);
+
+        Swal.fire({
+            title: '正在搜尋 Storage 照片...',
+            html: `<div id="zip-progress-text" style="font-size:14px; margin-top:10px;">請稍候...</div>`,
+            allowOutsideClick: false,
+            didOpen: () => Swal.showLoading()
         });
 
         const progressEl = document.getElementById('zip-progress-text');
+
         try {
-            const records = window.auditLayersState?.[targetKmlId] || {};
-            const recordEntries = Object.entries(records);
-            let downloadItems = []; // { name: string, url: string }
+            const storageFolderPath = `${STORAGE_ROOT}/${cleanLayerName}`;
+            const listResult = await firebase.storage().ref(storageFolderPath).listAll();
 
-            // 1. 收集點位照片檔名與網址
-            recordEntries.forEach(([ptKey, rec]) => {
-                let photos = [];
-                if (Array.isArray(rec.photos)) photos = rec.photos;
-                else if (rec.photos && typeof rec.photos === 'object') photos = Object.values(rec.photos);
-
-                photos.filter(u => typeof u === 'string' && u).forEach((url, i) => {
-                    downloadItems.push({
-                        name: `${ptKey}_照片${i + 1}.jpg`,
-                        url: url
-                    });
-                });
-            });
-
-            // 2. 若記憶體無照片紀錄，對 Storage 做備援搜尋
-            if (downloadItems.length === 0 && typeof firebase !== 'undefined' && firebase.storage) {
-                const rootRef = firebase.storage().ref(`${STORAGE_ROOT}/${cleanLayerName}`);
-                
-                async function fetchAllFiles(ref) {
-                    let files = [];
-                    const res = await ref.listAll();
-                    files.push(...res.items);
-                    for (const folderRef of res.prefixes) {
-                        const subFiles = await fetchAllFiles(folderRef);
-                        files.push(...subFiles);
-                    }
-                    return files;
-                }
-
-                try {
-                    const items = await fetchAllFiles(rootRef);
-                    for (const item of items) {
-                        const url = await item.getDownloadURL();
-                        downloadItems.push({ name: item.name, url: url });
-                    }
-                } catch (err) {
-                    console.warn('Storage 備援搜尋照片跳過:', err);
-                }
+            if (listResult.items.length === 0) {
+                return Swal.fire('提示', `Storage 路徑 [${storageFolderPath}] 下找不到任何檔案。`, 'info');
             }
 
-            if (recordEntries.length === 0 && downloadItems.length === 0) {
-                return Swal.fire('提示', '找不到任何清查紀錄或照片檔案', 'info');
-            }
+            const items = listResult.items;
+            if (progressEl) progressEl.textContent = `找到 ${items.length} 個檔案，準備下載...`;
 
             const zip = new JSZip();
             const rootFolder = zip.folder(cleanLayerName);
-
-            // 3. 生成 CSV 總表內容 (開頭加入 \uFEFF UTF-8 BOM 避免 Excel 亂碼)
-            let csvContent = "\uFEFF點位名稱,設備狀態,經度,緯度,備註事項,照片檔案清單\n";
-            recordEntries.forEach(([ptKey, rec]) => {
-                const nameEsc = `"${(ptKey || rec.name || '').replace(/"/g, '""')}"`;
-                const statusEsc = `"${(rec.deviceStatus || rec.status || '正常').replace(/"/g, '""')}"`;
-                const lng = rec.lng !== undefined ? rec.lng : '';
-                const lat = rec.lat !== undefined ? rec.lat : '';
-                const noteEsc = `"${(rec.note || rec.remark || '無').replace(/"/g, '""')}"`;
-
-                let photos = [];
-                if (Array.isArray(rec.photos)) photos = rec.photos;
-                else if (rec.photos && typeof rec.photos === 'object') photos = Object.values(rec.photos);
-                
-                const photoNames = photos.filter(u => typeof u === 'string' && u)
-                                         .map((_, i) => `${ptKey}_照片${i + 1}.jpg`)
-                                         .join('; ');
-                const photosEsc = `"${photoNames}"`;
-
-                csvContent += `${nameEsc},${statusEsc},${lng},${lat},${noteEsc},${photosEsc}\n`;
-            });
-
-            // 4. 將生成的 CSV 直接寫入 ZIP 壓縮檔內
-            rootFolder.file(`${cleanLayerName}_清查總表.csv`, csvContent);
-
-            // 5. 分批下載照片並打包進 ZIP (每批平行 3 個請求)
             let completedCount = 0, failCount = 0;
-            for (let i = 0; i < downloadItems.length; i += 3) {
-                const batch = downloadItems.slice(i, i + 3);
-                await Promise.all(batch.map(async (item) => {
+
+            const BATCH_SIZE = 3;
+            for (let i = 0; i < items.length; i += BATCH_SIZE) {
+                const batch = items.slice(i, i + BATCH_SIZE);
+
+                await Promise.all(batch.map(async (fileRef) => {
                     try {
-                        const response = await fetch(item.url);
-                        if (!response.ok) throw new Error();
-                        rootFolder.file(item.name, await response.blob());
-                    } catch { 
-                        failCount++; 
+                        const downloadUrl = await fileRef.getDownloadURL();
+                        const response = await fetch(downloadUrl);
+                        if (!response.ok) throw new Error(`HTTP error ${response.status}`);
+                        rootFolder.file(fileRef.name, await response.blob());
+                    } catch (err) {
+                        failCount++;
                     } finally {
                         completedCount++;
-                        if (progressEl) progressEl.textContent = `照片打包進度: (${completedCount}/${downloadItems.length})`;
+                        if (progressEl) progressEl.textContent = `打包進度: (${completedCount}/${items.length})`;
                     }
                 }));
             }
 
-            // 6. 壓縮打包並下載單一 ZIP 檔案
-            if (progressEl) progressEl.textContent = '正在壓縮產出 ZIP 檔案...';
-            const zipBlob = await zip.generateAsync({ type: 'blob' });
-            saveAs(zipBlob, `${cleanLayerName}_清查打包資料.zip`);
+            if (completedCount - failCount === 0) throw new Error('所有檔案下載皆失敗，請確認網路連線或 CORS 設定。');
+            if (progressEl) progressEl.textContent = '檔案下載完成，正在壓縮 ZIP...';
 
-            Swal.fire({ 
-                icon: failCount > 0 ? 'warning' : 'success', 
-                title: '打包下載完成！', 
-                text: `ZIP 包內已包含 CSV 總表與照片檔案`,
-                timer: 2500, 
-                showConfirmButton: false 
+            saveAs(await zip.generateAsync({ type: 'blob' }), `${cleanLayerName}_Storage照片總集.zip`);
+
+            Swal.fire({
+                icon: failCount > 0 ? 'warning' : 'success',
+                title: '打包下載完成！',
+                text: failCount > 0 ? `成功打包 ${completedCount - failCount} 個檔案，失敗 ${failCount} 個` : `已成功下載 ${completedCount} 個檔案與 CSV 清冊`,
+                timer: 2500,
+                showConfirmButton: false
             });
+
         } catch (error) {
-            console.error('打包失敗:', error);
             Swal.fire({ icon: 'error', title: '打包失敗', text: error.message || '發生未知錯誤' });
         }
     };
