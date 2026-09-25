@@ -148,25 +148,26 @@
                     const isAudited = !!record;
                     f.properties.isAudited = isAudited;
 
-                    if (isAudited) {
-                        f.properties.auditStatus = record.deviceStatus || "正常";
-                        f.properties.auditNote = record.note;
-                        f.properties.photos = record.photos || [];
-                        f.properties.fillColor = isAuditedVisible ? "#FCD770" : "transparent";
-                        f.properties.fillOpacity = isAuditedVisible ? 0.85 : 0;
-                        f.properties.opacity = isAuditedVisible ? 1 : 0;
-                        f.properties.stroke = isAuditedVisible;
-                        f.properties.weight = isAuditedVisible ? 2 : 0;
-                    } else {
-                        f.properties.auditStatus = null;
-                        f.properties.fillColor = "#2A00D2";
-                        f.properties.fillOpacity = 0.85;
-                        f.properties.opacity = 1;
-                        f.properties.stroke = true;
-                        f.properties.weight = 2;
-                    }
-                    f.properties.color = isAuditedVisible ? "#ffffff" : "transparent";
-                    f.properties.radius = 8;
+               if (isAudited) {
+                   // 已清查（黃點）：隨開關切換顯示或隱藏
+                   f.properties.auditStatus = record.deviceStatus || "正常";
+                   f.properties.fillColor = isAuditedVisible ? "#FCD770" : "transparent";
+                   f.properties.fillOpacity = isAuditedVisible ? 0.85 : 0;
+                   f.properties.opacity = isAuditedVisible ? 1 : 0;
+                   f.properties.stroke = isAuditedVisible;
+                   f.properties.weight = isAuditedVisible ? 2 : 0;
+                   f.properties.color = isAuditedVisible ? "#ffffff" : "transparent"; // ⭕ 黃點外框跟隨開關
+               } else {
+                   // 未清查（藍點）：無論黃點開關與否，恆定保持藍底白邊
+                   f.properties.auditStatus = null;
+                   f.properties.fillColor = "#2A00D2";
+                   f.properties.fillOpacity = 0.85;
+                   f.properties.opacity = 1;
+                   f.properties.stroke = true;
+                   f.properties.weight = 2;
+                   f.properties.color = "#ffffff"; // ⭕ 藍點外框恆定為白色
+               }
+               f.properties.radius = 8;
                 } else {
                     f.properties.fillColor = "#e74c3c";
                     f.properties.color = "#ffffff";
@@ -488,8 +489,9 @@
 
                     forceMapRefresh();
                     Swal.fire({ icon: 'success', title: '已成功開啟清查模式', timer: 1200, showConfirmButton: false });
+                } else {
+                    window.showAuditActionModal();
                 }
-                // 按下取消時直接關閉彈窗，不開啟管理介面
             } else {
                 Swal.fire({ title: '正在關閉清查...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
                 
@@ -505,8 +507,6 @@
             Swal.fire({ icon: 'error', title: '同步失敗', text: error.message }).then(() => window.showAuditActionModal());
         }
     };
-
-
         
     // ---------------------------------------------------------
     // 5. 新增自訂點位與編輯 UI
