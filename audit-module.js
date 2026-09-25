@@ -955,26 +955,61 @@
     };
       
     // ---------------------------------------------------------
-    // 7. 詳細紀錄與批次打包下載
+    // 7. 詳細紀錄與批次打包下載 (查看模式 - 動態照片 2~12 張)
     // ---------------------------------------------------------
     window.viewAuditDetailOnly = function(pointKey) {
         const kmlId = window.mapNamespace?.currentKmlLayerId;
         const record = window.auditLayersState[kmlId]?.[pointKey];
         if (!record) return;
-
-        const imagesHtml = (record.photos || []).map(url => 
-            url ? `<img src="${safeEscape(url)}" class="audit-detail-img">` : ''
-        ).join('');
-
+    
+        // 統一將照片資料轉換為陣列 (相容陣列與物件格式)
+        let photoList = [];
+        if (Array.isArray(record.photos)) {
+            photoList = record.photos;
+        } else if (record.photos && typeof record.photos === 'object') {
+            photoList = Object.values(record.photos);
+        }
+    
+        // 過濾出有效的圖片網址
+        photoList = photoList.filter(url => url && typeof url === 'string');
+    
+        // 動態產生照片網格 HTML
+        const photosHtml = photoList.length > 0
+            ? photoList.map((url, idx) => `
+                <div class="audit-photo-item-editor">
+                    <div class="audit-photo-box-editor">
+                        <img src="${safeEscape(url)}" class="audit-detail-img" style="width:100%; height:100%; object-fit:cover; cursor:pointer;" onclick="window.open('${safeEscape(url)}', '_blank')">
+                    </div>
+                    <span class="audit-photo-tag-editor">照片 ${idx + 1}</span>
+                </div>
+            `).join('')
+            : `<div style="color:#94a3b8; font-size:14px; padding:4px;">無現場照片</div>`;
+    
         Swal.fire({
-            title: `清查紀錄：${safeEscape(pointKey)}`,
-            html: `<div class="audit-form-container">
-                <p><b>設備狀況：</b><span style="color:#e91e63; font-weight:bold;">🟢 ${safeEscape(record.deviceStatus || '正常')}</span></p>
-                <p><b>現場照片：</b></p>
-                	<div style="display:flex; flex-wrap:wrap;">${imagesHtml || '無照片'}</div>
-                  </div>`,
-                <p><b>現場備註：</b><br>${safeEscape(record.note || '無備註')}</p>
-                
+            title: `查看清查紀錄：${safeEscape(pointKey)}`,
+            html: `
+                <div class="audit-form-container">
+                    <!-- 1. 設備狀態 (並排樣式) -->
+                    <div class="audit-form-group-inline">
+                        <label class="audit-form-label">設備狀態</label>
+                        <input type="text" class="audit-form-input" value="${safeEscape(record.deviceStatus || record.status || '正常')}" style="font-weight:600; color:#2c3e50;" readonly disabled>
+                    </div>
+    
+                    <!-- 2. 現場照片 (動態顯示照片數量與網格) -->
+                    <div class="audit-form-group">
+                        <label class="audit-form-label">現場照片 (${photoList.length} 張)</label>
+                        <div class="audit-photo-grid-editor">
+                            ${photosHtml}
+                        </div>
+                    </div>
+    
+                    <!-- 3. 備註事項 -->
+                    <div class="audit-form-group">
+                        <label class="audit-form-label">備註事項</label>
+                        <textarea class="audit-form-textarea" readonly disabled>${safeEscape(record.note || record.remark || '無')}</textarea>
+                    </div>
+                </div>
+            `,
             confirmButtonText: '關閉'
         });
     };
