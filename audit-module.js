@@ -1037,7 +1037,7 @@
         const cleanLayerName = getLayerFolderName(targetKmlId, targetKmlId);
         
         Swal.fire({ 
-            title: '正在打包資料與照片...', 
+            title: '正在處理資料與同步...', 
             html: `<div id="zip-progress-text" style="font-size:14px; margin-top:10px;">請稍候...</div>`, 
             allowOutsideClick: false, 
             didOpen: () => Swal.showLoading() 
@@ -1049,7 +1049,7 @@
             const recordEntries = Object.entries(records);
             let downloadItems = []; // { name: string, url: string }
 
-            // 1. 從記憶體狀態 (auditLayersState) 收集照片檔名與網址
+            // 1. 收集照片網址資訊
             recordEntries.forEach(([ptKey, rec]) => {
                 let photos = [];
                 if (Array.isArray(rec.photos)) photos = rec.photos;
@@ -1063,40 +1063,11 @@
                 });
             });
 
-            // 2. 若記憶體無照片紀錄，對 Storage 做遞迴目錄搜尋照片
-            if (downloadItems.length === 0 && typeof firebase !== 'undefined' && firebase.storage) {
-                const rootRef = firebase.storage().ref(`${STORAGE_ROOT}/${cleanLayerName}`);
-                
-                async function fetchAllFiles(ref) {
-                    let files = [];
-                    const res = await ref.listAll();
-                    files.push(...res.items);
-                    for (const folderRef of res.prefixes) {
-                        const subFiles = await fetchAllFiles(folderRef);
-                        files.push(...subFiles);
-                    }
-                    return files;
-                }
-
-                try {
-                    const items = await fetchAllFiles(rootRef);
-                    for (const item of items) {
-                        const url = await item.getDownloadURL();
-                        downloadItems.push({ name: item.name, url: url });
-                    }
-                } catch (err) {
-                    console.warn('Storage 照片搜尋跳過:', err);
-                }
-            }
-
             if (recordEntries.length === 0 && downloadItems.length === 0) {
                 return Swal.fire('提示', '找不到任何清查紀錄與照片檔案', 'info');
             }
 
-            const zip = new JSZip();
-            const rootFolder = zip.folder(cleanLayerName);
-
-            // 3. 生成 CSV 內容 (含 \uFEFF UTF-8 BOM 防 Excel 亂碼)
+            // 2. 生成 CSV 內容 (含 \uFEFF UTF-8 BOM)
             let csvContent = "\uFEFF點位名稱,設備狀態,經度,緯度,備註事項,照片檔案清單\n";
             recordEntries.forEach(([ptKey, rec]) => {
                 const nameEsc = `"${(ptKey || rec.name || '').replace(/"/g, '""')}"`;
@@ -1117,10 +1088,23 @@
                 csvContent += `${nameEsc},${statusEsc},${lng},${lat},${noteEsc},${photosEsc}\n`;
             });
 
-            // 將產出的 CSV 檔加入 ZIP 資料夾中
-            rootFolder.file(`${cleanLayerName}_點位清查紀錄.csv`, csvContent);
+            // 3. 建立 CSV 的 Blob 物件
+            const csvBlob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
 
-            // 4. 分批下載照片檔並放入 ZIP (每批 3 個平行請求)
+            // 4. 上傳 CSV 至 Firebase Storage
+            if (typeof firebase !== 'undefined' && firebase.storage) {
+                if (progressEl) progressEl.textContent = '正在上傳 CSV 總表至 Firebase Storage...';
+                
+                const csvStorageRef = firebase.storage().ref().child(`${STORAGE_ROOT}/${cleanLayerName}/${cleanLayerName}_清查總表.csv`);
+                await csvStorageRef.put(csvBlob, { contentType: 'text/csv' });
+            }
+
+            // 5. 將 CSV 放入 ZIP 壓縮檔
+            const zip = new JSZip();
+            const rootFolder = zip.folder(cleanLayerName);
+            rootFolder.file(`${cleanLayerName}_清查總表.csv`, csvBlob);
+
+            // 6. 下載照片並加入 ZIP
             let completedCount = 0, failCount = 0;
             for (let i = 0; i < downloadItems.length; i += 3) {
                 const batch = downloadItems.slice(i, i + 3);
@@ -1138,18 +1122,19 @@
                 }));
             }
 
-            // 5. 輸出 ZIP 檔案
+            // 7. 觸發 ZIP 下載
             saveAs(await zip.generateAsync({ type: 'blob' }), `${cleanLayerName}_清查打包資料.zip`);
 
             Swal.fire({ 
                 icon: failCount > 0 ? 'warning' : 'success', 
-                title: '打包下載完成！', 
-                text: `已包含 CSV 紀錄表與照片檔`,
+                title: '上傳與打包完成！', 
+                text: `CSV 總表已同步儲存至 Firebase Storage 並打包下載`,
                 timer: 2500, 
                 showConfirmButton: false 
             });
         } catch (error) {
-            Swal.fire({ icon: 'error', title: '打包失敗', text: error.message || '發生未知錯誤' });
+            console.error('處理失敗:', error);
+            Swal.fire({ icon: 'error', title: '處理失敗', text: error.message || '發生未知錯誤' });
         }
     };
         
