@@ -290,6 +290,25 @@
     margin-top: 8px;
 }
 
+/* 新增：設備狀態並排樣式 */
+.audit-form-group-inline {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 12px !important;
+    width: 100% !important;
+}
+
+.audit-form-group-inline .audit-form-label {
+    white-space: nowrap !important;
+    margin: 0 !important;
+}
+
+.audit-form-group-inline .audit-form-select {
+    flex: 1 !important;
+    margin: 0 !important;
+}
+
 .audit-modal-title {
     display: flex;
     align-items: center;

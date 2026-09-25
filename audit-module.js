@@ -156,7 +156,7 @@
                    f.properties.opacity = isAuditedVisible ? 1 : 0;
                    f.properties.stroke = isAuditedVisible;
                    f.properties.weight = isAuditedVisible ? 2 : 0;
-                   f.properties.color = isAuditedVisible ? "#ffffff" : "transparent"; // ⭕ 黃點外框跟隨開關
+                   f.properties.color = isAuditedVisible ? "#ffffff" : "transparent"; 
                } else {
                    // 未清查（藍點）：無論黃點開關與否，恆定保持藍底白邊
                    f.properties.auditStatus = null;
@@ -165,7 +165,7 @@
                    f.properties.opacity = 1;
                    f.properties.stroke = true;
                    f.properties.weight = 2;
-                   f.properties.color = "#ffffff"; // ⭕ 藍點外框恆定為白色
+                   f.properties.color = "#ffffff"; 
                }
                f.properties.radius = 8;
                 } else {
@@ -817,28 +817,28 @@
     window.openAuditEditor = async function(isModifyMode = false) {
         const activePoint = window.currentSelectedPoint;
         if (!activePoint) return;
-
+    
         const layerProps = activePoint.feature?.properties || activePoint.properties || {};
         const pointKey = getPointKey(layerProps);
         const kmlId = layerProps.kmlId || window.mapNamespace?.currentKmlLayerId;
-
+    
         if (!isAuditActiveForLayer(kmlId)) return;
-
+    
         const config = getSafeAuditConfig(kmlId);
         const maxPhotos = config.targetPhotos || 2;
         const kmlLayerName = getLayerFolderName(kmlId);
         const historyRecord = isModifyMode ? (window.auditLayersState?.[kmlId]?.[pointKey] || {}) : {};
-
+    
         const isUserCreatedPoint = !!(historyRecord.deviceStatus === '新增' || layerProps.deviceStatus === '新增');
         const currentPhotos = new Array(maxPhotos).fill('');
         if (isModifyMode && Array.isArray(historyRecord.photos)) {
             historyRecord.photos.forEach((url, idx) => { if (idx < maxPhotos) currentPhotos[idx] = url || ''; });
         }
-
+    
         const currentStatus = isUserCreatedPoint ? '新增' : (historyRecord.deviceStatus || '');
         const currentNote = historyRecord.note || '';
         const baseStatusOptions = config.statusOptions || ['正常', '損壞', '遺失'];
-
+    
         let statusSelectHtml = isUserCreatedPoint ? `
             <select id="swal-status" class="swal2-input audit-form-select" disabled>
                 <option value="新增" selected>新增</option>
@@ -847,7 +847,7 @@
                 <option value="" ${!currentStatus ? 'selected' : ''}>--- 請選擇設備狀態 ---</option>
                 ${baseStatusOptions.filter(opt => opt !== '新增').map(opt => `<option value="${opt}" ${currentStatus === opt ? 'selected' : ''}>${opt}</option>`).join('')}
             </select>`;
-
+    
         let photoHtml = '';
         for (let i = 0; i < maxPhotos; i++) {
             const photoData = currentPhotos[i] || '';
@@ -865,12 +865,16 @@
                     </label>
                 </div>`;
         }
-
+    
         const { value: res, isDenied } = await Swal.fire({
             title: `<div>${isModifyMode ? '修改' : '填寫'}清查紀錄：${safeEscape(pointKey)}</div>`,
             html: `<div class="audit-form-container">
-                <label class="audit-form-label">設備狀態 <span class="required">*必選</span></label>
-                ${statusSelectHtml}
+                <!-- 修改處：加入 audit-form-group-inline 容器包裹選單與標題 -->
+                <div class="audit-form-group-inline">
+                    <label class="audit-form-label">設備狀態 <span class="required">*必選</span></label>
+                    ${statusSelectHtml}
+                </div>
+                
                 <label class="audit-form-label">現場照片 (需滿 ${maxPhotos} 張) <span class="required">*必填</span></label>
                 <div class="audit-photo-grid-editor">${photoHtml}</div>
                 <label class="audit-form-label">備註事項 <span class="optional">(選填)</span></label>
@@ -923,9 +927,9 @@
                 return { status: statusValue, note: document.getElementById('swal-note').value, photos: currentPhotos };
             }
         });
-
+    
         if (isDenied) return window.deleteCustomPoint(kmlId, pointKey, kmlLayerName);
-
+    
         if (res) {
             Swal.fire({ title: '正在上傳與更新資料...', didOpen: () => Swal.showLoading(), allowOutsideClick: false });
             try {
@@ -934,14 +938,14 @@
                     pointName: pointKey, status: "已完成", deviceStatus: res.status, 
                     note: res.note, photos: photoUrls, updatedAt: firebase.firestore.FieldValue.serverTimestamp()
                 };
-
+    
                 window.auditLayersState ||= {};
                 window.auditLayersState[kmlId] ||= {};
                 window.auditLayersState[kmlId][pointKey] = structuredData;
-
+    
                 await firebase.firestore().collection(APP_PATH).doc(kmlId).collection('auditRecords').doc(pointKey).set(structuredData, { merge: true });
                 await generateLayerCsvReport(kmlId, kmlLayerName, maxPhotos);
-
+    
                 await Swal.fire({ icon: 'success', title: '更新成功', timer: 800, showConfirmButton: false });
                 forceMapRefresh();
             } catch (e) { 
