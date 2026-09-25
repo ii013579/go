@@ -1,5 +1,5 @@
 ﻿/**
- * audit-module.js - 清查與修改覆蓋整合優化版 (v4.0 CSS分離優化版)
+ * audit-module.js - 清查與修改覆蓋整合優化版 (v4.1 完整修復版)
  */
 (function() {
     'use strict';
@@ -17,6 +17,15 @@
 
     const APP_PATH = 'artifacts/kmldata-d22fb/public/data/kmlLayers';
     const STORAGE_ROOT = 'kmldata-d22fb/storage';
+
+    // 全域安全轉義工具 (防止外部呼叫 safeEscape 報錯)
+    function safeEscape(str) {
+        if (str == null) return '';
+        if (typeof str !== 'string') str = String(str);
+        return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+    }
+    window.safeEscape = safeEscape;
+    window.escapeHtml = safeEscape;
 
     // ---------------------------------------------------------
     // 共用輔助函式與權限判定
@@ -41,13 +50,6 @@
         const config = getSafeAuditConfig(kmlId);
         return !!config?.isAuditing;
     }
-
-    function safeEscape(str) {
-        if (str == null) return '';
-        if (typeof str !== 'string') str = String(str);
-        return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
-    }
-    window.escapeHtml = safeEscape;
 
     function getPointKey(props, defaultVal = "未知點位") {
         return props?.name || props?.title || props?.auditPointKey || props?.id || defaultVal;
@@ -104,125 +106,142 @@
     };
 
     // ---------------------------------------------------------
-    // 1. 樣式攔截與重繪
+    // 1. 樣式攔截與重繪 (修復陣列污染、未清查點更新與 DOM 顯隱問題)
     // ---------------------------------------------------------
-    const originalAddLayers = window.addGeoJsonLayers;
-    window.addGeoJsonLayers = function(features) {
-        const ns = window.mapNamespace;
-        const kmlId = ns?.currentKmlLayerId || window.currentActiveKmlId;
+    (function hookAddGeoJsonLayers() {
+        if (window.addGeoJsonLayers && window.addGeoJsonLayers.__isHooked) return;
 
-        if (kmlId && Array.isArray(features)) {
-            const records = window.auditLayersState?.[kmlId] || {};
-            const activeAudit = isAuditActiveForLayer(kmlId);
+        const originalAddLayers = window.addGeoJsonLayers;
 
-            if (activeAudit) {
-                Object.entries(records).forEach(([key, record]) => {
-                    if ((record.isCustomPoint || record.deviceStatus === "新增") && record.lat && record.lng) {
-                        const pointKey = record.pointName || key;
-                        if (!features.some(f => getPointKey(f.properties, f.id) === pointKey)) {
-                            features.push({
-                                type: "Feature",
-                                geometry: { type: "Point", coordinates: [parseFloat(record.lng), parseFloat(record.lat)] },
-                                properties: {
-                                    name: pointKey, title: pointKey, kmlId, auditPointKey: pointKey,
-                                    isCustomPoint: true, isAudited: true, deviceStatus: record.deviceStatus || "新增",
-                                    auditStatus: record.auditStatus || record.deviceStatus || "新增",
-                                    auditNote: record.note || "", photos: record.photos || []
-                                }
+        const newAddGeoJsonLayers = function(features) {
+            const ns = window.mapNamespace;
+            const kmlId = ns?.currentKmlLayerId || window.currentActiveKmlId;
+
+            // 複製傳入陣列，避免修改到原始 features 造成資料重複污染
+            let processingFeatures = Array.isArray(features) ? [...features] : features;
+
+            if (kmlId && Array.isArray(processingFeatures)) {
+                const records = window.auditLayersState?.[kmlId] || {};
+                const activeAudit = isAuditActiveForLayer(kmlId);
+
+                if (activeAudit) {
+                    Object.entries(records).forEach(([key, record]) => {
+                        if ((record.isCustomPoint || record.deviceStatus === "新增") && record.lat && record.lng) {
+                            const pointKey = record.pointName || key;
+                            if (!processingFeatures.some(f => getPointKey(f.properties, f.id) === pointKey)) {
+                                processingFeatures.push({
+                                    type: "Feature",
+                                    geometry: { type: "Point", coordinates: [parseFloat(record.lng), parseFloat(record.lat)] },
+                                    properties: {
+                                        name: pointKey, title: pointKey, kmlId, auditPointKey: pointKey,
+                                        isCustomPoint: true, isAudited: true, deviceStatus: record.deviceStatus || "新增",
+                                        auditStatus: record.auditStatus || record.deviceStatus || "新增",
+                                        auditNote: record.note || "", photos: record.photos || []
+                                    }
+                                });
+                            }
+                        }
+                    });
+                }
+
+                const isAuditedVisible = window.showAuditedPoints !== false;
+
+                processingFeatures.forEach(f => {
+                    f.properties ||= {};
+                    f.properties.kmlId = kmlId;
+                    const pointKey = getPointKey(f.properties, f.id);
+                    f.properties.auditPointKey = pointKey;
+
+                    if (activeAudit) {
+                        const record = records[pointKey];
+                        const isAudited = !!record;
+                        f.properties.isAudited = isAudited;
+
+                        if (isAudited) {
+                            f.properties.auditStatus = record.deviceStatus || "正常";
+                            f.properties.fillColor = isAuditedVisible ? "#FCD770" : "transparent";
+                            f.properties.fillOpacity = isAuditedVisible ? 0.85 : 0;
+                            f.properties.opacity = isAuditedVisible ? 1 : 0;
+                            f.properties.stroke = isAuditedVisible;
+                            f.properties.weight = isAuditedVisible ? 2 : 0;
+                            f.properties.color = isAuditedVisible ? "#ffffff" : "transparent"; 
+                        } else {
+                            f.properties.auditStatus = null;
+                            f.properties.fillColor = "#2A00D2";
+                            f.properties.fillOpacity = 0.85;
+                            f.properties.opacity = 1;
+                            f.properties.stroke = true;
+                            f.properties.weight = 2;
+                            f.properties.color = "#ffffff"; 
+                        }
+                        f.properties.radius = 8;
+                    } else {
+                        f.properties.fillColor = "#e74c3c";
+                        f.properties.color = "#ffffff";
+                        f.properties.radius = 8;
+                        f.properties.isAudited = false;
+                        f.properties.fillOpacity = 0.85;
+                        f.properties.opacity = 1;
+                        f.properties.stroke = true;
+                        f.properties.weight = 1.5;
+                        delete f.properties.auditStatus;
+                    }
+                });
+            }
+            
+            const result = originalAddLayers ? originalAddLayers.call(this, processingFeatures) : null;
+
+            if (ns?.map) {
+                const activeAudit = isAuditActiveForLayer(kmlId);
+                const isAuditedVisible = window.showAuditedPoints !== false;
+
+                ns.map.eachLayer(layer => {
+                    const props = layer.feature?.properties || layer.options?.properties;
+                    if (!props) return;
+
+                    if (!activeAudit) {
+                        if (typeof layer.setStyle === 'function') {
+                            layer.setStyle({ fillColor: "#e74c3c", color: "#ffffff", fillOpacity: 0.85, opacity: 1, stroke: true, weight: 1.5 });
+                        }
+                        return;
+                    }
+
+                    if (props.isAudited) {
+                        // 已清查點 (黃點) 控制
+                        layer.options.interactive = isAuditedVisible;
+                        if (typeof layer.setStyle === 'function') {
+                            layer.setStyle({
+                                fillColor: isAuditedVisible ? "#FCD770" : "transparent",
+                                fillOpacity: isAuditedVisible ? 0.85 : 0,
+                                opacity: isAuditedVisible ? 1 : 0,
+                                stroke: isAuditedVisible,
+                                weight: isAuditedVisible ? 2 : 0,
+                                color: isAuditedVisible ? "#ffffff" : "transparent"
+                            });
+                        }
+                    } else {
+                        // 未清查點 (藍點) 控制 - 補上明確更新
+                        layer.options.interactive = true;
+                        if (typeof layer.setStyle === 'function') {
+                            layer.setStyle({
+                                fillColor: "#2A00D2",
+                                fillOpacity: 0.85,
+                                opacity: 1,
+                                stroke: true,
+                                weight: 2,
+                                color: "#ffffff"
                             });
                         }
                     }
                 });
             }
 
-            const isAuditedVisible = window.showAuditedPoints !== false;
+            return result;
+        };
 
-            features.forEach(f => {
-                f.properties ||= {};
-                f.properties.kmlId = kmlId;
-                const pointKey = getPointKey(f.properties, f.id);
-                f.properties.auditPointKey = pointKey;
-
-                if (activeAudit) {
-                    const record = records[pointKey];
-                    const isAudited = !!record;
-                    f.properties.isAudited = isAudited;
-
-               if (isAudited) {
-                   // 已清查（黃點）：隨開關切換顯示或隱藏
-                   f.properties.auditStatus = record.deviceStatus || "正常";
-                   f.properties.fillColor = isAuditedVisible ? "#FCD770" : "transparent";
-                   f.properties.fillOpacity = isAuditedVisible ? 0.85 : 0;
-                   f.properties.opacity = isAuditedVisible ? 1 : 0;
-                   f.properties.stroke = isAuditedVisible;
-                   f.properties.weight = isAuditedVisible ? 2 : 0;
-                   f.properties.color = isAuditedVisible ? "#ffffff" : "transparent"; 
-               } else {
-                   // 未清查（藍點）：無論黃點開關與否，恆定保持藍底白邊
-                   f.properties.auditStatus = null;
-                   f.properties.fillColor = "#2A00D2";
-                   f.properties.fillOpacity = 0.85;
-                   f.properties.opacity = 1;
-                   f.properties.stroke = true;
-                   f.properties.weight = 2;
-                   f.properties.color = "#ffffff"; 
-               }
-               f.properties.radius = 8;
-                } else {
-                    f.properties.fillColor = "#e74c3c";
-                    f.properties.color = "#ffffff";
-                    f.properties.radius = 8;
-                    f.properties.isAudited = false;
-                    f.properties.fillOpacity = 0.85;
-                    f.properties.opacity = 1;
-                    f.properties.stroke = true;
-                    f.properties.weight = 1.5;
-                    delete f.properties.auditStatus;
-                }
-            });
-        }
-        
-        const result = originalAddLayers ? originalAddLayers.apply(this, arguments) : null;
-
-        if (ns?.map) {
-            const activeAudit = isAuditActiveForLayer(kmlId);
-            const isAuditedVisible = window.showAuditedPoints !== false;
-
-            ns.map.eachLayer(layer => {
-                const props = layer.feature?.properties || layer.options?.properties;
-                if (!props) return;
-
-                if (!activeAudit) {
-                    if (typeof layer.setStyle === 'function') {
-                        layer.setStyle({ fillColor: "#e74c3c", color: "#ffffff", fillOpacity: 0.85, opacity: 1, stroke: true, weight: 1.5 });
-                    }
-                    return;
-                }
-
-                if (props.isAudited) {
-                    layer.options.interactive = isAuditedVisible;
-                    if (typeof layer.setStyle === 'function') {
-                        layer.setStyle({
-                            fillColor: isAuditedVisible ? "#FCD770" : "transparent",
-                            fillOpacity: isAuditedVisible ? 0.85 : 0,
-                            opacity: isAuditedVisible ? 1 : 0,
-                            stroke: isAuditedVisible,
-                            weight: isAuditedVisible ? 2 : 0
-                        });
-                    }
-                    [layer._path, layer._icon, layer._shadow].forEach(el => {
-                        if (el) {
-                            el.style.display = isAuditedVisible ? '' : 'none';
-                            el.style.pointerEvents = isAuditedVisible ? 'auto' : 'none';
-                            el.style.cursor = isAuditedVisible ? 'pointer' : 'default';
-                        }
-                    });
-                }
-            });
-        }
-
-        return result;
-    };
+        newAddGeoJsonLayers.__isHooked = true;
+        window.addGeoJsonLayers = newAddGeoJsonLayers;
+    })();
 
     function initMapResizeObserver() {
         const map = window.mapNamespace?.map;
@@ -254,7 +273,7 @@
     // 2. 底部控制按鈕與右上角元件
     // ---------------------------------------------------------
     function updateBottomBtnState() {
-        const kmlId = window.mapNamespace?.currentKmlLayerId;
+        const kmlId = window.mapNamespace?.currentKmlLayerId || window.currentActiveKmlId;
         const activeAudit = isAuditActiveForLayer(kmlId);
 
         if (!activeAudit) {
@@ -820,7 +839,7 @@
     
         const layerProps = activePoint.feature?.properties || activePoint.properties || {};
         const pointKey = getPointKey(layerProps);
-        const kmlId = layerProps.kmlId || window.mapNamespace?.currentKmlLayerId;
+        const kmlId = layerProps.kmlId || window.mapNamespace?.currentKmlLayerId || window.currentActiveKmlId;
     
         if (!isAuditActiveForLayer(kmlId)) return;
     
@@ -869,7 +888,6 @@
         const { value: res, isDenied } = await Swal.fire({
             title: `<div>${isModifyMode ? '修改' : '填寫'}清查紀錄：${safeEscape(pointKey)}</div>`,
             html: `<div class="audit-form-container">
-                <!-- 修改處：加入 audit-form-group-inline 容器包裹選單與標題 -->
                 <div class="audit-form-group-inline">
                     <label class="audit-form-label">設備狀態 <span class="required">*必選</span></label>
                     ${statusSelectHtml}
@@ -955,14 +973,15 @@
     };
       
     // ---------------------------------------------------------
-    // 7. 詳細紀錄與批次打包下載 (查看模式 - 動態照片 2~12 張)
+    // 7. 詳細紀錄與批次打包下載 (修復 KML ID Fallback 與雙軌照片收集機制)
     // ---------------------------------------------------------
     window.viewAuditDetailOnly = function(pointKey) {
-        const kmlId = window.mapNamespace?.currentKmlLayerId;
-        const record = window.auditLayersState[kmlId]?.[pointKey];
-        if (!record) return;
+        const kmlId = window.mapNamespace?.currentKmlLayerId || window.currentActiveKmlId;
+        const record = window.auditLayersState?.[kmlId]?.[pointKey];
+        if (!record) {
+            return Swal.fire('提示', '找不到該點位的清查紀錄', 'warning');
+        }
     
-        // 統一將照片資料轉換為陣列 (相容陣列與物件格式)
         let photoList = [];
         if (Array.isArray(record.photos)) {
             photoList = record.photos;
@@ -970,10 +989,8 @@
             photoList = Object.values(record.photos);
         }
     
-        // 過濾出有效的圖片網址
         photoList = photoList.filter(url => url && typeof url === 'string');
     
-        // 動態產生照片網格 HTML
         const photosHtml = photoList.length > 0
             ? photoList.map((url, idx) => `
                 <div class="audit-photo-item-editor">
@@ -989,13 +1006,11 @@
             title: `查看清查紀錄：${safeEscape(pointKey)}`,
             html: `
                 <div class="audit-form-container">
-                    <!-- 1. 設備狀態 (並排樣式) -->
                     <div class="audit-form-group-inline">
                         <label class="audit-form-label">設備狀態</label>
                         <input type="text" class="audit-form-input" value="${safeEscape(record.deviceStatus || record.status || '正常')}" style="font-weight:600; color:#2c3e50;" readonly disabled>
                     </div>
     
-                    <!-- 2. 現場照片 (動態顯示照片數量與網格) -->
                     <div class="audit-form-group">
                         <label class="audit-form-label">現場照片 (${photoList.length} 張)</label>
                         <div class="audit-photo-grid-editor">
@@ -1003,7 +1018,6 @@
                         </div>
                     </div>
     
-                    <!-- 3. 備註事項 -->
                     <div class="audit-form-group">
                         <label class="audit-form-label">備註事項</label>
                         <textarea class="audit-form-textarea" readonly disabled>${safeEscape(record.note || record.remark || '無')}</textarea>
@@ -1018,35 +1032,75 @@
         if (typeof JSZip === 'undefined' || typeof saveAs === 'undefined') return Swal.fire('套件缺失', '缺少 JSZip / FileSaver 套件', 'error');
         if (!checkHasAuditPermission()) return Swal.fire('權限不足', '您的帳號角色權限受限！', 'warning');
 
-        const cleanLayerName = getLayerFolderName(kmlId, kmlId);
-        Swal.fire({ title: '正在搜尋 Storage 照片...', html: `<div id="zip-progress-text" style="font-size:14px; margin-top:10px;">請稍候...</div>`, allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+        const targetKmlId = kmlId || window.mapNamespace?.currentKmlLayerId || window.currentActiveKmlId;
+        const cleanLayerName = getLayerFolderName(targetKmlId, targetKmlId);
+        
+        Swal.fire({ title: '正在收集照片網址...', html: `<div id="zip-progress-text" style="font-size:14px; margin-top:10px;">請稍候...</div>`, allowOutsideClick: false, didOpen: () => Swal.showLoading() });
 
         const progressEl = document.getElementById('zip-progress-text');
         try {
-            const listResult = await firebase.storage().ref(`${STORAGE_ROOT}/${cleanLayerName}`).listAll();
-            if (!listResult.items.length) return Swal.fire('提示', '找不到任何照片檔案', 'info');
+            let downloadItems = []; // { name: string, url: string }
+
+            // 1. 優先從記憶體狀態 (auditLayersState) 收集照片
+            const records = window.auditLayersState?.[targetKmlId] || {};
+            Object.entries(records).forEach(([ptKey, rec]) => {
+                let photos = [];
+                if (Array.isArray(rec.photos)) photos = rec.photos;
+                else if (rec.photos && typeof rec.photos === 'object') photos = Object.values(rec.photos);
+
+                photos.filter(u => typeof u === 'string' && u).forEach((url, i) => {
+                    downloadItems.push({
+                        name: `${ptKey}_照片${i + 1}.jpg`,
+                        url: url
+                    });
+                });
+            });
+
+            // 2. 若記憶體無紀錄，則對 Storage 做遞迴目錄搜尋
+            if (downloadItems.length === 0 && typeof firebase !== 'undefined' && firebase.storage) {
+                const rootRef = firebase.storage().ref(`${STORAGE_ROOT}/${cleanLayerName}`);
+                
+                async function fetchAllFiles(ref) {
+                    let files = [];
+                    const res = await ref.listAll();
+                    files.push(...res.items);
+                    for (const folderRef of res.prefixes) {
+                        const subFiles = await fetchAllFiles(folderRef);
+                        files.push(...subFiles);
+                    }
+                    return files;
+                }
+
+                const items = await fetchAllFiles(rootRef);
+                for (const item of items) {
+                    const url = await item.getDownloadURL();
+                    downloadItems.push({ name: item.name, url: url });
+                }
+            }
+
+            if (downloadItems.length === 0) return Swal.fire('提示', '找不到任何照片檔案', 'info');
 
             const zip = new JSZip(), rootFolder = zip.folder(cleanLayerName);
             let completedCount = 0, failCount = 0;
 
-            for (let i = 0; i < listResult.items.length; i += 3) {
-                const batch = listResult.items.slice(i, i + 3);
-                await Promise.all(batch.map(async (fileRef) => {
+            // 分批下載照片 (每批 3 個請求)
+            for (let i = 0; i < downloadItems.length; i += 3) {
+                const batch = downloadItems.slice(i, i + 3);
+                await Promise.all(batch.map(async (item) => {
                     try {
-                        const downloadUrl = await fileRef.getDownloadURL();
-                        const response = await fetch(downloadUrl);
+                        const response = await fetch(item.url);
                         if (!response.ok) throw new Error();
-                        rootFolder.file(fileRef.name, await response.blob());
+                        rootFolder.file(item.name, await response.blob());
                     } catch { failCount++; } 
                     finally {
                         completedCount++;
-                        if (progressEl) progressEl.textContent = `打包進度: (${completedCount}/${listResult.items.length})`;
+                        if (progressEl) progressEl.textContent = `打包進度: (${completedCount}/${downloadItems.length})`;
                     }
                 }));
             }
 
-            if (completedCount - failCount === 0) throw new Error('檔案下載失敗');
-            saveAs(await zip.generateAsync({ type: 'blob' }), `${cleanLayerName}_Storage照片總集.zip`);
+            if (completedCount - failCount === 0) throw new Error('所有照片下載皆失敗');
+            saveAs(await zip.generateAsync({ type: 'blob' }), `${cleanLayerName}_清查照片總集.zip`);
 
             Swal.fire({ icon: failCount > 0 ? 'warning' : 'success', title: '打包下載完成！', timer: 2500, showConfirmButton: false });
         } catch (error) {
