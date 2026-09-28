@@ -863,7 +863,7 @@
         }
     };
 
-// ---------------------------------------------------------
+    // ---------------------------------------------------------
     // 6. 清查資料彈窗 (編輯與查看)
     // ---------------------------------------------------------
 
@@ -937,14 +937,16 @@
                 <div class="audit-photo-grid-editor">${photoHtml}</div>
 
                 <!-- 3. 敘述 -->
-                <div class="audit-form-group" style="margin-top:10px;">
+                <div class="audit-form-group">
                     <label class="audit-form-label">敘述 <span class="optional">(選填)</span></label>
                     <input type="text" id="swal-desc" class="swal2-input audit-form-input" value="${safeEscape(currentDesc)}" placeholder="請輸入點位敘述...">
                 </div>
 
                 <!-- 4. 備註事項 -->
-                <label class="audit-form-label">備註事項 <span class="optional">(選填)</span></label>
-                <textarea id="swal-note" class="swal2-textarea audit-form-textarea">${safeEscape(currentNote)}</textarea>
+                <div class="audit-form-group">
+                    <label class="audit-form-label">備註事項 <span class="optional">(選填)</span></label>
+                    <textarea id="swal-note" class="swal2-textarea audit-form-textarea">${safeEscape(currentNote)}</textarea>
+                </div>
             </div>`,
             showCancelButton: true, showDenyButton: isUserCreatedPoint, denyButtonText: '🗑️ 刪除點位', denyButtonColor: '#e74c3c',
             confirmButtonText: isModifyMode ? '覆蓋更新' : '確認並上傳', cancelButtonText: '取消',
@@ -1067,12 +1069,12 @@
         photos.forEach((url, idx) => {
             if (url) {
                 imagesHtml += `
-                    <div style="position: relative; aspect-ratio: 1; border-radius: 6px; overflow: hidden; border: 1px solid #dcdfe6; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                    <div class="audit-photo-display-item">
                         <img src="${safeEscape(url)}" 
-                             style="width: 100%; height: 100%; object-fit: cover; cursor: pointer; transition: transform 0.2s;" 
+                             class="audit-photo-display-img" 
                              onclick="window.open('${safeEscape(url)}', '_blank')" 
                              title="點擊檢視大圖">
-                        <span style="position: absolute; bottom: 3px; right: 3px; background: rgba(0,0,0,0.6); color: #fff; font-size: 10px; padding: 1px 5px; border-radius: 3px;">#${idx + 1}</span>
+                        <span class="audit-photo-display-badge">#${idx + 1}</span>
                     </div>`;
             }
         });
@@ -1080,36 +1082,36 @@
         Swal.fire({
             title: `📍 清查紀錄：${safeEscape(pointKey)}`,
             html: `
-                <div class="audit-form-container" style="text-align: left; padding: 4px 2px;">
+                <div class="audit-form-container">
                     
                     <!-- 1. 設備狀態 -->
-                    <div class="audit-form-group" style="margin-bottom: 12px;">
-                        <label class="audit-form-label" style="font-weight: bold; color: #333; display: block; margin-bottom: 5px; font-size: 14px;">設備狀態</label>
-                        <div style="padding: 10px 12px; background: #f8f9fa; border: 1px solid #dcdfe6; border-radius: 6px; font-size: 14px; font-weight: bold; color: #2ecc71;">
+                    <div class="audit-form-group">
+                        <label class="audit-form-label">設備狀態</label>
+                        <div class="audit-read-box status-box">
                             🟢 ${safeEscape(deviceStatus)}
                         </div>
                     </div>
 
                     <!-- 2. 現場照片 -->
-                    <div class="audit-form-group" style="margin-bottom: 12px;">
-                        <label class="audit-form-label" style="font-weight: bold; color: #333; display: block; margin-bottom: 6px; font-size: 14px;">現場照片 (${photos.length} 張)</label>
-                        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 8px; background: #fafafa; padding: 10px; border: 1px solid #ebeef5; border-radius: 6px; min-height: 80px;">
-                            ${imagesHtml || '<div style="color: #909399; font-size: 13px; grid-column: 1 / -1; text-align: center; padding: 20px 0;">未提供現場照片</div>'}
+                    <div class="audit-form-group">
+                        <label class="audit-form-label">現場照片 (${photos.length} 張)</label>
+                        <div class="audit-photo-display-grid">
+                            ${imagesHtml || '<div class="audit-photo-empty-text">未提供現場照片</div>'}
                         </div>
                     </div>
 
                     <!-- 3. 敘述 -->
-                    <div class="audit-form-group" style="margin-bottom: 12px;">
-                        <label class="audit-form-label" style="font-weight: bold; color: #333; display: block; margin-bottom: 5px; font-size: 14px;">敘述</label>
-                        <div style="padding: 10px 12px; background: #f8f9fa; border: 1px solid #dcdfe6; border-radius: 6px; min-height: 42px; white-space: pre-wrap; word-break: break-all; font-size: 13px; color: #555; line-height: 1.5;">
+                    <div class="audit-form-group">
+                        <label class="audit-form-label">敘述</label>
+                        <div class="audit-read-box text-box">
                             ${safeEscape(description)}
                         </div>
                     </div>
 
                     <!-- 4. 備註事項 -->
                     <div class="audit-form-group">
-                        <label class="audit-form-label" style="font-weight: bold; color: #333; display: block; margin-bottom: 5px; font-size: 14px;">備註事項</label>
-                        <div style="padding: 10px 12px; background: #f8f9fa; border: 1px solid #dcdfe6; border-radius: 6px; min-height: 52px; white-space: pre-wrap; word-break: break-all; font-size: 13px; color: #555; line-height: 1.5;">
+                        <label class="audit-form-label">備註事項</label>
+                        <div class="audit-read-box text-box min-height-note">
                             ${safeEscape(note)}
                         </div>
                     </div>
@@ -1125,7 +1127,7 @@
     };
           
     // ---------------------------------------------------------
-    // 8. 打包 Firebase Storage 照片
+    // 7. 打包 Firebase Storage 照片
     // ---------------------------------------------------------
     window.downloadAuditPhotosZip = async function(kmlId) {
         if (typeof JSZip === 'undefined' || typeof saveAs === 'undefined') {
@@ -1200,7 +1202,7 @@
     };
         
     // ---------------------------------------------------------
-    // 9. 監聽器與退場機制
+    // 8. 監聽器與退場機制
     // ---------------------------------------------------------
     const initGlobalConfigListener = () => {
         if (typeof firebase === 'undefined' || !firebase.apps.length) return setTimeout(initGlobalConfigListener, 500);
@@ -1247,7 +1249,7 @@
     }
 
     // ---------------------------------------------------------
-    // 10. 地圖掛載與元件初始化
+    // 9. 地圖掛載與元件初始化
     // ---------------------------------------------------------
     let checkAttempts = 0;
     const checkMapInterval = setInterval(() => {
