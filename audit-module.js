@@ -1037,14 +1037,14 @@
         }
     };
 
-// ---------------------------------------------------------
-    // 7. 查看詳細紀錄彈窗
+    // ---------------------------------------------------------
+    // 7. 查看詳細紀錄彈窗（樣式配置與修改表單完全同步）
     // ---------------------------------------------------------
     window.viewAuditDetailOnly = function(pointKeyParam) {
         // 1. 自動防呆取得點位 key 與 kmlId
         const activePoint = window.currentSelectedPoint;
         const layerProps = activePoint?.feature?.properties || activePoint?.properties || {};
-        const pointKey = pointKeyParam || getPointKey(layerProps);
+        const pointKey = pointKeyParam || (typeof getPointKey === 'function' ? getPointKey(layerProps) : null) || layerProps.name || layerProps.id;
         const kmlId = layerProps.kmlId || window.mapNamespace?.currentKmlLayerId || window.currentActiveKmlId;
 
         if (!pointKey) {
@@ -1058,36 +1058,70 @@
             return Swal.fire('提示', `尚無「${safeEscape(pointKey)}」的清查紀錄！`, 'info');
         }
 
-        // 3. 提取資料（含敘述 description/desc 欄位）
+        // 3. 提取資料與預設值
         const deviceStatus = record.deviceStatus || record.status || '已完成';
         const description = record.description || record.desc || layerProps.description || layerProps.desc || '無';
         const note = record.note || record.remark || '無';
         const photos = Array.isArray(record.photos) ? record.photos : [];
 
-        // 4. 組合照片 HTML（點擊可另開視窗看大圖）
+        // 4. 組合照片 Grid HTML（樣式與修改視窗的照片預覽格完全相同）
         let imagesHtml = '';
         photos.forEach((url, idx) => {
             if (url) {
                 imagesHtml += `
-                    <div style="width:45%; margin:2.5%; text-align:center;">
-                        <img src="${safeEscape(url)}" style="width:100%; max-height:120px; object-fit:cover; border-radius:6px; border:1px solid #ccc; cursor:pointer;" onclick="window.open('${safeEscape(url)}', '_blank')" title="點擊檢視大圖">
-                        <div style="font-size:11px; color:#888; margin-top:2px;">照片 ${idx + 1}</div>
+                    <div style="position: relative; aspect-ratio: 1; border-radius: 6px; overflow: hidden; border: 1px solid #dcdfe6; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                        <img src="${safeEscape(url)}" 
+                             style="width: 100%; height: 100%; object-fit: cover; cursor: pointer; transition: transform 0.2s;" 
+                             onclick="window.open('${safeEscape(url)}', '_blank')" 
+                             title="點擊檢視大圖">
+                        <span style="position: absolute; bottom: 3px; right: 3px; background: rgba(0,0,0,0.6); color: #fff; font-size: 10px; padding: 1px 5px; border-radius: 3px;">#${idx + 1}</span>
                     </div>`;
             }
         });
 
-        // 5. 彈窗顯示紀錄
+        // 5. 彈窗顯示（配置排版完全對齊修改視窗）
         Swal.fire({
             title: `📍 清查紀錄：${safeEscape(pointKey)}`,
-            html: `<div style="text-align: left; font-size:14px; line-height:1.6;">
-                <p style="margin-bottom:8px;"><b>設備狀態：</b><span style="color:#2ecc71; font-weight:bold;">🟢 ${safeEscape(deviceStatus)}</span></p>
-                <p style="margin-bottom:8px; background:#f8f9fa; padding:6px 10px; border-radius:4px;"><b>敘述：</b><span style="color:#555;">${safeEscape(description)}</span></p>
-                <p style="margin-bottom:8px; background:#f8f9fa; padding:6px 10px; border-radius:4px;"><b>現場備註：</b><br><span style="color:#555;">${safeEscape(note)}</span></p>
-                <p style="margin-bottom:4px;"><b>現場照片：</b></p>
-                <div style="display:flex; flex-wrap:wrap; justify-content:flex-start;">${imagesHtml || '<span style="color:#999; font-size:13px; padding:5px;">未提供照片</span>'}</div>
-            </div>`,
+            html: `
+                <div class="audit-form-container" style="text-align: left; padding: 4px 2px;">
+                    
+                    <!-- 1. 設備狀態 -->
+                    <div class="audit-form-group" style="margin-bottom: 14px;">
+                        <label class="audit-form-label" style="font-weight: bold; color: #333; display: block; margin-bottom: 5px; font-size: 14px;">1. 設備狀態</label>
+                        <div style="padding: 10px 12px; background: #f8f9fa; border: 1px solid #dcdfe6; border-radius: 6px; font-size: 14px; font-weight: bold; color: #2ecc71;">
+                            🟢 ${safeEscape(deviceStatus)}
+                        </div>
+                    </div>
+
+                    <!-- 2. 點位敘述 -->
+                    <div class="audit-form-group" style="margin-bottom: 14px;">
+                        <label class="audit-form-label" style="font-weight: bold; color: #333; display: block; margin-bottom: 5px; font-size: 14px;">2. 點位敘述</label>
+                        <div style="padding: 10px 12px; background: #f8f9fa; border: 1px solid #dcdfe6; border-radius: 6px; min-height: 42px; white-space: pre-wrap; word-break: break-all; font-size: 13px; color: #555; line-height: 1.5;">
+                            ${safeEscape(description)}
+                        </div>
+                    </div>
+
+                    <!-- 3. 現場備註 -->
+                    <div class="audit-form-group" style="margin-bottom: 14px;">
+                        <label class="audit-form-label" style="font-weight: bold; color: #333; display: block; margin-bottom: 5px; font-size: 14px;">3. 現場備註</label>
+                        <div style="padding: 10px 12px; background: #f8f9fa; border: 1px solid #dcdfe6; border-radius: 6px; min-height: 52px; white-space: pre-wrap; word-break: break-all; font-size: 13px; color: #555; line-height: 1.5;">
+                            ${safeEscape(note)}
+                        </div>
+                    </div>
+
+                    <!-- 4. 現場照片 -->
+                    <div class="audit-form-group">
+                        <label class="audit-form-label" style="font-weight: bold; color: #333; display: block; margin-bottom: 6px; font-size: 14px;">4. 現場照片 (${photos.length} 張)</label>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 8px; background: #fafafa; padding: 10px; border: 1px solid #ebeef5; border-radius: 6px; min-height: 80px;">
+                            ${imagesHtml || '<div style="color: #909399; font-size: 13px; grid-column: 1 / -1; text-align: center; padding: 20px 0;">未提供現場照片</div>'}
+                        </div>
+                    </div>
+
+                </div>`,
             confirmButtonText: '關閉',
             confirmButtonColor: '#34495e',
+            showCloseButton: true,
+            focusConfirm: false,
             didOpen: () => typeof setPointAddBtnVisible === 'function' && setPointAddBtnVisible(false),
             willClose: () => typeof syncAuditButtonVisibility === 'function' && syncAuditButtonVisibility()
         });
