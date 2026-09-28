@@ -522,86 +522,25 @@
 }
 
 /* --------------------------------------------------------------------------
-   10. 查看與編輯詳情彈窗專屬樣式 (Audit Detail & Viewer Readonly Controls)
+   10. 查看詳情彈窗專屬樣式 (View Detail Readonly Form Layout)
    -------------------------------------------------------------------------- */
 
-/* 唯讀輸入框通用底框 (設備狀態、敘述、備註) */
-.audit-read-box {
-    padding: 10px 12px;
-    background: #f8f9fa;
-    border: 1px solid #dcdfe6;
-    border-radius: 6px;
-    font-size: 14px;
-    box-sizing: border-box;
+/* 唯讀狀態下的輸入框與文字域樣式 */
+.audit-form-input:read-only,
+.audit-form-textarea:read-only {
+    background-color: #f8f9fa !important;
+    color: #495057 !important;
+    cursor: default;
+    border-color: #ced4da !important;
 }
 
-/* 設備狀態文字 */
-.audit-read-box.status-box {
-    font-weight: bold;
-    color: #2ecc71;
-}
-
-/* 敘述與備註純文字區域 */
-.audit-read-box.text-box {
-    min-height: 42px;
-    white-space: pre-wrap;
-    word-break: break-all;
-    font-size: 13px;
-    color: #555;
-    line-height: 1.5;
-}
-
-.audit-read-box.text-box.min-height-note {
-    min-height: 52px;
-}
-
-/* 唯讀檢視模式的照片網格容器 */
-.audit-photo-display-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
-    gap: 8px;
-    background: #fafafa;
-    padding: 10px;
-    border: 1px solid #ebeef5;
-    border-radius: 6px;
-    min-height: 80px;
-}
-
-/* 單張照片卡片 */
-.audit-photo-display-item {
-    position: relative;
-    aspect-ratio: 1 / 1;
-    border-radius: 6px;
-    overflow: hidden;
-    border: 1px solid #dcdfe6;
-    background: #ffffff;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-}
-
-/* 單張照片圖檔 */
-.audit-photo-display-img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
+/* 唯讀模式下的照片點擊區域 */
+.audit-photo-box-editor.readonly-clickable {
     cursor: pointer;
-    transition: transform 0.2s ease-in-out;
 }
 
-.audit-photo-display-img:hover {
-    transform: scale(1.04);
-}
-
-/* 照片右下角編號標籤 */
-.audit-photo-display-badge {
-    position: absolute;
-    bottom: 3px;
-    right: 3px;
-    background: rgba(0, 0, 0, 0.6);
-    color: #ffffff;
-    font-size: 10px;
-    padding: 1px 5px;
-    border-radius: 3px;
-    pointer-events: none;
+.audit-photo-box-editor.readonly-clickable:hover {
+    border-color: #3b82f6;
 }
 
 /* 無照片提示字樣 */

@@ -1042,7 +1042,7 @@
     };
 
     /**
-     * 6-2. 僅檢視詳細紀錄彈窗 (唯讀模式)
+     * 6-2. 僅檢視詳細紀錄彈窗 (唯讀模式 - 排版與修改介面一致)
      */
     window.viewAuditDetailOnly = function(pointKeyParam) {
         const activePoint = window.currentSelectedPoint;
@@ -1060,60 +1060,60 @@
             return Swal.fire('提示', `尚無「${safeEscape(pointKey)}」的清查紀錄！`, 'info');
         }
 
-        const deviceStatus = record.deviceStatus || record.status || '已完成';
-        const description = record.description || record.desc || layerProps.description || layerProps.desc || '無';
-        const note = record.note || record.remark || '無';
-        const photos = Array.isArray(record.photos) ? record.photos : [];
+        const deviceStatus = record.deviceStatus || record.status || '未設定';
+        const description = record.description || record.desc || layerProps.description || layerProps.desc || '';
+        const note = record.note || record.remark || '';
+        const photos = Array.isArray(record.photos) ? record.photos.filter(p => p && p.trim() !== '') : [];
 
-        let imagesHtml = '';
-        photos.forEach((url, idx) => {
-            if (url) {
-                imagesHtml += `
-                    <div class="audit-photo-display-item">
-                        <img src="${safeEscape(url)}" 
-                             class="audit-photo-display-img" 
-                             onclick="window.open('${safeEscape(url)}', '_blank')" 
-                             title="點擊檢視大圖">
-                        <span class="audit-photo-display-badge">#${idx + 1}</span>
+        let photoHtml = '';
+        if (photos.length > 0) {
+            photos.forEach((url, idx) => {
+                const safeUrl = safeEscape(url);
+                photoHtml += `
+                    <div class="audit-photo-item-editor">
+                        <div class="audit-photo-box-editor readonly-clickable" onclick="window.open('${safeUrl}', '_blank')" title="點擊檢視原圖">
+                            <img src="${safeUrl}" class="audit-photo-preview-img">
+                        </div>
+                        <div class="audit-photo-tag-editor" onclick="window.open('${safeUrl}', '_blank')" title="點擊檢視原圖">
+                            <span>🖼️</span> 檢視照片 ${idx + 1}
+                        </div>
                     </div>`;
-            }
-        });
+            });
+        } else {
+            photoHtml = `<div class="audit-photo-empty-text">未提供現場照片</div>`;
+        }
 
         Swal.fire({
-            title: `📍 清查紀錄：${safeEscape(pointKey)}`,
+            title: `查看清查紀錄：${safeEscape(pointKey)}`,
             html: `
                 <div class="audit-form-container">
                     
-                    <!-- 1. 設備狀態 -->
-                    <div class="audit-form-group">
+                    <!-- 1. 設備狀態 (唯讀下拉選單) -->
+                    <div class="audit-form-group-inline">
                         <label class="audit-form-label">設備狀態</label>
-                        <div class="audit-read-box status-box">
-                            🟢 ${safeEscape(deviceStatus)}
+                        <select class="swal2-input audit-form-select" disabled>
+                            <option selected>${safeEscape(deviceStatus)}</option>
+                        </select>
+                    </div>
+
+                    <!-- 2. 現場照片 (與編輯框樣式相同的外框與外觀) -->
+                    <div class="audit-form-group">
+                        <label class="audit-form-label">現場照片 (共 ${photos.length} 張)</label>
+                        <div class="audit-photo-grid-editor">
+                            ${photoHtml}
                         </div>
                     </div>
 
-                    <!-- 2. 現場照片 -->
+                    <!-- 3. 敘述 (唯讀輸入框) -->
                     <div class="audit-form-group">
-                        <label class="audit-form-label">現場照片 (${photos.length} 張)</label>
-                        <div class="audit-photo-display-grid">
-                            ${imagesHtml || '<div class="audit-photo-empty-text">未提供現場照片</div>'}
-                        </div>
+                        <label class="audit-form-label">敘述 <span class="optional">(選填)</span></label>
+                        <input type="text" class="swal2-input audit-form-input" value="${safeEscape(description)}" readonly placeholder="無敘述">
                     </div>
 
-                    <!-- 3. 敘述 -->
+                    <!-- 4. 備註事項 (唯讀文字框) -->
                     <div class="audit-form-group">
-                        <label class="audit-form-label">敘述</label>
-                        <div class="audit-read-box text-box">
-                            ${safeEscape(description)}
-                        </div>
-                    </div>
-
-                    <!-- 4. 備註事項 -->
-                    <div class="audit-form-group">
-                        <label class="audit-form-label">備註事項</label>
-                        <div class="audit-read-box text-box min-height-note">
-                            ${safeEscape(note)}
-                        </div>
+                        <label class="audit-form-label">備註事項 <span class="optional">(選填)</span></label>
+                        <textarea class="swal2-textarea audit-form-textarea" readonly placeholder="無備註事項">${safeEscape(note)}</textarea>
                     </div>
 
                 </div>`,
