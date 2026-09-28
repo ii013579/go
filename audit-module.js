@@ -863,9 +863,13 @@
         }
     };
 
+// ---------------------------------------------------------
+    // 6. 清查資料彈窗 (編輯與查看)
     // ---------------------------------------------------------
-    // 6. 清查資料編輯與彈窗
-    // ---------------------------------------------------------
+
+    /**
+     * 6-1. 編輯/填寫清查紀錄彈窗
+     */
     window.openAuditEditor = async function(isModifyMode = false) {
         const activePoint = window.currentSelectedPoint;
         if (!activePoint) return;
@@ -888,7 +892,6 @@
         }
     
         const currentStatus = isUserCreatedPoint ? '新增' : (historyRecord.deviceStatus || '');
-        // ⬇️ 讀取敘述資料 ⬇️
         const currentDesc = historyRecord.description || historyRecord.desc || layerProps.description || layerProps.desc || '';
         const currentNote = historyRecord.note || '';
         const baseStatusOptions = config.statusOptions || ['正常', '損壞', '遺失'];
@@ -923,20 +926,23 @@
         const { value: res, isDenied } = await Swal.fire({
             title: `<div>${isModifyMode ? '修改' : '填寫'}清查紀錄：${safeEscape(pointKey)}</div>`,
             html: `<div class="audit-form-container">
+                <!-- 1. 設備狀態 -->
                 <div class="audit-form-group-inline">
                     <label class="audit-form-label">設備狀態 <span class="required">*必選</span></label>
                     ${statusSelectHtml}
                 </div>
                 
+                <!-- 2. 現場照片 -->
                 <label class="audit-form-label">現場照片 (需滿 ${maxPhotos} 張) <span class="required">*必填</span></label>
                 <div class="audit-photo-grid-editor">${photoHtml}</div>
 
-                <!-- ⬇️ 新增：敘述輸入框 ⬇️ -->
+                <!-- 3. 敘述 -->
                 <div class="audit-form-group" style="margin-top:10px;">
                     <label class="audit-form-label">敘述 <span class="optional">(選填)</span></label>
                     <input type="text" id="swal-desc" class="swal2-input audit-form-input" value="${safeEscape(currentDesc)}" placeholder="請輸入點位敘述...">
                 </div>
 
+                <!-- 4. 備註事項 -->
                 <label class="audit-form-label">備註事項 <span class="optional">(選填)</span></label>
                 <textarea id="swal-note" class="swal2-textarea audit-form-textarea">${safeEscape(currentNote)}</textarea>
             </div>`,
@@ -984,7 +990,6 @@
                 const validPhotosCount = currentPhotos.filter(p => p && p.trim() !== '').length;
                 if (validPhotosCount < maxPhotos) return Swal.showValidationMessage(`請補滿 ${maxPhotos} 張照片 (目前 ${validPhotosCount}/${maxPhotos})`); 
                 
-                // ⬇️ 取得敘述欄位值 ⬇️
                 const descValue = document.getElementById('swal-desc')?.value.trim() || '';
 
                 return { 
@@ -1003,8 +1008,6 @@
             Swal.fire({ title: '正在上傳與更新資料...', didOpen: () => Swal.showLoading(), allowOutsideClick: false });
             try {
                 const photoUrls = await window.uploadPhotosToStorage(res.photos, kmlId, pointKey, kmlLayerName);
-                
-                // ⬇️ 將 description / desc 加入 structuredData 儲存 ⬇️
                 const structuredData = {
                     pointName: pointKey, 
                     status: "已完成", 
@@ -1020,7 +1023,6 @@
                 window.auditLayersState[kmlId] ||= {};
                 window.auditLayersState[kmlId][pointKey] = { ...window.auditLayersState[kmlId][pointKey], ...structuredData };
     
-                // 同步更新地圖 Feature properties
                 if (layerProps) {
                     layerProps.description = res.description;
                     layerProps.desc = res.desc;
@@ -1037,11 +1039,10 @@
         }
     };
 
-    // ---------------------------------------------------------
-    // 7. 查看詳細紀錄彈窗（樣式配置與修改表單完全同步）
-    // ---------------------------------------------------------
+    /**
+     * 6-2. 僅檢視詳細紀錄彈窗 (唯讀模式)
+     */
     window.viewAuditDetailOnly = function(pointKeyParam) {
-        // 1. 自動防呆取得點位 key 與 kmlId
         const activePoint = window.currentSelectedPoint;
         const layerProps = activePoint?.feature?.properties || activePoint?.properties || {};
         const pointKey = pointKeyParam || (typeof getPointKey === 'function' ? getPointKey(layerProps) : null) || layerProps.name || layerProps.id;
@@ -1051,20 +1052,17 @@
             return Swal.fire('提示', '無法辨識點位名稱！', 'warning');
         }
 
-        // 2. 取得清查紀錄（若記憶體無紀錄，則嘗試退回讀取原圖層屬性 layerProps）
         const record = window.auditLayersState?.[kmlId]?.[pointKey] || layerProps;
 
         if (!record || (!record.deviceStatus && !record.status && !record.photos)) {
             return Swal.fire('提示', `尚無「${safeEscape(pointKey)}」的清查紀錄！`, 'info');
         }
 
-        // 3. 提取資料與預設值
         const deviceStatus = record.deviceStatus || record.status || '已完成';
         const description = record.description || record.desc || layerProps.description || layerProps.desc || '無';
         const note = record.note || record.remark || '無';
         const photos = Array.isArray(record.photos) ? record.photos : [];
 
-        // 4. 組合照片 Grid HTML（樣式與修改視窗的照片預覽格完全相同）
         let imagesHtml = '';
         photos.forEach((url, idx) => {
             if (url) {
@@ -1079,41 +1077,40 @@
             }
         });
 
-        // 5. 彈窗顯示（配置排版完全對齊修改視窗）
         Swal.fire({
             title: `📍 清查紀錄：${safeEscape(pointKey)}`,
             html: `
                 <div class="audit-form-container" style="text-align: left; padding: 4px 2px;">
                     
                     <!-- 1. 設備狀態 -->
-                    <div class="audit-form-group" style="margin-bottom: 14px;">
-                        <label class="audit-form-label" style="font-weight: bold; color: #333; display: block; margin-bottom: 5px; font-size: 14px;">1. 設備狀態</label>
+                    <div class="audit-form-group" style="margin-bottom: 12px;">
+                        <label class="audit-form-label" style="font-weight: bold; color: #333; display: block; margin-bottom: 5px; font-size: 14px;">設備狀態</label>
                         <div style="padding: 10px 12px; background: #f8f9fa; border: 1px solid #dcdfe6; border-radius: 6px; font-size: 14px; font-weight: bold; color: #2ecc71;">
                             🟢 ${safeEscape(deviceStatus)}
                         </div>
                     </div>
 
-                    <!-- 2. 點位敘述 -->
-                    <div class="audit-form-group" style="margin-bottom: 14px;">
-                        <label class="audit-form-label" style="font-weight: bold; color: #333; display: block; margin-bottom: 5px; font-size: 14px;">2. 點位敘述</label>
+                    <!-- 2. 現場照片 -->
+                    <div class="audit-form-group" style="margin-bottom: 12px;">
+                        <label class="audit-form-label" style="font-weight: bold; color: #333; display: block; margin-bottom: 6px; font-size: 14px;">現場照片 (${photos.length} 張)</label>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 8px; background: #fafafa; padding: 10px; border: 1px solid #ebeef5; border-radius: 6px; min-height: 80px;">
+                            ${imagesHtml || '<div style="color: #909399; font-size: 13px; grid-column: 1 / -1; text-align: center; padding: 20px 0;">未提供現場照片</div>'}
+                        </div>
+                    </div>
+
+                    <!-- 3. 敘述 -->
+                    <div class="audit-form-group" style="margin-bottom: 12px;">
+                        <label class="audit-form-label" style="font-weight: bold; color: #333; display: block; margin-bottom: 5px; font-size: 14px;">敘述</label>
                         <div style="padding: 10px 12px; background: #f8f9fa; border: 1px solid #dcdfe6; border-radius: 6px; min-height: 42px; white-space: pre-wrap; word-break: break-all; font-size: 13px; color: #555; line-height: 1.5;">
                             ${safeEscape(description)}
                         </div>
                     </div>
 
-                    <!-- 3. 現場備註 -->
-                    <div class="audit-form-group" style="margin-bottom: 14px;">
-                        <label class="audit-form-label" style="font-weight: bold; color: #333; display: block; margin-bottom: 5px; font-size: 14px;">3. 現場備註</label>
+                    <!-- 4. 備註事項 -->
+                    <div class="audit-form-group">
+                        <label class="audit-form-label" style="font-weight: bold; color: #333; display: block; margin-bottom: 5px; font-size: 14px;">備註事項</label>
                         <div style="padding: 10px 12px; background: #f8f9fa; border: 1px solid #dcdfe6; border-radius: 6px; min-height: 52px; white-space: pre-wrap; word-break: break-all; font-size: 13px; color: #555; line-height: 1.5;">
                             ${safeEscape(note)}
-                        </div>
-                    </div>
-
-                    <!-- 4. 現場照片 -->
-                    <div class="audit-form-group">
-                        <label class="audit-form-label" style="font-weight: bold; color: #333; display: block; margin-bottom: 6px; font-size: 14px;">4. 現場照片 (${photos.length} 張)</label>
-                        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 8px; background: #fafafa; padding: 10px; border: 1px solid #ebeef5; border-radius: 6px; min-height: 80px;">
-                            ${imagesHtml || '<div style="color: #909399; font-size: 13px; grid-column: 1 / -1; text-align: center; padding: 20px 0;">未提供現場照片</div>'}
                         </div>
                     </div>
 
