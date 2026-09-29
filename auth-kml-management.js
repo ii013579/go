@@ -1,4 +1,4 @@
-// auth-kml-management.js v3.01
+// auth-kml-management.js v3.02
 
 (function () {
   'use strict';
@@ -16,6 +16,9 @@
     userEmailDisplay: $('userEmailDisplay'),
     pinButton: $('pinButton'),
     kmlLayerSelect: $('kmlLayerSelect'),
+
+    // 【新增】整體 KML 控制面板容器
+    kmlControlsDashboard: $('kmlControlsDashboard'),
 
     uploadKmlSectionDashboard: $('uploadKmlSectionDashboard'),
     selectedKmlFileNameDashboard: $('selectedKmlFileNameDashboard'),
@@ -69,7 +72,7 @@
     }
   };
 
-  // 取得 KML collection 的 Firestore 參照（DRY）
+  // 取得 appId 來源
   const currentAppId = (typeof appId !== 'undefined') ? appId : 'kmldata-d22fb';
   console.log("[系統] 目前使用的 App ID 路徑:", currentAppId);
 
@@ -136,13 +139,16 @@
     const select = els.kmlLayerSelect;
     const pinnedId = localStorage.getItem('pinnedKmlId') || localStorage.getItem('pinnedKmlLayerId');
 
+    // 若無釘選或下拉選單尚未生成，則不動作
     if (!pinnedId || !select) return;
 
+    // 檢查清單是否已經渲染完成
     if (select.options.length <= 1) {
       console.log("⏳ 選單清單尚未就緒，延後自動載入...");
       return; 
     }
 
+    // 檢查釘選 ID 是否在目前的選項中
     const option = Array.from(select.options).find(opt => opt.value === pinnedId);
     
     if (!option) {
@@ -152,13 +158,14 @@
       return;
     }
 
+    // 執行載入並鎖定
     if (typeof window.loadKmlLayerFromFirestore === 'function') {
       if (window.mapNamespace?.isLoadingKml || window.mapNamespace?.currentKmlLayerId === pinnedId) {
         return;
       }
 
       console.log(`🚀 [初始載入] 執行釘選圖層: ${pinnedId}`);
-      hasInitialAutoLoaded = true;
+      hasInitialAutoLoaded = true; // 上鎖，此後不再自動觸發
       
       select.value = pinnedId;
       updatePinButtonState();
@@ -179,31 +186,18 @@
           return;
       }
   
-      // 角色權限判斷：
-      // - canEdit: Owner 與 Editor 具備上傳/刪除等管理權限
-      // - canView: user (一般用戶)、editor、owner 及未登入訪客皆可瀏覽；僅未審核帳號 (unapproved) 禁用
-      const isUnapproved = (window.currentUserRole === 'unapproved');
-      const canEdit = (window.currentUserRole === 'owner' || window.currentUserRole === 'editor');
-      const canView = !isUnapproved;
-
       // 初始化 UI 狀態
-      if (deleteBtn) deleteBtn.disabled = !canEdit;
-      select.disabled = !canView;
-
-      // 角色權限 UI 調整 (判斷 Editor/Owner 是否顯示管理介面；user 與 unapproved 隱藏管理區塊)
+      if (deleteBtn) deleteBtn.disabled = true;
+      select.disabled = false;
+  
+      // 角色權限 UI 調整 (判斷 Editor/Owner 是否顯示管理介面)
+      const canEdit = (window.currentUserRole === 'owner' || window.currentUserRole === 'editor');
+      if (els.kmlControlsDashboard) els.kmlControlsDashboard.style.display = canEdit ? 'flex' : 'none'; // 【新增：隱藏/顯示整個面板】
       if (els.uploadKmlSectionDashboard) els.uploadKmlSectionDashboard.style.display = canEdit ? 'flex' : 'none';
       if (els.deleteKmlSectionDashboard) els.deleteKmlSectionDashboard.style.display = canEdit ? 'flex' : 'none';
       if (selectDashboard) selectDashboard.disabled = !canEdit;
       if (els.uploadKmlSubmitBtnDashboard) els.uploadKmlSubmitBtnDashboard.disabled = !canEdit;
-
-      // 未審核帳號無檢視權限
-      if (isUnapproved) {
-          select.innerHTML = '<option value="">-- 未審核帳號無瀏覽權限 --</option>';
-          if (selectDashboard) selectDashboard.innerHTML = '<option value="">-- 未審核帳號無瀏覽權限 --</option>';
-          currentKmlLayers = [];
-          return;
-      }
-
+  
       try {
           let layersToRender = [];
   
@@ -216,7 +210,7 @@
               const kmlRef = getKmlCollectionRef();
               let snapshot;
               
-              // Editor 只能看到自己上傳的，Owner 與 一般用戶 (user) 可瀏覽所有 public KML
+              // Editor 只能看到自己上傳的，Owner 看全部
               if (window.currentUserRole === 'editor' && auth.currentUser?.email) {
                   snapshot = await kmlRef.where('uploadedBy', '==', auth.currentUser.email).get();
               } else {
@@ -232,7 +226,7 @@
               localStorage.setItem('kml_list_cache_data', JSON.stringify(layersToRender));
           }
   
-          // 清空並重新填充 DOM
+          // 清空並重新填充 DOM (防止 UI 閃爍)
           select.innerHTML = '<option value="">-- 請選擇 KML 圖層 --</option>';
           if (selectDashboard) selectDashboard.innerHTML = '<option value="">-- 請選擇 KML 圖層 --</option>';
           
@@ -264,7 +258,7 @@
       }
   };
 
-  // 預設的確認視窗函式
+  // 預設的確認視窗函式（若尚未定義則提供 fallback）
   if (typeof window.showConfirmationModal === 'undefined') {
     window.showConfirmationModal = function (title, message) {
       return new Promise(resolve => {
@@ -280,10 +274,12 @@
           return;
         }
 
+        // 顯示 modal
         titleEl.textContent = title;
         msgEl.innerHTML = message;
         overlay.classList.add('visible');
 
+        // 清理與回傳
         const cleanupAndResolve = (result) => {
           overlay.classList.remove('visible');
           yesBtn.removeEventListener('click', yesHandler);
@@ -310,6 +306,7 @@ const refreshUserList = async () => {
   const USER_CACHE_KEY = 'owner_user_list_cache';
 
   try {
+    // 1. 優先檢查 Session 快取
     const cachedData = sessionStorage.getItem(USER_CACHE_KEY);
     if (cachedData) {
       console.log("%c[Cache] 命中快取", "color: #9C27B0;");
@@ -319,6 +316,7 @@ const refreshUserList = async () => {
       return;
     }
 
+    // 2. 抓取 Firestore 資料
     console.log("🔥 [Firestore] 抓取最新名單...");
     const snapshot = await db.collection('users').get();
     const usersData = [];
@@ -335,6 +333,7 @@ const refreshUserList = async () => {
     container.innerHTML = `<p style="color: red;">載入失敗: ${error.message}</p>`;
   }
 
+  // --- 內部輔助：渲染 DOM ---
   function renderUserCards(data) {
     container.innerHTML = '';
     const roleOrder = { 'unapproved': 1, 'user': 2, 'editor': 3, 'owner': 4 };
@@ -363,6 +362,7 @@ const refreshUserList = async () => {
     });
   }
 
+  // --- 內部輔助：綁定事件 ---
   function bindUserManagementEvents() {
     container.querySelectorAll('.user-card').forEach(card => {
       const select = card.querySelector('.user-role-select');
@@ -387,6 +387,7 @@ const refreshUserList = async () => {
         try {
           await db.collection('users').doc(uid).delete();
           card.remove();
+          // 更新快取
           const list = JSON.parse(sessionStorage.getItem(USER_CACHE_KEY) || '[]');
           sessionStorage.setItem(USER_CACHE_KEY, JSON.stringify(list.filter(u => u.id !== uid)));
         } catch (e) { window.showMessage?.('錯誤', e.message); }
@@ -397,7 +398,9 @@ const refreshUserList = async () => {
 
 // 監聽 Auth 狀態變更以更新 UI
 auth.onAuthStateChanged(async (user) => {
+  // --- A. 處理登入/登出 UI 狀態 ---
   if (user) {
+    // 1. 使用者已登入：切換基礎 UI 顯示
     if (els.loginForm) els.loginForm.style.display = 'none';
     if (els.loggedInDashboard) els.loggedInDashboard.style.display = 'block';
     if (els.userEmailDisplay) {
@@ -405,6 +408,7 @@ auth.onAuthStateChanged(async (user) => {
       els.userEmailDisplay.style.display = 'block';
     }
 
+    // 防止重複綁定監聽器
     if (!unsubUserRole) {
       const userDocRef = db.collection('users').doc(user.uid);
       unsubUserRole = userDocRef.onSnapshot(async (doc) => {
@@ -426,20 +430,25 @@ auth.onAuthStateChanged(async (user) => {
             els.userEmailDisplay.textContent = `${user.email} (${getRoleDisplayName(window.currentUserRole)})`;
           }
 
+          // 2. 根據角色調整管理功能
           const canEdit = (newRole === 'owner' || newRole === 'editor');
           const isOwner = (newRole === 'owner');
 
           const toggleDisplay = (el, show) => { if (el) el.style.display = show ? 'flex' : 'none'; };
           const toggleBlock = (el, show) => { if (el) el.style.display = show ? 'block' : 'none'; };
 
+          // 顯示/隱藏各項功能區塊
+          toggleDisplay(els.kmlControlsDashboard, canEdit); // 【新增：權限判斷隱藏/顯示整個控制項面板】
           toggleDisplay(els.uploadKmlSectionDashboard, canEdit);
           toggleDisplay(els.deleteKmlSectionDashboard, canEdit);
           toggleDisplay(els.registrationSettingsSection, isOwner);
           toggleBlock(els.userManagementSection, isOwner); 
+          
           if (els.userListDiv) {
-              els.userListDiv.style.display = 'none';
+              els.userListDiv.style.display = 'none'; // 預設關閉列表容器
           }
 
+          // 3. 角色變動時同步 KML 權限狀態
           if (roleChanged && typeof optimizedUpdateKmlLayerSelects === 'function') {
             await optimizedUpdateKmlLayerSelects();
           }
@@ -452,6 +461,7 @@ auth.onAuthStateChanged(async (user) => {
     }
 
   } else {
+    // 4. 使用者登出/未登入
     console.log("[Auth] 使用者未登入，開放圖層瀏覽權限");
     if (unsubUserRole) {
       unsubUserRole();
@@ -461,11 +471,13 @@ auth.onAuthStateChanged(async (user) => {
     
     sessionStorage.removeItem('owner_user_list_cache');
     
+    if (els.kmlControlsDashboard) els.kmlControlsDashboard.style.display = 'none'; // 【新增：未登入隱藏控制項面板】
     if (els.loginForm) els.loginForm.style.display = 'block';
     if (els.loggedInDashboard) els.loggedInDashboard.style.display = 'none';
     if (els.userEmailDisplay) els.userEmailDisplay.style.display = 'none';
   }
 
+  // --- B. 圖層載入邏輯 ---
   if (!hasInitialMenuLoaded) {
     hasInitialMenuLoaded = true; 
     console.log("[Init] 啟動初始圖層載入程序 (公開瀏覽)");
@@ -537,7 +549,7 @@ async function optimizedUpdateKmlLayerSelects() {
   }
 }
 
-  // Google 登入按鈕事件
+  // Google 登入按鈕事件（處理新帳號註冊流程：需註冊碼）
   if (els.googleSignInBtn) {
     els.googleSignInBtn.addEventListener('click', async () => {
       try {
@@ -559,6 +571,7 @@ async function optimizedUpdateKmlLayerSelects() {
               const regDoc = await db.collection('settings').doc('registration').get();
               if (!regDoc.exists) {
                 window.showMessage?.('註冊失敗', '註冊系統未啟用或無效的註冊碼。請聯繫管理員。');
+                console.error("settings/registration 文檔不存在。");
                 return;
               }
 
@@ -568,6 +581,7 @@ async function optimizedUpdateKmlLayerSelects() {
 
               if (!storedCode || storedCode !== code || (expiryTime && currentTime > expiryTime)) {
                 window.showMessage?.('註冊失敗', '無效或過期的註冊碼。');
+                console.error(`註冊失敗: 註冊碼不匹配或已過期。`);
                 return;
               }
 
@@ -588,8 +602,10 @@ async function optimizedUpdateKmlLayerSelects() {
                   oneTimeCode: null,
                   oneTimeCodeExpiry: null
                 }, { merge: true });
+                console.warn("一次性註冊碼已在 Firestore 中失效（前端嘗試操作）。");
                 window.showMessage?.('註冊成功', `歡迎 ${reAuthUser.email} (${nickname})！您的帳號已成功註冊，正在等待審核。`);
               } catch (codeInvalidationError) {
+                console.warn("前端嘗試使註冊碼失效時發生權限不足錯誤:", codeInvalidationError.message);
                 window.showMessage?.('註冊待審核', `歡迎 ${reAuthUser.email} (${nickname})！您的帳號已成功註冊，正在等待審核。`);
               }
             } catch (error) {
@@ -613,12 +629,14 @@ async function optimizedUpdateKmlLayerSelects() {
     els.logoutBtn.addEventListener('click', async () => {
       try {
         await auth.signOut();
+        
         Object.keys(localStorage).forEach(key => {
           if (key.startsWith('kml_')) {
             localStorage.removeItem(key);
           }
         });
         console.log("[系統] 登出成功，已清理本地 KML 快取。");
+
         window.showMessage?.('登出成功', '用戶已登出。');
         
         setTimeout(() => {
@@ -632,6 +650,7 @@ async function optimizedUpdateKmlLayerSelects() {
     });
   }
   
+  // 檔案選擇器
   if (els.selectedKmlFileNameDashboard && els.hiddenKmlFileInput) {
     els.selectedKmlFileNameDashboard.addEventListener('click', () => els.hiddenKmlFileInput.click());
 
@@ -679,7 +698,7 @@ if (typeof window.showConfirmationModal !== 'undefined') {
   };
 }
 
-// 上傳區觸發與選擇
+// 觸發選檔與確認
 if (els.triggerUploadBtn) {
   els.triggerUploadBtn.addEventListener('click', () => els.hiddenKmlFileInput.click());
 }
@@ -702,7 +721,7 @@ if (els.hiddenKmlFileInput) {
   });
 }
 
-// 刪除彈窗觸發
+// 刪除邏輯：彈窗內選取圖層
 if (els.triggerDeleteBtn) {
   els.triggerDeleteBtn.addEventListener('click', async () => {
     const options = Array.from(els.kmlLayerSelectDashboard.options)
@@ -736,7 +755,7 @@ if (els.triggerDeleteBtn) {
   });
 }
 
-// 上傳 KML 執行邏輯 (僅 owner/editor 允許)
+// 上傳 KML 處理 (與 Firebase 對接)
 if (els.uploadKmlSubmitBtnDashboard) {
   els.uploadKmlSubmitBtnDashboard.addEventListener('click', async () => {
     const file = els.hiddenKmlFileInput?.files?.[0];
@@ -782,14 +801,9 @@ if (els.uploadKmlSubmitBtnDashboard) {
   });
 }
 
-// 刪除 KML 執行邏輯 (修正：限制僅 owner/editor 允許，防止 user 角色操作)
+// 刪除 KML 處理
 if (els.deleteSelectedKmlBtn) {
   els.deleteSelectedKmlBtn.addEventListener('click', async () => {
-    if (window.currentUserRole !== 'owner' && window.currentUserRole !== 'editor') {
-      window.showMessage?.('錯誤', '您沒有權限刪除 KML。');
-      return;
-    }
-
     const kmlIdToDelete = els.kmlLayerSelectDashboard.value;
     const selectedOption = els.kmlLayerSelectDashboard.options[els.kmlLayerSelectDashboard.selectedIndex];
     const kmlName = selectedOption ? selectedOption.textContent : null;
@@ -822,7 +836,7 @@ if (els.deleteSelectedKmlBtn) {
   });
 }
 
-// 清查功能按鈕
+// 清查功能整合邏輯
 const auditBtn = document.getElementById('auditKmlBtn');
 
 if (auditBtn) {
@@ -839,6 +853,7 @@ if (auditBtn) {
     };
 }
   
+// 產生一次性註冊碼
 const generateRegistrationAlphanumericCode = () => {
   const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
   const digits = '013456789';
@@ -905,7 +920,7 @@ if (els.generateRegistrationCodeBtn) {
   });
 }
 
-// 刷新使用者列表按鈕（僅 owner 可用）
+// 刷新使用者列表按鈕
 if (els.refreshUsersBtn) {
   els.refreshUsersBtn.addEventListener('click', async () => {
     if (window.currentUserRole !== 'owner') {
@@ -975,5 +990,5 @@ if (els.refreshUsersBtn) {
   } else {
     console.error('找不到 id 為 "pinButton" 的圖釘按鈕，釘選功能無法啟用。');
   }
-  
+
 })();
