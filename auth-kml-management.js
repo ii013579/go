@@ -1,4 +1,4 @@
-// auth-kml-management.js v3.02
+// auth-kml-management.js v3.03
 
 (function () {
   'use strict';
@@ -192,7 +192,7 @@
   
       // 角色權限 UI 調整 (判斷 Editor/Owner 是否顯示管理介面)
       const canEdit = (window.currentUserRole === 'owner' || window.currentUserRole === 'editor');
-      if (els.kmlControlsDashboard) els.kmlControlsDashboard.style.display = canEdit ? 'flex' : 'none'; // 【新增：隱藏/顯示整個面板】
+      if (els.kmlControlsDashboard) els.kmlControlsDashboard.style.display = canEdit ? 'flex' : 'none';
       if (els.uploadKmlSectionDashboard) els.uploadKmlSectionDashboard.style.display = canEdit ? 'flex' : 'none';
       if (els.deleteKmlSectionDashboard) els.deleteKmlSectionDashboard.style.display = canEdit ? 'flex' : 'none';
       if (selectDashboard) selectDashboard.disabled = !canEdit;
@@ -208,14 +208,8 @@
           } else {
               console.log("%c🌐 [Network] 快取失效，從網路抓取 KML 清單", "color: #FF9800;");
               const kmlRef = getKmlCollectionRef();
-              let snapshot;
-              
-              // Editor 只能看到自己上傳的，Owner 看全部
-              if (window.currentUserRole === 'editor' && auth.currentUser?.email) {
-                  snapshot = await kmlRef.where('uploadedBy', '==', auth.currentUser.email).get();
-              } else {
-                  snapshot = await kmlRef.get();
-              }
+              // 取得所有 KML 圖層，讓 Editor 與 Owner 皆可瀏覽全量圖層
+              const snapshot = await kmlRef.get();
   
               if (!snapshot.empty) {
                   snapshot.forEach(doc => {
@@ -232,17 +226,30 @@
           
           currentKmlLayers = []; 
           
+          const currentUserEmail = auth.currentUser?.email;
+          const isOwner = (window.currentUserRole === 'owner');
+
           layersToRender.forEach(layer => {
               const kmlId = layer.id;
               const kmlName = layer.name || `KML_${kmlId.substring(0, 8)}`;
+              const uploadedBy = layer.uploadedBy || '';
               
               const opt1 = createOption(kmlId, kmlName);
               const opt2 = createOption(kmlId, kmlName);
               
+              // 判斷當前使用者是否有權限刪除該圖層 (Owner 可全刪，Editor 只能刪自己上傳的)
+              const canDelete = isOwner || (window.currentUserRole === 'editor' && uploadedBy === currentUserEmail);
+              
+              if (!canDelete && selectDashboard) {
+                  opt2.disabled = true;
+                  opt2.style.color = '#999';
+                  opt2.textContent = `${kmlName} (無刪除權限)`;
+              }
+
               select.appendChild(opt1);
               if (selectDashboard) selectDashboard.appendChild(opt2);
               
-              currentKmlLayers.push({ id: kmlId, name: kmlName });
+              currentKmlLayers.push({ id: kmlId, name: kmlName, uploadedBy: uploadedBy });
           });
   
           if (currentKmlLayers.length > 0 && canEdit && deleteBtn) {
@@ -438,7 +445,7 @@ auth.onAuthStateChanged(async (user) => {
           const toggleBlock = (el, show) => { if (el) el.style.display = show ? 'block' : 'none'; };
 
           // 顯示/隱藏各項功能區塊
-          toggleDisplay(els.kmlControlsDashboard, canEdit); // 【新增：權限判斷隱藏/顯示整個控制項面板】
+          toggleDisplay(els.kmlControlsDashboard, canEdit);
           toggleDisplay(els.uploadKmlSectionDashboard, canEdit);
           toggleDisplay(els.deleteKmlSectionDashboard, canEdit);
           toggleDisplay(els.registrationSettingsSection, isOwner);
@@ -471,7 +478,7 @@ auth.onAuthStateChanged(async (user) => {
     
     sessionStorage.removeItem('owner_user_list_cache');
     
-    if (els.kmlControlsDashboard) els.kmlControlsDashboard.style.display = 'none'; // 【新增：未登入隱藏控制項面板】
+    if (els.kmlControlsDashboard) els.kmlControlsDashboard.style.display = 'none';
     if (els.loginForm) els.loginForm.style.display = 'block';
     if (els.loggedInDashboard) els.loggedInDashboard.style.display = 'none';
     if (els.userEmailDisplay) els.userEmailDisplay.style.display = 'none';
@@ -721,12 +728,21 @@ if (els.hiddenKmlFileInput) {
   });
 }
 
-// 刪除邏輯：彈窗內選取圖層
+// 刪除邏輯：彈窗內選取圖層（無權限之選項設為 disable 且灰色無法選取）
 if (els.triggerDeleteBtn) {
   els.triggerDeleteBtn.addEventListener('click', async () => {
-    const options = Array.from(els.kmlLayerSelectDashboard.options)
-      .filter(opt => opt.value !== "")
-      .map(opt => `<option value="${opt.value}">${opt.textContent}</option>`)
+    const currentUserEmail = auth.currentUser?.email;
+    const isOwner = (window.currentUserRole === 'owner');
+
+    const options = currentKmlLayers
+      .map(layer => {
+        const canDelete = isOwner || (window.currentUserRole === 'editor' && layer.uploadedBy === currentUserEmail);
+        if (canDelete) {
+          return `<option value="${layer.id}">${layer.name}</option>`;
+        } else {
+          return `<option value="${layer.id}" disabled style="color: #999; background-color: #f2f2f2;">${layer.name} (無刪除權限)</option>`;
+        }
+      })
       .join('');
 
     if (!options) {
@@ -738,6 +754,7 @@ if (els.triggerDeleteBtn) {
       <div style="text-align: left; margin-top: 10px;">
         <p>請選擇要刪除的圖層：</p>
         <select id="modalKmlDeletePicker" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #ddd; margin-top: 5px;">
+          <option value="" disabled selected>-- 請選擇要刪除的圖層 --</option>
           ${options}
         </select>
         <p style="color: #d32f2f; font-size: 12px; margin-top: 10px; font-weight: bold;">⚠️ 警告：刪除後資料將無法復原。</p>
@@ -746,10 +763,15 @@ if (els.triggerDeleteBtn) {
     const confirmDelete = await window.showConfirmationModal('刪除圖層', modalContent);
 
     if (confirmDelete) {
-      const selectedId = document.getElementById('modalKmlDeletePicker').value;
-      if (selectedId) {
+      const picker = document.getElementById('modalKmlDeletePicker');
+      const selectedId = picker ? picker.value : null;
+      const selectedOpt = picker ? picker.options[picker.selectedIndex] : null;
+
+      if (selectedId && selectedOpt && !selectedOpt.disabled) {
         els.kmlLayerSelectDashboard.value = selectedId;
         els.deleteSelectedKmlBtn.click();
+      } else {
+        window.showMessage?.('提示', '您未選擇有效的可刪除圖層，或無權限刪除該圖層。');
       }
     }
   });
@@ -801,14 +823,25 @@ if (els.uploadKmlSubmitBtnDashboard) {
   });
 }
 
-// 刪除 KML 處理
+// 刪除 KML 處理（加入權限雙重檢查）
 if (els.deleteSelectedKmlBtn) {
   els.deleteSelectedKmlBtn.addEventListener('click', async () => {
     const kmlIdToDelete = els.kmlLayerSelectDashboard.value;
     const selectedOption = els.kmlLayerSelectDashboard.options[els.kmlLayerSelectDashboard.selectedIndex];
-    const kmlName = selectedOption ? selectedOption.textContent : null;
+    const kmlName = selectedOption ? selectedOption.textContent.replace(' (無刪除權限)', '') : null;
 
     if (!kmlIdToDelete) return;
+
+    // 權限二次驗證：檢查是否為 Owner 或此項目的上傳者
+    const targetLayer = currentKmlLayers.find(l => l.id === kmlIdToDelete);
+    const currentUserEmail = auth.currentUser?.email;
+    const isOwner = (window.currentUserRole === 'owner');
+    const canDelete = isOwner || (window.currentUserRole === 'editor' && targetLayer?.uploadedBy === currentUserEmail);
+
+    if (!canDelete) {
+      window.showMessage?.('權限不足', '您只能刪除自己上傳的 KML 圖層。');
+      return;
+    }
 
     try {
       await getKmlCollectionRef().doc(kmlIdToDelete).delete();
