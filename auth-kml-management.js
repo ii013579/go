@@ -1,4 +1,4 @@
-// auth-kml-management.js v3.02
+// auth-kml-management.js v3.01
 
 (function () {
   'use strict';
@@ -17,8 +17,6 @@
     pinButton: $('pinButton'),
     kmlLayerSelect: $('kmlLayerSelect'),
 
-    // KML 管理介面整體與細項區塊
-    kmlManagementSection: $('kmlManagementSection') \vert{}\vert{}$('kmlManagementSectionDashboard'),
     uploadKmlSectionDashboard: $('uploadKmlSectionDashboard'),
     selectedKmlFileNameDashboard: $('selectedKmlFileNameDashboard'),
     uploadKmlSubmitBtnDashboard: $('uploadKmlSubmitBtnDashboard'),
@@ -40,7 +38,7 @@
     refreshUsersBtn: $('refreshUsersBtn'),
     userListDiv: $('userList'),
 
-    // 確認視窗相關元素
+    // 確認視窗相關元素（若不存在，showConfirmationModal 會 fallback）
     confirmationModalOverlay: $('confirmationModalOverlay'),
     confirmationModalTitle: $('confirmationModalTitle'),
     confirmationModalMessage: $('confirmationModalMessage'),
@@ -71,6 +69,7 @@
     }
   };
 
+  // 取得 KML collection 的 Firestore 參照（DRY）
   const currentAppId = (typeof appId !== 'undefined') ? appId : 'kmldata-d22fb';
   console.log("[系統] 目前使用的 App ID 路徑:", currentAppId);
 
@@ -94,7 +93,7 @@
     return o;
   };
 
-  // 更新釘選按鈕狀態
+  // 更新釘選按鈕狀態（是否 enable / 顯示為已釘選樣式）
   const updatePinButtonState = () => {
     const pinBtn = els.pinButton;
     const select = els.kmlLayerSelect;
@@ -110,7 +109,7 @@
     else pinBtn.classList.remove('clicked');
   };
 
-  // 當 KML 下拉選單變更時處理
+  // 當 KML 下拉選單變更時處理（避免重複向 Firestore 請求）
   const handleKmlLayerSelectChange = () => {
     const select = els.kmlLayerSelect;
     const kmlId = select?.value || '';
@@ -118,17 +117,19 @@
     updatePinButtonState();
 
     if (kmlId && typeof window.loadKmlLayerFromFirestore === 'function') {
+      // 若已載入相同圖層則跳過，避免重複讀取
       if (window.currentKmlLayerId === kmlId) {
         console.log(`⚠️ 已載入圖層 ${kmlId}，略過 change 觸發的重複讀取`);
         return;
       }
       window.loadKmlLayerFromFirestore(kmlId);
     } else if (!kmlId && typeof window.clearAllKmlLayers === 'function') {
+      // 若沒有選擇任何圖層，清除地圖上的圖層
       window.clearAllKmlLayers();
     }
   };
 
-  // 釘選載入邏輯
+  // 優化後的釘選載入邏輯
   const tryLoadPinnedKmlLayerWhenReady = () => {
     if (hasInitialAutoLoaded) return; 
 
@@ -166,7 +167,7 @@
   };
 
   /**
-   * 更新 KML 下拉選單內容（整合權限控制與 Pinned KML 觸發）
+   * 更新 KML 下拉選單內容（整合快取判斷與 Pinned KML 觸發）
    */
   const updateKmlLayerSelects = async (passedLayers = null) => {
       const select = els.kmlLayerSelect;
@@ -178,21 +179,35 @@
           return;
       }
   
-      // 初始化 UI 狀態
-      if (deleteBtn) deleteBtn.disabled = true;
-      select.disabled = false;
-  
-      // 【權限調整】僅 owner 與 editor 顯示 KML 管理介面，user 與 unapproved 隱藏
+      // 角色權限判斷：
+      // - canEdit: Owner 與 Editor 具備上傳/刪除等管理權限
+      // - canView: user (一般用戶)、editor、owner 及未登入訪客皆可瀏覽；僅未審核帳號 (unapproved) 禁用
+      const isUnapproved = (window.currentUserRole === 'unapproved');
       const canEdit = (window.currentUserRole === 'owner' || window.currentUserRole === 'editor');
-      if (els.kmlManagementSection) els.kmlManagementSection.style.display = canEdit ? 'block' : 'none';
+      const canView = !isUnapproved;
+
+      // 初始化 UI 狀態
+      if (deleteBtn) deleteBtn.disabled = !canEdit;
+      select.disabled = !canView;
+
+      // 角色權限 UI 調整 (判斷 Editor/Owner 是否顯示管理介面；user 與 unapproved 隱藏管理區塊)
       if (els.uploadKmlSectionDashboard) els.uploadKmlSectionDashboard.style.display = canEdit ? 'flex' : 'none';
       if (els.deleteKmlSectionDashboard) els.deleteKmlSectionDashboard.style.display = canEdit ? 'flex' : 'none';
       if (selectDashboard) selectDashboard.disabled = !canEdit;
       if (els.uploadKmlSubmitBtnDashboard) els.uploadKmlSubmitBtnDashboard.disabled = !canEdit;
-  
+
+      // 未審核帳號無檢視權限
+      if (isUnapproved) {
+          select.innerHTML = '<option value="">-- 未審核帳號無瀏覽權限 --</option>';
+          if (selectDashboard) selectDashboard.innerHTML = '<option value="">-- 未審核帳號無瀏覽權限 --</option>';
+          currentKmlLayers = [];
+          return;
+      }
+
       try {
           let layersToRender = [];
   
+          // 判斷資料來源：優先使用傳入的快取資料
           if (Array.isArray(passedLayers)) {
               layersToRender = passedLayers;
               console.log("%c♻️ [Cache] 使用快取清單渲染選單", "color: #4CAF50;");
@@ -201,6 +216,7 @@
               const kmlRef = getKmlCollectionRef();
               let snapshot;
               
+              // Editor 只能看到自己上傳的，Owner 與 一般用戶 (user) 可瀏覽所有 public KML
               if (window.currentUserRole === 'editor' && auth.currentUser?.email) {
                   snapshot = await kmlRef.where('uploadedBy', '==', auth.currentUser.email).get();
               } else {
@@ -212,9 +228,11 @@
                       layersToRender.push({ id: doc.id, ...doc.data() });
                   });
               }
+              // 同步回 LocalStorage
               localStorage.setItem('kml_list_cache_data', JSON.stringify(layersToRender));
           }
   
+          // 清空並重新填充 DOM
           select.innerHTML = '<option value="">-- 請選擇 KML 圖層 --</option>';
           if (selectDashboard) selectDashboard.innerHTML = '<option value="">-- 請選擇 KML 圖層 --</option>';
           
@@ -237,6 +255,7 @@
               deleteBtn.disabled = false;
           }
   
+          // 觸發釘選圖層載入
           tryLoadPinnedKmlLayerWhenReady();
   
       } catch (error) {
@@ -281,242 +300,244 @@
     };
   }
 
-  // 重新整理使用者列表（管理員頁面）
-  const refreshUserList = async () => {
-    const container = els.userListDiv;
-    if (!container) return;
+/**
+ * 重新整理使用者列表（管理員頁面）
+ */
+const refreshUserList = async () => {
+  const container = els.userListDiv;
+  if (!container) return;
 
-    const USER_CACHE_KEY = 'owner_user_list_cache';
+  const USER_CACHE_KEY = 'owner_user_list_cache';
 
-    try {
-      const cachedData = sessionStorage.getItem(USER_CACHE_KEY);
-      if (cachedData) {
-        console.log("%c[Cache] 命中快取", "color: #9C27B0;");
-        const usersData = JSON.parse(cachedData);
-        renderUserCards(usersData);
-        bindUserManagementEvents();
-        return;
-      }
-
-      console.log("🔥 [Firestore] 抓取最新名單...");
-      const snapshot = await db.collection('users').get();
-      const usersData = [];
-      snapshot.forEach(doc => {
-        if (auth.currentUser && doc.id === auth.currentUser.uid) return;
-        usersData.push({ id: doc.id, ...doc.data() });
-      });
-
-      sessionStorage.setItem(USER_CACHE_KEY, JSON.stringify(usersData));
+  try {
+    const cachedData = sessionStorage.getItem(USER_CACHE_KEY);
+    if (cachedData) {
+      console.log("%c[Cache] 命中快取", "color: #9C27B0;");
+      const usersData = JSON.parse(cachedData);
       renderUserCards(usersData);
       bindUserManagementEvents();
-
-    } catch (error) {
-      container.innerHTML = `<p style="color: red;">載入失敗: ${error.message}</p>`;
-    }
-
-    function renderUserCards(data) {
-      container.innerHTML = '';
-      const roleOrder = { 'unapproved': 1, 'user': 2, 'editor': 3, 'owner': 4 };
-      data.sort((a, b) => (roleOrder[a.role] || 99) - (roleOrder[b.role] || 99));
-
-      data.forEach(user => {
-        const card = document.createElement('div');
-        card.className = 'user-card';
-        card.dataset.uid = user.id;
-        card.innerHTML = `
-          <div class="user-email">${user.email?.split('@')[0] || 'N/A'}</div>
-          <div class="user-nickname">${user.name || 'N/A'}</div>
-          <div class="user-role-controls">
-            <select class="user-role-select" data-original-value="${user.role || 'unapproved'}">
-              <option value="unapproved" ${user.role === 'unapproved' ? 'selected' : ''}>未審核</option>
-              <option value="user" ${user.role === 'user' ? 'selected' : ''}>一般</option>
-              <option value="editor" ${user.role === 'editor' ? 'selected' : ''}>編輯者</option>
-              <option value="owner" ${user.role === 'owner' ? 'selected' : ''} ${window.currentUserRole !== 'owner' ? 'disabled' : ''}>擁有者</option>
-            </select>
-          </div>
-          <div class="user-actions">
-            <button class="change-role-btn" disabled>變</button>
-            <button class="delete-user-btn action-buttons delete-btn">刪</button>
-          </div>`;
-        container.appendChild(card);
-      });
-    }
-
-    function bindUserManagementEvents() {
-      container.querySelectorAll('.user-card').forEach(card => {
-        const select = card.querySelector('.user-role-select');
-        const changeBtn = card.querySelector('.change-role-btn');
-        const deleteBtn = card.querySelector('.delete-user-btn');
-        const uid = card.dataset.uid;
-
-        select.onchange = () => { changeBtn.disabled = (select.value === select.dataset.originalValue); };
-
-        changeBtn.onclick = async () => {
-          if (!await window.showConfirmationModal?.('確認', '確定變更角色？')) return;
-          try {
-            await db.collection('users').doc(uid).update({ role: select.value });
-            select.dataset.originalValue = select.value;
-            changeBtn.disabled = true;
-            window.showMessage?.('成功', '角色已更新');
-          } catch (e) { window.showMessage?.('錯誤', e.message); }
-        };
-
-        deleteBtn.onclick = async () => {
-          if (!await window.showConfirmationModal?.('警告', '確定刪除用戶？')) return;
-          try {
-            await db.collection('users').doc(uid).delete();
-            card.remove();
-            const list = JSON.parse(sessionStorage.getItem(USER_CACHE_KEY) || '[]');
-            sessionStorage.setItem(USER_CACHE_KEY, JSON.stringify(list.filter(u => u.id !== uid)));
-          } catch (e) { window.showMessage?.('錯誤', e.message); }
-        };
-      });
-    }
-  };
-
-  // 監聽 Auth 狀態變更以更新 UI
-  auth.onAuthStateChanged(async (user) => {
-    if (user) {
-      if (els.loginForm) els.loginForm.style.display = 'none';
-      if (els.loggedInDashboard) els.loggedInDashboard.style.display = 'block';
-      if (els.userEmailDisplay) {
-        els.userEmailDisplay.textContent = `${user.email} (權限檢查中...)`;
-        els.userEmailDisplay.style.display = 'block';
-      }
-
-      if (!unsubUserRole) {
-        const userDocRef = db.collection('users').doc(user.uid);
-        unsubUserRole = userDocRef.onSnapshot(async (doc) => {
-          try {
-            if (!doc.exists) {
-              console.warn("使用者文件不存在，執行登出");
-              auth.signOut();
-              return;
-            }
-
-            const userData = doc.data() || {};
-            const newRole = userData.role || 'unapproved';
-            const roleChanged = (window.currentUserRole !== newRole);
-            
-            window.currentUserRole = newRole;
-            console.log(`[身份驗證] 目前角色: ${window.currentUserRole}`);
-            
-            if (els.userEmailDisplay) {
-              els.userEmailDisplay.textContent = `${user.email} (${getRoleDisplayName(window.currentUserRole)})`;
-            }
-
-            // 【權限調整】僅 owner 與 editor 具備 KML 管理權限；user 及 unapproved 隱藏管理介面
-            const canEdit = (newRole === 'owner' || newRole === 'editor');
-            const isOwner = (newRole === 'owner');
-
-            const toggleDisplay = (el, show) => { if (el) el.style.display = show ? 'flex' : 'none'; };
-            const toggleBlock = (el, show) => { if (el) el.style.display = show ? 'block' : 'none'; };
-
-            // 顯示/隱藏各項功能區塊
-            toggleBlock(els.kmlManagementSection, canEdit);
-            toggleDisplay(els.uploadKmlSectionDashboard, canEdit);
-            toggleDisplay(els.deleteKmlSectionDashboard, canEdit);
-            toggleDisplay(els.registrationSettingsSection, isOwner);
-            toggleBlock(els.userManagementSection, isOwner); 
-            if (els.userListDiv) {
-                els.userListDiv.style.display = 'none';
-            }
-
-            if (roleChanged && typeof optimizedUpdateKmlLayerSelects === 'function') {
-              await optimizedUpdateKmlLayerSelects();
-            }
-          } catch (err) {
-            console.error("處理用戶快照時出錯:", err);
-          }
-        }, (error) => {
-          console.error("監聽角色失敗:", error);
-        });
-      }
-
-    } else {
-      console.log("[Auth] 使用者未登入，開放圖層瀏覽權限");
-      if (unsubUserRole) {
-        unsubUserRole();
-        unsubUserRole = null;
-      }
-      window.currentUserRole = null;
-      
-      sessionStorage.removeItem('owner_user_list_cache');
-      
-      if (els.loginForm) els.loginForm.style.display = 'block';
-      if (els.loggedInDashboard) els.loggedInDashboard.style.display = 'none';
-      if (els.userEmailDisplay) els.userEmailDisplay.style.display = 'none';
-    }
-
-    if (!hasInitialMenuLoaded) {
-      hasInitialMenuLoaded = true; 
-      console.log("[Init] 啟動初始圖層載入程序 (公開瀏覽)");
-      
-      if (typeof optimizedUpdateKmlLayerSelects === 'function') {
-        await optimizedUpdateKmlLayerSelects();
-      } else if (typeof updateKmlLayerSelects === 'function') {
-        await updateKmlLayerSelects();
-      }
-    }
-  });
-
-  async function optimizedUpdateKmlLayerSelects() {
-    if (isUpdatingList) {
-      console.log("清單更新進行中，略過本次呼叫");
       return;
     }
-    isUpdatingList = true;
 
-    const LIST_CACHE_KEY = 'kml_list_cache_data';
-    const SYNC_TIME_KEY = 'kml_list_last_sync';
+    console.log("🔥 [Firestore] 抓取最新名單...");
+    const snapshot = await db.collection('users').get();
+    const usersData = [];
+    snapshot.forEach(doc => {
+      if (auth.currentUser && doc.id === auth.currentUser.uid) return;
+      usersData.push({ id: doc.id, ...doc.data() });
+    });
 
-    try {
-      const syncSnap = await getSyncDocRef().get();
-      console.log("%c🔥 [Firestore Read] 讀取 metadata/sync", "color: white; background: red; padding: 2px 5px;");
-      const serverUpdate = syncSnap.exists ? (syncSnap.data().lastUpdate || 0) : 0;
-      const localUpdate = parseInt(localStorage.getItem(SYNC_TIME_KEY) || "0");
-      const cachedList = localStorage.getItem(LIST_CACHE_KEY);
+    sessionStorage.setItem(USER_CACHE_KEY, JSON.stringify(usersData));
+    renderUserCards(usersData);
+    bindUserManagementEvents();
 
-      const isCacheValid = (cachedList && serverUpdate <= localUpdate && serverUpdate !== 0);
-
-      if (isCacheValid) {
-        console.log("%c[核心快取模式] 伺服器資料無變動，使用快取清單與圖層", "color: #4CAF50; font-weight: bold;");
-        const layers = JSON.parse(cachedList);
-        await updateKmlLayerSelects(layers);
-        tryLoadPinnedKmlLayerWhenReady();
-        return; 
-      }
-
-      console.log("%c[同步模式] 偵測到雲端更新，開始重新抓取資料", "color: #FF9800; font-weight: bold;");
-
-      Object.keys(localStorage).forEach(key => {
-        if (key.startsWith('kml_data_')) {
-          localStorage.removeItem(key);
-        }
-      });
-
-      const snapshot = await getKmlCollectionRef().get();
-      console.log("%c🔥 [Firestore Read] 讀取 kmlLayers 集合 (全量)", "color: white; background: red; padding: 2px 5px;");
-      const layers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-
-      localStorage.setItem(LIST_CACHE_KEY, JSON.stringify(layers));
-      localStorage.setItem(SYNC_TIME_KEY, serverUpdate.toString());
-
-      await updateKmlLayerSelects(layers);
-      tryLoadPinnedKmlLayerWhenReady();
-
-    } catch (err) {
-      console.error("優化清單程序出錯:", err);
-      const snapshot = await getKmlCollectionRef().get();
-      const layers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      await updateKmlLayerSelects(layers);
-      tryLoadPinnedKmlLayerWhenReady();
-    } finally {
-      isUpdatingList = false;
-    }
+  } catch (error) {
+    container.innerHTML = `<p style="color: red;">載入失敗: ${error.message}</p>`;
   }
 
-  // Google 登入事件
+  function renderUserCards(data) {
+    container.innerHTML = '';
+    const roleOrder = { 'unapproved': 1, 'user': 2, 'editor': 3, 'owner': 4 };
+    data.sort((a, b) => (roleOrder[a.role] || 99) - (roleOrder[b.role] || 99));
+
+    data.forEach(user => {
+      const card = document.createElement('div');
+      card.className = 'user-card';
+      card.dataset.uid = user.id;
+      card.innerHTML = `
+        <div class="user-email">${user.email?.split('@')[0] || 'N/A'}</div>
+        <div class="user-nickname">${user.name || 'N/A'}</div>
+        <div class="user-role-controls">
+          <select class="user-role-select" data-original-value="${user.role || 'unapproved'}">
+            <option value="unapproved" ${user.role === 'unapproved' ? 'selected' : ''}>未審核</option>
+            <option value="user" ${user.role === 'user' ? 'selected' : ''}>一般</option>
+            <option value="editor" ${user.role === 'editor' ? 'selected' : ''}>編輯者</option>
+            <option value="owner" ${user.role === 'owner' ? 'selected' : ''} ${window.currentUserRole !== 'owner' ? 'disabled' : ''}>擁有者</option>
+          </select>
+        </div>
+        <div class="user-actions">
+          <button class="change-role-btn" disabled>變</button>
+          <button class="delete-user-btn action-buttons delete-btn">刪</button>
+        </div>`;
+      container.appendChild(card);
+    });
+  }
+
+  function bindUserManagementEvents() {
+    container.querySelectorAll('.user-card').forEach(card => {
+      const select = card.querySelector('.user-role-select');
+      const changeBtn = card.querySelector('.change-role-btn');
+      const deleteBtn = card.querySelector('.delete-user-btn');
+      const uid = card.dataset.uid;
+
+      select.onchange = () => { changeBtn.disabled = (select.value === select.dataset.originalValue); };
+
+      changeBtn.onclick = async () => {
+        if (!await window.showConfirmationModal?.('確認', '確定變更角色？')) return;
+        try {
+          await db.collection('users').doc(uid).update({ role: select.value });
+          select.dataset.originalValue = select.value;
+          changeBtn.disabled = true;
+          window.showMessage?.('成功', '角色已更新');
+        } catch (e) { window.showMessage?.('錯誤', e.message); }
+      };
+
+      deleteBtn.onclick = async () => {
+        if (!await window.showConfirmationModal?.('警告', '確定刪除用戶？')) return;
+        try {
+          await db.collection('users').doc(uid).delete();
+          card.remove();
+          const list = JSON.parse(sessionStorage.getItem(USER_CACHE_KEY) || '[]');
+          sessionStorage.setItem(USER_CACHE_KEY, JSON.stringify(list.filter(u => u.id !== uid)));
+        } catch (e) { window.showMessage?.('錯誤', e.message); }
+      };
+    });
+  }
+};
+
+// 監聽 Auth 狀態變更以更新 UI
+auth.onAuthStateChanged(async (user) => {
+  if (user) {
+    if (els.loginForm) els.loginForm.style.display = 'none';
+    if (els.loggedInDashboard) els.loggedInDashboard.style.display = 'block';
+    if (els.userEmailDisplay) {
+      els.userEmailDisplay.textContent = `${user.email} (權限檢查中...)`;
+      els.userEmailDisplay.style.display = 'block';
+    }
+
+    if (!unsubUserRole) {
+      const userDocRef = db.collection('users').doc(user.uid);
+      unsubUserRole = userDocRef.onSnapshot(async (doc) => {
+        try {
+          if (!doc.exists) {
+            console.warn("使用者文件不存在，執行登出");
+            auth.signOut();
+            return;
+          }
+
+          const userData = doc.data() || {};
+          const newRole = userData.role || 'unapproved';
+          const roleChanged = (window.currentUserRole !== newRole);
+          
+          window.currentUserRole = newRole;
+          console.log(`[身份驗證] 目前角色: ${window.currentUserRole}`);
+          
+          if (els.userEmailDisplay) {
+            els.userEmailDisplay.textContent = `${user.email} (${getRoleDisplayName(window.currentUserRole)})`;
+          }
+
+          const canEdit = (newRole === 'owner' || newRole === 'editor');
+          const isOwner = (newRole === 'owner');
+
+          const toggleDisplay = (el, show) => { if (el) el.style.display = show ? 'flex' : 'none'; };
+          const toggleBlock = (el, show) => { if (el) el.style.display = show ? 'block' : 'none'; };
+
+          toggleDisplay(els.uploadKmlSectionDashboard, canEdit);
+          toggleDisplay(els.deleteKmlSectionDashboard, canEdit);
+          toggleDisplay(els.registrationSettingsSection, isOwner);
+          toggleBlock(els.userManagementSection, isOwner); 
+          if (els.userListDiv) {
+              els.userListDiv.style.display = 'none';
+          }
+
+          if (roleChanged && typeof optimizedUpdateKmlLayerSelects === 'function') {
+            await optimizedUpdateKmlLayerSelects();
+          }
+        } catch (err) {
+          console.error("處理用戶快照時出錯:", err);
+        }
+      }, (error) => {
+        console.error("監聽角色失敗:", error);
+      });
+    }
+
+  } else {
+    console.log("[Auth] 使用者未登入，開放圖層瀏覽權限");
+    if (unsubUserRole) {
+      unsubUserRole();
+      unsubUserRole = null;
+    }
+    window.currentUserRole = null;
+    
+    sessionStorage.removeItem('owner_user_list_cache');
+    
+    if (els.loginForm) els.loginForm.style.display = 'block';
+    if (els.loggedInDashboard) els.loggedInDashboard.style.display = 'none';
+    if (els.userEmailDisplay) els.userEmailDisplay.style.display = 'none';
+  }
+
+  if (!hasInitialMenuLoaded) {
+    hasInitialMenuLoaded = true; 
+    console.log("[Init] 啟動初始圖層載入程序 (公開瀏覽)");
+    
+    if (typeof optimizedUpdateKmlLayerSelects === 'function') {
+      await optimizedUpdateKmlLayerSelects();
+    } else if (typeof updateKmlLayerSelects === 'function') {
+      await updateKmlLayerSelects();
+    }
+  }
+});
+
+/**
+ * 核心邏輯：整合時間戳比對、清單快取、以及圖層內容(Pinned)快取
+ */
+async function optimizedUpdateKmlLayerSelects() {
+  if (isUpdatingList) {
+    console.log("清單更新進行中，略過本次呼叫");
+    return;
+  }
+  isUpdatingList = true;
+
+  const LIST_CACHE_KEY = 'kml_list_cache_data';
+  const SYNC_TIME_KEY = 'kml_list_last_sync';
+
+  try {
+    const syncSnap = await getSyncDocRef().get();
+    console.log("%c🔥 [Firestore Read] 讀取 metadata/sync", "color: white; background: red; padding: 2px 5px;");
+    const serverUpdate = syncSnap.exists ? (syncSnap.data().lastUpdate || 0) : 0;
+    const localUpdate = parseInt(localStorage.getItem(SYNC_TIME_KEY) || "0");
+    const cachedList = localStorage.getItem(LIST_CACHE_KEY);
+
+    const isCacheValid = (cachedList && serverUpdate <= localUpdate && serverUpdate !== 0);
+
+    if (isCacheValid) {
+      console.log("%c[核心快取模式] 伺服器資料無變動，使用快取清單與圖層", "color: #4CAF50; font-weight: bold;");
+      const layers = JSON.parse(cachedList);
+      await updateKmlLayerSelects(layers);
+      tryLoadPinnedKmlLayerWhenReady();
+      return; 
+    }
+
+    console.log("%c[同步模式] 偵測到雲端更新，開始重新抓取資料", "color: #FF9800; font-weight: bold;");
+
+    Object.keys(localStorage).forEach(key => {
+      if (key.startsWith('kml_data_')) {
+        localStorage.removeItem(key);
+      }
+    });
+
+    const snapshot = await getKmlCollectionRef().get();
+    console.log("%c🔥 [Firestore Read] 讀取 kmlLayers 集合 (全量)", "color: white; background: red; padding: 2px 5px;");
+    const layers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+    localStorage.setItem(LIST_CACHE_KEY, JSON.stringify(layers));
+    localStorage.setItem(SYNC_TIME_KEY, serverUpdate.toString());
+
+    await updateKmlLayerSelects(layers);
+    tryLoadPinnedKmlLayerWhenReady();
+
+  } catch (err) {
+    console.error("優化清單程序出錯:", err);
+    const snapshot = await getKmlCollectionRef().get();
+    const layers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    await updateKmlLayerSelects(layers);
+    tryLoadPinnedKmlLayerWhenReady();
+  } finally {
+    isUpdatingList = false;
+  }
+}
+
+  // Google 登入按鈕事件
   if (els.googleSignInBtn) {
     els.googleSignInBtn.addEventListener('click', async () => {
       try {
@@ -572,6 +593,7 @@
                 window.showMessage?.('註冊待審核', `歡迎 ${reAuthUser.email} (${nickname})！您的帳號已成功註冊，正在等待審核。`);
               }
             } catch (error) {
+              console.error("使用註冊碼登入/註冊失敗:", error);
               window.showMessage?.('註冊失敗', `使用註冊碼登入/註冊時發生錯誤: ${error.message}`);
             }
           });
@@ -579,6 +601,7 @@
           window.showMessage?.('登入成功', `歡迎回來 ${user.email}！`);
         }
       } catch (error) {
+        console.error("Google 登入失敗:", error);
         if (els.loginMessage) els.loginMessage.textContent = `登入失敗: ${error.message}`;
         window.showMessage?.('登入失敗', `Google 登入時發生錯誤: ${error.message}`);
       }
@@ -595,11 +618,15 @@
             localStorage.removeItem(key);
           }
         });
+        console.log("[系統] 登出成功，已清理本地 KML 快取。");
         window.showMessage?.('登出成功', '用戶已登出。');
+        
         setTimeout(() => {
             location.reload();
         }, 1000);
+
       } catch (error) {
+        console.error("登出失敗:", error);
         window.showMessage?.('登出失敗', `登出時發生錯誤: ${error.message}`);
       }
     });
@@ -620,255 +647,294 @@
     });
   }
 
-  if (els.triggerUploadBtn) {
-    els.triggerUploadBtn.addEventListener('click', () => els.hiddenKmlFileInput.click());
-  }
+if (typeof window.showConfirmationModal !== 'undefined') {
+  const originalModal = window.showConfirmationModal;
+  window.showConfirmationModal = function (title, message) {
+    return new Promise(resolve => {
+      const overlay = els.confirmationModalOverlay;
+      const titleEl = els.confirmationModalTitle;
+      const msgEl = els.confirmationModalMessage;
+      const yesBtn = els.confirmYesBtn;
+      const noBtn = els.confirmNoBtn;
 
-  if (els.hiddenKmlFileInput) {
-    els.hiddenKmlFileInput.addEventListener('change', async (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-
-      const confirmUpload = await window.showConfirmationModal(
-        '確認上傳',
-        `您選擇了檔案：<br><strong style="color: red;">${file.name}</strong><br>確定要執行上傳嗎？`
-      );
-
-      if (confirmUpload) {
-        els.uploadKmlSubmitBtnDashboard.click();
-      } else {
-        els.hiddenKmlFileInput.value = '';
-      }
-    });
-  }
-
-  if (els.triggerDeleteBtn) {
-    els.triggerDeleteBtn.addEventListener('click', async () => {
-      const options = Array.from(els.kmlLayerSelectDashboard.options)
-        .filter(opt => opt.value !== "")
-        .map(opt => `<option value="${opt.value}">${opt.textContent}</option>`)
-        .join('');
-
-      if (!options) {
-        window.showMessage?.('提示', '目前沒有可刪除的 KML 圖層。');
+      if (!overlay || !titleEl || !msgEl || !yesBtn || !noBtn) {
+        resolve(confirm(message));
         return;
       }
 
-      const modalContent = `
-        <div style="text-align: left; margin-top: 10px;">
-          <p>請選擇要刪除的圖層：</p>
-          <select id="modalKmlDeletePicker" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #ddd; margin-top: 5px;">
-            ${options}
-          </select>
-          <p style="color: #d32f2f; font-size: 12px; margin-top: 10px; font-weight: bold;">⚠️ 警告：刪除後資料將無法復原。</p>
-        </div>`;
+      titleEl.textContent = title;
+      msgEl.innerHTML = message;
+      overlay.classList.add('visible');
 
-      const confirmDelete = await window.showConfirmationModal('刪除圖層', modalContent);
-
-      if (confirmDelete) {
-        const selectedId = document.getElementById('modalKmlDeletePicker').value;
-        if (selectedId) {
-          els.kmlLayerSelectDashboard.value = selectedId;
-          els.deleteSelectedKmlBtn.click();
-        }
-      }
-    });
-  }
-
-  // 上傳 KML 處理
-  if (els.uploadKmlSubmitBtnDashboard) {
-    els.uploadKmlSubmitBtnDashboard.addEventListener('click', async () => {
-      const file = els.hiddenKmlFileInput?.files?.[0];
-      if (!file || !auth.currentUser) return;
-
-      if (window.currentUserRole !== 'owner' && window.currentUserRole !== 'editor') {
-        window.showMessage?.('錯誤', '您沒有權限上傳 KML。');
-        return;
-      }
-
-      const reader = new FileReader();
-      reader.onload = async () => {
-        try {
-          const geojson = toGeoJSON.kml(new DOMParser().parseFromString(reader.result, 'text/xml'));
-          const kmlLayersCollectionRef = getKmlCollectionRef();
-          const existingKmlQuery = await kmlLayersCollectionRef.where('name', '==', file.name).get();
-          let kmlLayerDocRef = existingKmlQuery.empty ? kmlLayersCollectionRef.doc() : existingKmlQuery.docs[0].ref;
-
-          await kmlLayerDocRef.set({
-            name: file.name,
-            uploadTime: firebase.firestore.FieldValue.serverTimestamp(),
-            uploadedBy: auth.currentUser.email,
-            uploadedByRole: window.currentUserRole,
-            geojson: JSON.stringify(geojson)
-          }, { merge: true });
-
-          const now = Date.now();
-          await db.collection('artifacts').doc(appId).collection('public').doc('data')
-            .collection('metadata').doc('sync').set({ lastUpdate: now, lastUpdateTime: new Date(now).toLocaleString('zh-TW') }, { merge: true });
-
-          localStorage.removeItem('kml_list_cache_data');
-          localStorage.removeItem(`kml_data_${kmlLayerDocRef.id}`);
-
-          window.showMessage?.('成功', `KML "${file.name}" 已處理成功。`);
-          await optimizedUpdateKmlLayerSelects();
-          updatePinButtonState();
-          els.hiddenKmlFileInput.value = '';
-        } catch (error) {
-          window.showMessage?.('錯誤', error.message);
-        }
+      const cleanupAndResolve = (result) => {
+        overlay.classList.remove('visible');
+        yesBtn.onclick = null;
+        noBtn.onclick = null;
+        resolve(result);
       };
-      reader.readAsText(file);
+
+      yesBtn.onclick = () => cleanupAndResolve(true);
+      noBtn.onclick = () => cleanupAndResolve(false);
     });
-  }
-
-  // 刪除 KML 處理
-  if (els.deleteSelectedKmlBtn) {
-    els.deleteSelectedKmlBtn.addEventListener('click', async () => {
-      // 權限再次檢查
-      if (window.currentUserRole !== 'owner' && window.currentUserRole !== 'editor') {
-        window.showMessage?.('錯誤', '您沒有權限刪除 KML。');
-        return;
-      }
-
-      const kmlIdToDelete = els.kmlLayerSelectDashboard.value;
-      const selectedOption = els.kmlLayerSelectDashboard.options[els.kmlLayerSelectDashboard.selectedIndex];
-      const kmlName = selectedOption ? selectedOption.textContent : null;
-
-      if (!kmlIdToDelete) return;
-
-      try {
-        await getKmlCollectionRef().doc(kmlIdToDelete).delete();
-        
-        if (typeof window.cleanupAuditData === 'function' && kmlName) {
-          console.log(`[系統] 觸發清查資料清理: ${kmlName}`);
-          await window.cleanupAuditData(kmlName);
-        }
-
-        const now = Date.now();
-        await db.collection('artifacts').doc(currentAppId).collection('public').doc('data')
-          .collection('metadata').doc('sync').set({ lastUpdate: now }, { merge: true });
-
-        localStorage.removeItem('kml_list_cache_data');
-        localStorage.removeItem(`kml_data_${kmlIdToDelete}`);
-
-        window.showMessage?.('成功', '圖層及相關清查資料已刪除。');
-        await optimizedUpdateKmlLayerSelects();
-        window.clearAllKmlLayers?.();
-        updatePinButtonState();
-      } catch (error) {
-        console.error("刪除失敗:", error);
-        window.showMessage?.('刪除失敗', error.message);
-      }
-    });
-  }
-
-  // 清查功能整合邏輯
-  const auditBtn = document.getElementById('auditKmlBtn');
-  if (auditBtn) {
-      auditBtn.onclick = async () => {
-          if (typeof window.updateKmlSelectUI === 'function') {
-              window.updateKmlSelectUI();
-          }
-
-          if (typeof window.showAuditActionModal === 'function') {
-              window.showAuditActionModal(); 
-          } else {
-              Swal.fire('錯誤', '清查模組尚未準備就緒', 'error');
-          }
-      };
-  }
-    
-  // 產生一次性註冊碼邏輯
-  const generateRegistrationAlphanumericCode = () => {
-    const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-    const digits = '013456789';
-    let res = '';
-    for (let i = 0; i < 3; i++) res += letters.charAt(Math.floor(Math.random() * letters.length));
-    for (let i = 0; i < 5; i++) res += digits.charAt(Math.floor(Math.random() * digits.length));
-    return res;
   };
+}
 
-  if (els.generateRegistrationCodeBtn) {
-    els.generateRegistrationCodeBtn.addEventListener('click', async () => {
-      if (window.currentUserRole !== 'owner') {
-        window.showMessage?.('權限不足', '只有管理員才能生成註冊碼。');
-        return;
+// 上傳區觸發與選擇
+if (els.triggerUploadBtn) {
+  els.triggerUploadBtn.addEventListener('click', () => els.hiddenKmlFileInput.click());
+}
+
+if (els.hiddenKmlFileInput) {
+  els.hiddenKmlFileInput.addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const confirmUpload = await window.showConfirmationModal(
+      '確認上傳',
+      `您選擇了檔案：<br><strong style="color: red;">${file.name}</strong><br>確定要執行上傳嗎？`
+    );
+
+    if (confirmUpload) {
+      els.uploadKmlSubmitBtnDashboard.click();
+    } else {
+      els.hiddenKmlFileInput.value = '';
+    }
+  });
+}
+
+// 刪除彈窗觸發
+if (els.triggerDeleteBtn) {
+  els.triggerDeleteBtn.addEventListener('click', async () => {
+    const options = Array.from(els.kmlLayerSelectDashboard.options)
+      .filter(opt => opt.value !== "")
+      .map(opt => `<option value="${opt.value}">${opt.textContent}</option>`)
+      .join('');
+
+    if (!options) {
+      window.showMessage?.('提示', '目前沒有可刪除的 KML 圖層。');
+      return;
+    }
+
+    const modalContent = `
+      <div style="text-align: left; margin-top: 10px;">
+        <p>請選擇要刪除的圖層：</p>
+        <select id="modalKmlDeletePicker" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #ddd; margin-top: 5px;">
+          ${options}
+        </select>
+        <p style="color: #d32f2f; font-size: 12px; margin-top: 10px; font-weight: bold;">⚠️ 警告：刪除後資料將無法復原。</p>
+      </div>`;
+
+    const confirmDelete = await window.showConfirmationModal('刪除圖層', modalContent);
+
+    if (confirmDelete) {
+      const selectedId = document.getElementById('modalKmlDeletePicker').value;
+      if (selectedId) {
+        els.kmlLayerSelectDashboard.value = selectedId;
+        els.deleteSelectedKmlBtn.click();
       }
-      if (registrationCodeTimer) { clearInterval(registrationCodeTimer); registrationCodeTimer = null; }
+    }
+  });
+}
 
+// 上傳 KML 執行邏輯 (僅 owner/editor 允許)
+if (els.uploadKmlSubmitBtnDashboard) {
+  els.uploadKmlSubmitBtnDashboard.addEventListener('click', async () => {
+    const file = els.hiddenKmlFileInput?.files?.[0];
+    if (!file || !auth.currentUser) return;
+
+    if (window.currentUserRole !== 'owner' && window.currentUserRole !== 'editor') {
+      window.showMessage?.('錯誤', '您沒有權限上傳 KML。');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = async () => {
       try {
-        const code = generateRegistrationAlphanumericCode();
-        let countdownSeconds = 60;
-        const expiryDate = new Date();
-        expiryDate.setSeconds(expiryDate.getSeconds() + countdownSeconds);
+        const geojson = toGeoJSON.kml(new DOMParser().parseFromString(reader.result, 'text/xml'));
+        const kmlLayersCollectionRef = getKmlCollectionRef();
+        const existingKmlQuery = await kmlLayersCollectionRef.where('name', '==', file.name).get();
+        let kmlLayerDocRef = existingKmlQuery.empty ? kmlLayersCollectionRef.doc() : existingKmlQuery.docs[0].ref;
 
-        await db.collection('settings').doc('registration').set({
-          oneTimeCode: code,
-          oneTimeCodeExpiry: firebase.firestore.Timestamp.fromDate(expiryDate)
+        await kmlLayerDocRef.set({
+          name: file.name,
+          uploadTime: firebase.firestore.FieldValue.serverTimestamp(),
+          uploadedBy: auth.currentUser.email,
+          uploadedByRole: window.currentUserRole,
+          geojson: JSON.stringify(geojson)
         }, { merge: true });
 
-        if (els.registrationCodeDisplay) els.registrationCodeDisplay.textContent = code;
-        if (els.registrationCodeCountdown) els.registrationCodeCountdown.textContent = ` (剩餘 ${countdownSeconds} 秒)`;
-        if (els.registrationCodeDisplay) els.registrationCodeDisplay.style.display = 'inline-block';
-        if (els.registrationCodeCountdown) els.registrationCodeCountdown.style.display = 'inline-block';
-        if (els.registrationExpiryDisplay) els.registrationExpiryDisplay.style.display = 'none';
+        const now = Date.now();
+        await db.collection('artifacts').doc(appId).collection('public').doc('data')
+          .collection('metadata').doc('sync').set({ lastUpdate: now, lastUpdateTime: new Date(now).toLocaleString('zh-TW') }, { merge: true });
 
-        registrationCodeTimer = setInterval(() => {
-          countdownSeconds--;
-          if (countdownSeconds >= 0) {
-            if (els.registrationCodeCountdown) els.registrationCodeCountdown.textContent = ` (剩餘 ${countdownSeconds} 秒)`;
-          } else {
-            clearInterval(registrationCodeTimer);
-            registrationCodeTimer = null;
-            if (els.registrationCodeDisplay) els.registrationCodeDisplay.textContent = '註冊碼已過期';
-            if (els.registrationCodeCountdown) els.registrationCodeCountdown.style.display = 'none';
-          }
-        }, 1000);
+        localStorage.removeItem('kml_list_cache_data');
+        localStorage.removeItem(`kml_data_${kmlLayerDocRef.id}`);
 
-        try {
-          await navigator.clipboard.writeText(code);
-        } catch (e) {
-          const tempInput = document.createElement('textarea');
-          tempInput.value = code;
-          document.body.appendChild(tempInput);
-          tempInput.select();
-          document.execCommand('copy');
-          document.body.removeChild(tempInput);
+        window.showMessage?.('成功', `KML "${file.name}" 已處理成功。`);
+        await optimizedUpdateKmlLayerSelects();
+        updatePinButtonState();
+        els.hiddenKmlFileInput.value = '';
+      } catch (error) {
+        window.showMessage?.('錯誤', error.message);
+      }
+    };
+    reader.readAsText(file);
+  });
+}
+
+// 刪除 KML 執行邏輯 (修正：限制僅 owner/editor 允許，防止 user 角色操作)
+if (els.deleteSelectedKmlBtn) {
+  els.deleteSelectedKmlBtn.addEventListener('click', async () => {
+    if (window.currentUserRole !== 'owner' && window.currentUserRole !== 'editor') {
+      window.showMessage?.('錯誤', '您沒有權限刪除 KML。');
+      return;
+    }
+
+    const kmlIdToDelete = els.kmlLayerSelectDashboard.value;
+    const selectedOption = els.kmlLayerSelectDashboard.options[els.kmlLayerSelectDashboard.selectedIndex];
+    const kmlName = selectedOption ? selectedOption.textContent : null;
+
+    if (!kmlIdToDelete) return;
+
+    try {
+      await getKmlCollectionRef().doc(kmlIdToDelete).delete();
+      
+      if (typeof window.cleanupAuditData === 'function' && kmlName) {
+        console.log(`[系統] 觸發清查資料清理: ${kmlName}`);
+        await window.cleanupAuditData(kmlName);
+      }
+
+      const now = Date.now();
+      await db.collection('artifacts').doc(currentAppId).collection('public').doc('data')
+        .collection('metadata').doc('sync').set({ lastUpdate: now }, { merge: true });
+
+      localStorage.removeItem('kml_list_cache_data');
+      localStorage.removeItem(`kml_data_${kmlIdToDelete}`);
+
+      window.showMessage?.('成功', '圖層及相關清查資料已刪除。');
+      await optimizedUpdateKmlLayerSelects();
+      window.clearAllKmlLayers?.();
+      updatePinButtonState();
+    } catch (error) {
+      console.error("刪除失敗:", error);
+      window.showMessage?.('刪除失敗', error.message);
+    }
+  });
+}
+
+// 清查功能按鈕
+const auditBtn = document.getElementById('auditKmlBtn');
+
+if (auditBtn) {
+    auditBtn.onclick = async () => {
+        if (typeof window.updateKmlSelectUI === 'function') {
+            window.updateKmlSelectUI();
         }
 
-        window.showMessage?.('成功', `一次性註冊碼已生成並複製到剪貼簿，設定為 60 秒後過期！`);
-      } catch (error) {
-        window.showMessage?.('錯誤', `生成註冊碼失敗: ${error.message}`);
+        if (typeof window.showAuditActionModal === 'function') {
+            window.showAuditActionModal(); 
+        } else {
+            Swal.fire('錯誤', '清查模組尚未準備就緒', 'error');
+        }
+    };
+}
+  
+const generateRegistrationAlphanumericCode = () => {
+  const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  const digits = '013456789';
+  let res = '';
+  for (let i = 0; i < 3; i++) res += letters.charAt(Math.floor(Math.random() * letters.length));
+  for (let i = 0; i < 5; i++) res += digits.charAt(Math.floor(Math.random() * digits.length));
+  return res;
+};
+
+// 生成註冊碼按鈕（僅 owner 可用）
+if (els.generateRegistrationCodeBtn) {
+  els.generateRegistrationCodeBtn.addEventListener('click', async () => {
+    if (window.currentUserRole !== 'owner') {
+      window.showMessage?.('權限不足', '只有管理員才能生成註冊碼。');
+      return;
+    }
+    if (registrationCodeTimer) { clearInterval(registrationCodeTimer); registrationCodeTimer = null; }
+
+    try {
+      const code = generateRegistrationAlphanumericCode();
+      let countdownSeconds = 60;
+      const expiryDate = new Date();
+      expiryDate.setSeconds(expiryDate.getSeconds() + countdownSeconds);
+
+      await db.collection('settings').doc('registration').set({
+        oneTimeCode: code,
+        oneTimeCodeExpiry: firebase.firestore.Timestamp.fromDate(expiryDate)
+      }, { merge: true });
+
+      if (els.registrationCodeDisplay) els.registrationCodeDisplay.textContent = code;
+      if (els.registrationCodeCountdown) els.registrationCodeCountdown.textContent = ` (剩餘 ${countdownSeconds} 秒)`;
+      if (els.registrationCodeDisplay) els.registrationCodeDisplay.style.display = 'inline-block';
+      if (els.registrationCodeCountdown) els.registrationCodeCountdown.style.display = 'inline-block';
+      if (els.registrationExpiryDisplay) els.registrationExpiryDisplay.style.display = 'none';
+
+      registrationCodeTimer = setInterval(() => {
+        countdownSeconds--;
+        if (countdownSeconds >= 0) {
+          if (els.registrationCodeCountdown) els.registrationCodeCountdown.textContent = ` (剩餘 ${countdownSeconds} 秒)`;
+        } else {
+          clearInterval(registrationCodeTimer);
+          registrationCodeTimer = null;
+          if (els.registrationCodeDisplay) els.registrationCodeDisplay.textContent = '註冊碼已過期';
+          if (els.registrationCodeCountdown) els.registrationCodeCountdown.style.display = 'none';
+        }
+      }, 1000);
+
+      try {
+        await navigator.clipboard.writeText(code);
+      } catch (e) {
+        const tempInput = document.createElement('textarea');
+        tempInput.value = code;
+        document.body.appendChild(tempInput);
+        tempInput.select();
+        document.execCommand('copy');
+        document.body.removeChild(tempInput);
       }
-    });
-  }
 
-  // 刷新使用者列表按鈕
-  if (els.refreshUsersBtn) {
-    els.refreshUsersBtn.addEventListener('click', async () => {
-      if (window.currentUserRole !== 'owner') {
-        window.showMessage?.('權限不足', '只有管理員才能查看或編輯使用者列表。');
-        return;
-      }
-      
-      if (!els.userListDiv) return;
+      window.showMessage?.('成功', `一次性註冊碼已生成並複製到剪貼簿，設定為 ${60} 秒後過期！`);
+    } catch (error) {
+      console.error("生成註冊碼時出錯:", error);
+      window.showMessage?.('錯誤', `生成註冊碼失敗: ${error.message}`);
+    }
+  });
+}
 
-      const isVisible = els.userListDiv.style.display !== 'none';
+// 刷新使用者列表按鈕（僅 owner 可用）
+if (els.refreshUsersBtn) {
+  els.refreshUsersBtn.addEventListener('click', async () => {
+    if (window.currentUserRole !== 'owner') {
+      window.showMessage?.('權限不足', '只有管理員才能查看或編輯使用者列表。');
+      return;
+    }
+    
+    if (!els.userListDiv) return;
 
-      if (isVisible) {
-        els.userListDiv.style.display = 'none';
-      } else {
-        els.userListDiv.style.display = 'block';
-        sessionStorage.removeItem('owner_user_list_cache'); 
-        await refreshUserList(); 
-      }
-    });
-  }
+    const isVisible = els.userListDiv.style.display !== 'none';
 
+    if (isVisible) {
+      els.userListDiv.style.display = 'none';
+    } else {
+      els.userListDiv.style.display = 'block';
+      sessionStorage.removeItem('owner_user_list_cache'); 
+      await refreshUserList(); 
+    }
+  });
+}
+
+  // 綁定 kmlLayerSelect 的 change 事件
   if (els.kmlLayerSelect) {
     els.kmlLayerSelect.addEventListener('change', handleKmlLayerSelectChange);
+  } else {
+    console.error('找不到 id 為 "kmlLayerSelect" 的下拉選單，KML 載入功能無法啟用。');
   }
 
+  // 釘選按鈕行為
   if (els.pinButton) {
     els.pinButton.addEventListener('click', () => {
       const select = els.kmlLayerSelect;
@@ -906,5 +972,8 @@
       }
       updatePinButtonState();
     });
+  } else {
+    console.error('找不到 id 為 "pinButton" 的圖釘按鈕，釘選功能無法啟用。');
   }
+  
 })();
