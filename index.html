@@ -60,10 +60,10 @@
     <div id="loggedInDashboard" style="display: none;">
       <h3 id="userEmailDisplay"></h3>
 
-    <div id="kmlControlsDashboard">
+    <div id="kmlControlsDashboard" style="display: flex; align-items: center; gap: 8px;">
+        <label style="font-size: 14px; font-weight: 500; white-space: nowrap;">KML 管理:</label>
+    
         <div id="unifiedKmlActions" style="display: flex; align-items: center; gap: 8px;">
-            <label style="font-size: 14px; font-weight: 500; white-space: nowrap;">KML 管理:</label>
-            
             <input type="file" id="hiddenKmlFileInput" accept=".kml" style="display: none;" />
             <button id="triggerUploadBtn" class="action-buttons upload-btn">上傳</button>
             <button id="triggerDeleteBtn" class="action-buttons delete-btn">刪除</button>
