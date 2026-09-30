@@ -425,7 +425,7 @@
     };
 
     // ---------------------------------------------------------
-    // 4-1. 清查管理對話框與開關 (已將新增按鈕改為橘色正方形)
+    // 4-1. 清查管理對話框與開關 (橘色按鈕縮小並置中加號)
     // ---------------------------------------------------------
     window.showAuditActionModal = async function() {
         if (!checkHasAuditPermission()) {
@@ -459,11 +459,11 @@
         });
         listHtml += '</div>';
         
-        // 帶有左上角「橘色正方形」新增按鈕的標題列
+        // 帶有左上角縮小版橘色正方形與置中「➕」按鈕的標題列
         Swal.fire({
             title: `
                 <div style="display: flex; justify-content: space-between; align-items: center; position: relative; width: 100%;">
-                    <button onclick="window.promptCreateEmptyLayer()" title="建立空白清查圖層" style="position: absolute; left: 0; background-color: #f39c12; color: white; width: 36px; height: 36px; border-radius: 4px; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: bold; box-shadow: 0 2px 5px rgba(0,0,0,0.2);">
+                    <button onclick="window.promptCreateEmptyLayer()" title="建立空白清查圖層" style="position: absolute; left: 0; background-color: #f39c12; color: white; width: 24px; height: 24px; border-radius: 4px; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: bold; box-shadow: 0 1px 3px rgba(0,0,0,0.2);">
                         +
                     </button>
                     <span style="flex-grow: 1; text-align: center;">圖層清查管理</span>
