@@ -1,5 +1,5 @@
 ﻿/**
- * audit-module.js - 清查與修改覆蓋整合優化版 (v4.1 完整修復版)
+ * audit-module.js - 清查與修改覆蓋整合優化版 (v4.2 時間即時寫入修復版)
  */
 (function() {
     'use strict';
@@ -18,7 +18,7 @@
     const APP_PATH = 'artifacts/kmldata-d22fb/public/data/kmlLayers';
     const STORAGE_ROOT = 'kmldata-d22fb/storage';
 
-    // 全域安全轉義工具 (防止外部呼叫 safeEscape 報錯)
+    // 全域安全轉義工具
     function safeEscape(str) {
         if (str == null) return '';
         if (typeof str !== 'string') str = String(str);
@@ -27,9 +27,6 @@
     window.safeEscape = safeEscape;
     window.escapeHtml = safeEscape;
 
-    // ---------------------------------------------------------
-    // 共用輔助函式與權限判定
-    // ---------------------------------------------------------
     function getUserRole() {
         try {
             return (window.currentUserData?.role || window.currentUserRole || window.userRole || 
@@ -106,7 +103,7 @@
     };
 
     // ---------------------------------------------------------
-    // 1. 樣式攔截與重繪 (修復陣列污染、未清查點更新與 DOM 顯隱問題)
+    // 1. 樣式攔截與重繪
     // ---------------------------------------------------------
     (function hookAddGeoJsonLayers() {
         if (window.addGeoJsonLayers && window.addGeoJsonLayers.__isHooked) return;
@@ -117,7 +114,6 @@
             const ns = window.mapNamespace;
             const kmlId = ns?.currentKmlLayerId || window.currentActiveKmlId;
 
-            // 複製傳入陣列，避免修改到原始 features 造成資料重複污染
             let processingFeatures = Array.isArray(features) ? [...features] : features;
 
             if (kmlId && Array.isArray(processingFeatures)) {
@@ -207,7 +203,6 @@
                     }
 
                     if (props.isAudited) {
-                        // 已清查點 (黃點) 控制
                         layer.options.interactive = isAuditedVisible;
                         if (typeof layer.setStyle === 'function') {
                             layer.setStyle({
@@ -220,7 +215,6 @@
                             });
                         }
                     } else {
-                        // 未清查點 (藍點) 控制 - 補上明確更新
                         layer.options.interactive = true;
                         if (typeof layer.setStyle === 'function') {
                             layer.setStyle({
@@ -270,7 +264,7 @@
     window.forceMapRefresh = forceMapRefresh;
 
     // ---------------------------------------------------------
-    // 2. 底部控制按鈕與右上角元件
+    // 2. 底部控制按鈕與元件
     // ---------------------------------------------------------
     function updateBottomBtnState() {
         const kmlId = window.mapNamespace?.currentKmlLayerId || window.currentActiveKmlId;
@@ -284,7 +278,6 @@
             return;
         }
 
-        // 1. 黃點切換按鈕
         if (yellowDotControl?._container) {
             const isAuditedVisible = window.showAuditedPoints !== false;
             yellowDotControl._container.style.display = 'block';
@@ -297,7 +290,6 @@
                 </button>`;
         }
 
-        // 2. 清查進度條
         if (progressControl?._container) {
             const progress = window.getAuditProgress();
             if (progress) {
@@ -311,7 +303,6 @@
             }
         }
 
-        // 3. 底部點位操作按鈕
         if (bottomControl?._container) {
             const active = window.currentSelectedPoint;
             if (active) {
@@ -322,7 +313,7 @@
 
                 const btnHtml = isAudited ? `
                     <button onclick="window.viewAuditDetailOnly('${safePointKey}')" class="audit-btn-action btn-view">🔍 查看</button>
-                    <button onclick="window.openAuditEditor(true)" class="audit-btn-action btn-edit">✏️️ 修改</button>
+                    <button onclick="window.openAuditEditor(true)" class="audit-btn-action btn-edit">✏ 修改</button>
                 ` : `
                     <button onclick="window.openAuditEditor(false)" class="audit-btn-action btn-audit">📋 清查點位</button>
                 `;
@@ -359,7 +350,6 @@
         };
 
         const photoCount = parseInt(maxPhotos) || 2;
-        // ⬇️ 表頭加入「清查時間」與「敘述」欄位 ⬇️
         let headerArr = ["點名", "經度", "緯度", "設備狀態", "敘述"];
         for (let i = 1; i <= photoCount; i++) headerArr.push(`照片${i}`);
         headerArr.push("備註");
@@ -384,10 +374,8 @@
             rowArr.push(`"${record?.lng ?? feature?.geometry?.coordinates?.[0] ?? ""}"`);
             rowArr.push(`"${record?.lat ?? feature?.geometry?.coordinates?.[1] ?? ""}"`);
 
-            // ⬇️ 修改：敘述不載入 KML 中的 <description>，保留空白或僅讀取清查紀錄中的敘述 ⬇️
             const pointDesc = record?.description || record?.desc || "";
 
-            // 格式化清查時間輸出
             let formattedTime = "";
             if (record?.updatedAt) {
                 try {
@@ -521,7 +509,6 @@
                     localStorage.setItem('audit_status_options', JSON.stringify(formValues.options));
                     Swal.fire({ title: '正在開啟清查...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
                     
-                    // 寫入 Firestore
                     await firebase.firestore().collection(APP_PATH).doc(kmlId).set({ 
                         isAuditing: true, 
                         targetPhotos: formValues.count, 
@@ -771,6 +758,7 @@
                 await firebase.firestore().collection(APP_PATH).doc(kmlId).collection('auditRecords').doc(oldPointKey).delete();
             }
     
+            const nowTime = new Date(); // ⏱️ 確保本地與 CSV 立即有時間
             const structuredData = {
                 pointName: trimmedPointKey, 
                 status: "已完成", 
@@ -783,7 +771,7 @@
                 lat: numLat, 
                 lng: numLng, 
                 isCustomPoint: true, 
-                updatedAt: firebase.firestore.FieldValue.serverTimestamp() // ⏱️ 自動寫入伺服器時間
+                updatedAt: nowTime 
             };
     
             window.auditLayersState ||= {};
@@ -888,10 +876,6 @@
     // ---------------------------------------------------------
     // 6. 清查資料彈窗 (編輯與查看)
     // ---------------------------------------------------------
-
-    /**
-     * 6-1. 編輯/填寫清查紀錄彈窗
-     */
     window.openAuditEditor = async function(isModifyMode = false) {
         const activePoint = window.currentSelectedPoint;
         if (!activePoint) return;
@@ -1028,6 +1012,7 @@
             Swal.fire({ title: '正在上傳與更新資料...', didOpen: () => Swal.showLoading(), allowOutsideClick: false });
             try {
                 const photoUrls = await window.uploadPhotosToStorage(res.photos, kmlId, pointKey, kmlLayerName);
+                const nowTime = new Date(); // ⏱️ 確保本地與 CSV 立即有時間
                 const structuredData = {
                     pointName: pointKey, 
                     status: "已完成", 
@@ -1036,7 +1021,7 @@
                     desc: res.desc,
                     note: res.note, 
                     photos: photoUrls, 
-                    updatedAt: firebase.firestore.FieldValue.serverTimestamp() // ⏱️ 自動寫入伺服器時間
+                    updatedAt: nowTime 
                 };
     
                 window.auditLayersState ||= {};
@@ -1059,9 +1044,6 @@
         }
     };
 
-    /**
-     * 6-2. 僅檢視詳細紀錄彈窗 (唯讀模式)
-     */
     window.viewAuditDetailOnly = function(pointKeyParam) {
         const activePoint = window.currentSelectedPoint;
         const layerProps = activePoint?.feature?.properties || activePoint?.properties || {};
