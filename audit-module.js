@@ -322,7 +322,7 @@
 
                 const btnHtml = isAudited ? `
                     <button onclick="window.viewAuditDetailOnly('${safePointKey}')" class="audit-btn-action btn-view">🔍 查看</button>
-                    <button onclick="window.openAuditEditor(true)" class="audit-btn-action btn-edit">✏️ 修改</button>
+                    <button onclick="window.openAuditEditor(true)" class="audit-btn-action btn-edit">✏️️ 修改</button>
                 ` : `
                     <button onclick="window.openAuditEditor(false)" class="audit-btn-action btn-audit">📋 清查點位</button>
                 `;
@@ -359,10 +359,11 @@
         };
 
         const photoCount = parseInt(maxPhotos) || 2;
-        // ⬇️ 表頭加入「敘述」欄位 ⬇️
+        // ⬇️ 表頭加入「清查時間」與「敘述」欄位 ⬇️
         let headerArr = ["點名", "經度", "緯度", "設備狀態", "敘述"];
         for (let i = 1; i <= photoCount; i++) headerArr.push(`照片${i}`);
         headerArr.push("備註");
+        headerArr.push("清查時間");
         
         let csvContent = "\uFEFF" + headerArr.join(",") + "\n";
         const featureMap = new Map();
@@ -383,18 +384,33 @@
             rowArr.push(`"${record?.lng ?? feature?.geometry?.coordinates?.[0] ?? ""}"`);
             rowArr.push(`"${record?.lat ?? feature?.geometry?.coordinates?.[1] ?? ""}"`);
 
-            // ⬇️ 提取敘述（優先讀取清查紀錄 record，若無則讀取原 KML 圖層 feature 屬性） ⬇️
-            const pointDesc = record?.description || record?.desc || feature?.properties?.description || feature?.properties?.desc || "";
+            // ⬇️ 修改：敘述不載入 KML 中的 <description>，保留空白或僅讀取清查紀錄中的敘述 ⬇️
+            const pointDesc = record?.description || record?.desc || "";
+
+            // 格式化清查時間輸出
+            let formattedTime = "";
+            if (record?.updatedAt) {
+                try {
+                    const dateObj = record.updatedAt.toDate ? record.updatedAt.toDate() : new Date(record.updatedAt);
+                    if (!isNaN(dateObj.getTime())) {
+                        formattedTime = dateObj.toISOString().replace('T', ' ').substring(0, 19);
+                    }
+                } catch {
+                    formattedTime = "";
+                }
+            }
 
             if (record) {
                 rowArr.push(`"${String(record.deviceStatus || record.status || '正常').replace(/"/g, '""')}"`);
                 rowArr.push(`"${String(pointDesc).replace(/"/g, '""')}"`);
                 for (let i = 0; i < photoCount; i++) rowArr.push(`"${getCleanPhotoName(record.photos?.[i])}"`);
                 rowArr.push(`"${String(record.remark || record.note || "").replace(/"/g, '""')}"`);
+                rowArr.push(`"${formattedTime}"`);
             } else {
                 rowArr.push('""');
-                rowArr.push(`"${String(pointDesc).replace(/"/g, '""')}"`);
+                rowArr.push('""');
                 for (let i = 0; i < photoCount; i++) rowArr.push('""');
+                rowArr.push('""');
                 rowArr.push('""');
             }
             csvContent += rowArr.join(",") + "\n";
@@ -512,7 +528,6 @@
                         statusOptions: formValues.options
                     }, { merge: true });
                     
-                    // ⬇️ 修正重點：完整更新記憶體狀態，包含張數與選項 ⬇️
                     window.globalAuditConfigs ||= {};
                     window.globalAuditConfigs[kmlId] = {
                         ...window.globalAuditConfigs[kmlId],
@@ -531,7 +546,6 @@
                 
                 await firebase.firestore().collection(APP_PATH).doc(kmlId).set({ isAuditing: false }, { merge: true });
                 
-                // ⬇️ 同步更新記憶體為關閉狀態 ⬇️
                 window.globalAuditConfigs ||= {};
                 window.globalAuditConfigs[kmlId] = {
                     ...window.globalAuditConfigs[kmlId],
@@ -681,7 +695,6 @@
                 <label class="audit-form-label">現場照片 (需拍 ${maxPhotos} 張) <span class="required">*必填</span></label>
                 <div class="audit-photo-grid">${photoHtml}</div>
             </div>
-            <!-- ⬇️ 新增：敘述輸入框 ⬇️ -->
             <div class="audit-form-group" style="margin-top:10px;">
                 <label class="audit-form-label">敘述 <span class="optional">(選填)</span></label>
                 <input type="text" id="add-point-desc" value="${defaultDesc}" placeholder="請輸入點位敘述..." class="audit-form-input">
@@ -759,9 +772,18 @@
             }
     
             const structuredData = {
-                pointName: trimmedPointKey, status: "已完成", deviceStatus: deviceStatus || "新增", auditStatus: deviceStatus || "新增",
-                description: finalDesc, desc: finalDesc,
-                note: remark || "", photos: photoUrls, lat: numLat, lng: numLng, isCustomPoint: true, updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                pointName: trimmedPointKey, 
+                status: "已完成", 
+                deviceStatus: deviceStatus || "新增", 
+                auditStatus: deviceStatus || "新增",
+                description: finalDesc, 
+                desc: finalDesc,
+                note: remark || "", 
+                photos: photoUrls, 
+                lat: numLat, 
+                lng: numLng, 
+                isCustomPoint: true, 
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp() // ⏱️ 自動寫入伺服器時間
             };
     
             window.auditLayersState ||= {};
@@ -892,7 +914,7 @@
         }
     
         const currentStatus = isUserCreatedPoint ? '新增' : (historyRecord.deviceStatus || '');
-        const currentDesc = historyRecord.description || historyRecord.desc || layerProps.description || layerProps.desc || '';
+        const currentDesc = historyRecord.description || historyRecord.desc || '';
         const currentNote = historyRecord.note || '';
         const baseStatusOptions = config.statusOptions || ['正常', '損壞', '遺失'];
     
@@ -926,23 +948,19 @@
         const { value: res, isDenied } = await Swal.fire({
             title: `<div>${isModifyMode ? '修改' : '填寫'}清查紀錄：${safeEscape(pointKey)}</div>`,
             html: `<div class="audit-form-container">
-                <!-- 1. 設備狀態 -->
                 <div class="audit-form-group-inline">
                     <label class="audit-form-label">設備狀態 <span class="required">*必選</span></label>
                     ${statusSelectHtml}
                 </div>
                 
-                <!-- 2. 現場照片 -->
                 <label class="audit-form-label">現場照片 (需滿 ${maxPhotos} 張) <span class="required">*必填</span></label>
                 <div class="audit-photo-grid-editor">${photoHtml}</div>
 
-                <!-- 3. 敘述 -->
                 <div class="audit-form-group">
                     <label class="audit-form-label">敘述 <span class="optional">(選填)</span></label>
                     <input type="text" id="swal-desc" class="swal2-input audit-form-input" value="${safeEscape(currentDesc)}" placeholder="請輸入點位敘述...">
                 </div>
 
-                <!-- 4. 備註事項 -->
                 <div class="audit-form-group">
                     <label class="audit-form-label">備註事項 <span class="optional">(選填)</span></label>
                     <textarea id="swal-note" class="swal2-textarea audit-form-textarea">${safeEscape(currentNote)}</textarea>
@@ -1018,7 +1036,7 @@
                     desc: res.desc,
                     note: res.note, 
                     photos: photoUrls, 
-                    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                    updatedAt: firebase.firestore.FieldValue.serverTimestamp() // ⏱️ 自動寫入伺服器時間
                 };
     
                 window.auditLayersState ||= {};
@@ -1042,7 +1060,7 @@
     };
 
     /**
-     * 6-2. 僅檢視詳細紀錄彈窗 (唯讀模式 - 排版與修改介面一致)
+     * 6-2. 僅檢視詳細紀錄彈窗 (唯讀模式)
      */
     window.viewAuditDetailOnly = function(pointKeyParam) {
         const activePoint = window.currentSelectedPoint;
@@ -1061,7 +1079,7 @@
         }
 
         const deviceStatus = record.deviceStatus || record.status || '未設定';
-        const description = record.description || record.desc || layerProps.description || layerProps.desc || '';
+        const description = record.description || record.desc || '';
         const note = record.note || record.remark || '';
         const photos = Array.isArray(record.photos) ? record.photos.filter(p => p && p.trim() !== '') : [];
 
@@ -1087,8 +1105,6 @@
             title: `查看清查紀錄：${safeEscape(pointKey)}`,
             html: `
                 <div class="audit-form-container">
-                    
-                    <!-- 1. 設備狀態 (唯讀下拉選單) -->
                     <div class="audit-form-group-inline">
                         <label class="audit-form-label">設備狀態</label>
                         <select class="swal2-input audit-form-select" disabled>
@@ -1096,7 +1112,6 @@
                         </select>
                     </div>
 
-                    <!-- 2. 現場照片 (與編輯框樣式相同的外框與外觀) -->
                     <div class="audit-form-group">
                         <label class="audit-form-label">現場照片 (共 ${photos.length} 張)</label>
                         <div class="audit-photo-grid-editor">
@@ -1104,18 +1119,15 @@
                         </div>
                     </div>
 
-                    <!-- 3. 敘述 (唯讀輸入框) -->
                     <div class="audit-form-group">
                         <label class="audit-form-label">敘述 <span class="optional">(選填)</span></label>
                         <input type="text" class="swal2-input audit-form-input" value="${safeEscape(description)}" readonly placeholder="無敘述">
                     </div>
 
-                    <!-- 4. 備註事項 (唯讀文字框) -->
                     <div class="audit-form-group">
                         <label class="audit-form-label">備註事項 <span class="optional">(選填)</span></label>
                         <textarea class="swal2-textarea audit-form-textarea" readonly placeholder="無備註事項">${safeEscape(note)}</textarea>
                     </div>
-
                 </div>`,
             confirmButtonText: '關閉',
             confirmButtonColor: '#34495e',
