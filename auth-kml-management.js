@@ -728,25 +728,37 @@ if (els.hiddenKmlFileInput) {
   });
 }
 
-// 刪除邏輯：彈窗內選取圖層（無權限之選項設為 disable 且灰色無法選取）
+// 刪除邏輯：彈窗內選取圖層（支援一般圖層與手動建立的空白清查圖層，並同步刪除 Firebase 設定）
 if (els.triggerDeleteBtn) {
   els.triggerDeleteBtn.addEventListener('click', async () => {
     const currentUserEmail = auth.currentUser?.email;
     const isOwner = (window.currentUserRole === 'owner');
 
-    const options = currentKmlLayers
-      .map(layer => {
-        const canDelete = isOwner || (window.currentUserRole === 'editor' && layer.uploadedBy === currentUserEmail);
-        if (canDelete) {
-          return `<option value="${layer.id}">${layer.name}</option>`;
-        } else {
-          return `<option value="${layer.id}" disabled style="color: #999; background-color: #f2f2f2;">${layer.name} (無刪除權限)</option>`;
-        }
-      })
-      .join('');
+    // 改從畫面的圖層下拉選單（kmlLayerSelect）讀取目前所有的圖層選項，確保手動建立的空白圖層也能被抓到
+    const select = document.getElementById('kmlLayerSelect');
+    if (!select || select.options.length <= 1) {
+      window.showMessage?.('提示', '目前沒有可刪除的 KML 或清查圖層。');
+      return;
+    }
 
-    if (!options) {
-      window.showMessage?.('提示', '目前沒有可刪除的 KML 圖層。');
+    let optionsHtml = '';
+    Array.from(select.options).forEach(opt => {
+      if (!opt.value) return;
+      const layerId = opt.value;
+      const layerName = opt.getAttribute('data-basename') || opt.textContent.split(' (')[0];
+      
+      // 權限判斷（若是空白圖層或擁有者/上傳者可刪除，您可依需求調整權限邏輯）
+      const canDelete = isOwner || (window.currentUserRole === 'editor') || layerId.startsWith('empty_layer_');
+
+      if (canDelete) {
+        optionsHtml += `<option value="${layerId}">${safeEscape(layerName)}</option>`;
+      } else {
+        optionsHtml += `<option value="${layerId}" disabled style="color: #999; background-color: #f2f2f2;">${safeEscape(layerName)} (無刪除權限)</option>`;
+      }
+    });
+
+    if (!optionsHtml) {
+      window.showMessage?.('提示', '目前沒有您有權限刪除的圖層。');
       return;
     }
 
@@ -755,9 +767,9 @@ if (els.triggerDeleteBtn) {
         <p>請選擇要刪除的圖層：</p>
         <select id="modalKmlDeletePicker" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #ddd; margin-top: 5px;">
           <option value="" disabled selected>-- 請選擇要刪除的圖層 --</option>
-          ${options}
+          ${optionsHtml}
         </select>
-        <p style="color: #d32f2f; font-size: 12px; margin-top: 10px; font-weight: bold;">⚠️ 警告：刪除後資料將無法復原。</p>
+        <p style="color: #d32f2f; font-size: 12px; margin-top: 10px; font-weight: bold;">⚠️ 警告：刪除後 Firebase 上的資料與圖層設定將無法復原。</p>
       </div>`;
 
     const confirmDelete = await window.showConfirmationModal('刪除圖層', modalContent);
@@ -768,8 +780,36 @@ if (els.triggerDeleteBtn) {
       const selectedOpt = picker ? picker.options[picker.selectedIndex] : null;
 
       if (selectedId && selectedOpt && !selectedOpt.disabled) {
-        els.kmlLayerSelectDashboard.value = selectedId;
-        els.deleteSelectedKmlBtn.click();
+        try {
+          // 顯示載入中
+          Swal.fire({ title: '正在從 Firebase 刪除圖層...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+
+          // 1. 直接刪除 Firebase Firestore 中的對應文件（解決殘留在 Firebase 的問題）
+          await firebase.firestore().collection(APP_PATH).doc(selectedId).delete();
+
+          // 2. 清除全域設定快取
+          if (window.globalAuditConfigs && window.globalAuditConfigs[selectedId]) {
+            delete window.globalAuditConfigs[selectedId];
+          }
+
+          // 3. 觸發原本頁面的刪除按鈕或直接重整地圖與下拉選單
+          if (els.kmlLayerSelectDashboard) {
+            els.kmlLayerSelectDashboard.value = selectedId;
+          }
+          if (els.deleteSelectedKmlBtn) {
+            els.deleteSelectedKmlBtn.click();
+          }
+
+          // 如果畫面沒有自動重新整理，手動呼叫重整
+          if (typeof forceMapRefresh === 'function') {
+            forceMapRefresh();
+          }
+
+          Swal.fire({ icon: 'success', title: '圖層已成功刪除', timer: 1200, showConfirmButton: false });
+
+        } catch (error) {
+          Swal.fire({ icon: 'error', title: '刪除失敗', text: error.message });
+        }
       } else {
         window.showMessage?.('提示', '您未選擇有效的可刪除圖層，或無權限刪除該圖層。');
       }
