@@ -731,10 +731,9 @@ if (els.hiddenKmlFileInput) {
 // 刪除邏輯：彈窗內選取圖層（支援一般圖層與手動建立的空白清查圖層，並同步刪除 Firebase 設定）
 if (els.triggerDeleteBtn) {
   els.triggerDeleteBtn.addEventListener('click', async () => {
-    const currentUserEmail = auth.currentUser?.email;
     const isOwner = (window.currentUserRole === 'owner');
 
-    // 改從畫面的圖層下拉選單（kmlLayerSelect）讀取目前所有的圖層選項，確保手動建立的空白圖層也能被抓到
+    // 改從畫面的圖層下拉選單（kmlLayerSelect）讀取目前所有的圖層選項
     const select = document.getElementById('kmlLayerSelect');
     if (!select || select.options.length <= 1) {
       window.showMessage?.('提示', '目前沒有可刪除的 KML 或清查圖層。');
@@ -747,7 +746,6 @@ if (els.triggerDeleteBtn) {
       const layerId = opt.value;
       const layerName = opt.getAttribute('data-basename') || opt.textContent.split(' (')[0];
       
-      // 權限判斷（若是空白圖層或擁有者/上傳者可刪除，您可依需求調整權限邏輯）
       const canDelete = isOwner || (window.currentUserRole === 'editor') || layerId.startsWith('empty_layer_');
 
       if (canDelete) {
@@ -781,26 +779,34 @@ if (els.triggerDeleteBtn) {
 
       if (selectedId && selectedOpt && !selectedOpt.disabled) {
         try {
-          // 顯示載入中
           Swal.fire({ title: '正在從 Firebase 刪除圖層...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
 
-          // 1. 直接刪除 Firebase Firestore 中的對應文件（解決殘留在 Firebase 的問題）
-          await firebase.firestore().collection(APP_PATH).doc(selectedId).delete();
+          // 1. 使用正確的 KmlCollection 參照直接刪除 Firebase 上的文件
+          await getKmlCollectionRef().doc(selectedId).delete();
 
           // 2. 清除全域設定快取
           if (window.globalAuditConfigs && window.globalAuditConfigs[selectedId]) {
             delete window.globalAuditConfigs[selectedId];
           }
 
-          // 3. 觸發原本頁面的刪除按鈕或直接重整地圖與下拉選單
-          if (els.kmlLayerSelectDashboard) {
-            els.kmlLayerSelectDashboard.value = selectedId;
-          }
-          if (els.deleteSelectedKmlBtn) {
-            els.deleteSelectedKmlBtn.click();
+          // 3. 刪除對應的本地快取，強制下次重新抓取
+          localStorage.removeItem('kml_list_cache_data');
+          localStorage.removeItem(`kml_data_${selectedId}`);
+
+          // 4. 更新雲端同步時間戳（通知系統資料已變更，使其他快取失效）
+          const now = Date.now();
+          await db.collection('artifacts').doc(currentAppId).collection('public').doc('data')
+            .collection('metadata').doc('sync').set({ lastUpdate: now, lastUpdateTime: new Date(now).toLocaleString('zh-TW') }, { merge: true });
+
+          // 5. 重新載入下拉選單與畫面
+          if (typeof optimizedUpdateKmlLayerSelects === 'function') {
+            await optimizedUpdateKmlLayerSelects();
           }
 
-          // 如果畫面沒有自動重新整理，手動呼叫重整
+          if (typeof window.clearAllKmlLayers === 'function') {
+            window.clearAllKmlLayers();
+          }
+
           if (typeof forceMapRefresh === 'function') {
             forceMapRefresh();
           }
