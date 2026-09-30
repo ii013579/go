@@ -376,17 +376,18 @@
 
             const pointDesc = record?.description || record?.desc || "";
 
-            let formattedTime = "";
-            if (record?.updatedAt) {
-                try {
-                    const dateObj = record.updatedAt.toDate ? record.updatedAt.toDate() : new Date(record.updatedAt);
-                    if (!isNaN(dateObj.getTime())) {
-                        formattedTime = dateObj.toISOString().replace('T', ' ').substring(0, 19);
-                    }
-                } catch {
-                    formattedTime = "";
+        let formattedTime = "";
+        if (record?.updatedAt) {
+            try {
+                const dateObj = record.updatedAt.toDate ? record.updatedAt.toDate() : new Date(record.updatedAt);
+                if (!isNaN(dateObj.getTime())) {
+                    // 🇹🇼 強制對齊 UTC+8 (Asia/Taipei) 格式化為 YYYY-MM-DD HH:mm:ss
+                    formattedTime = dateObj.toLocaleString('sv', { timeZone: 'Asia/Taipei' });
                 }
+            } catch {
+                formattedTime = "";
             }
+        }
 
             if (record) {
                 rowArr.push(`"${String(record.deviceStatus || record.status || '正常').replace(/"/g, '""')}"`);
