@@ -1,5 +1,5 @@
 ﻿/**
- * audit-module.js - 清查與修改覆蓋整合優化版 (v4.2 時間即時寫入修復版)
+ * audit-module.js - 清查與修改覆蓋整合優化版 (v4.4 支援一鍵建立空白圖層)
  */
 (function() {
     'use strict';
@@ -333,7 +333,7 @@
     });
 
     // ---------------------------------------------------------
-    // 3. CSV 報告生成
+    // 3. CSV 報告生成 (強制 UTC+8 台灣時間)
     // ---------------------------------------------------------
     async function generateLayerCsvReport(kmlId, kmlLayerName, maxPhotos) {
         const activeKmlId = kmlId || window.currentActiveKmlId || window.mapNamespace?.currentKmlLayerId;
@@ -376,18 +376,17 @@
 
             const pointDesc = record?.description || record?.desc || "";
 
-        let formattedTime = "";
-        if (record?.updatedAt) {
-            try {
-                const dateObj = record.updatedAt.toDate ? record.updatedAt.toDate() : new Date(record.updatedAt);
-                if (!isNaN(dateObj.getTime())) {
-                    // 🇹🇼 強制對齊 UTC+8 (Asia/Taipei) 格式化為 YYYY-MM-DD HH:mm:ss
-                    formattedTime = dateObj.toLocaleString('sv', { timeZone: 'Asia/Taipei' });
+            let formattedTime = "";
+            if (record?.updatedAt) {
+                try {
+                    const dateObj = record.updatedAt.toDate ? record.updatedAt.toDate() : new Date(record.updatedAt);
+                    if (!isNaN(dateObj.getTime())) {
+                        formattedTime = dateObj.toLocaleString('sv', { timeZone: 'Asia/Taipei' });
+                    }
+                } catch {
+                    formattedTime = "";
                 }
-            } catch {
-                formattedTime = "";
             }
-        }
 
             if (record) {
                 rowArr.push(`"${String(record.deviceStatus || record.status || '正常').replace(/"/g, '""')}"`);
@@ -426,41 +425,155 @@
     };
 
     // ---------------------------------------------------------
-    // 4. 清查管理對話框與開關
+    // 4. 清查管理對話框與開關 (新增建立空白圖層功能)
     // ---------------------------------------------------------
     window.showAuditActionModal = async function() {
         if (!checkHasAuditPermission()) {
             return Swal.fire('權限不足', '您的帳號角色不允許管理清查狀態！', 'warning');
         }
         const select = document.getElementById('kmlLayerSelect');
-        if (!select || select.options.length <= 1) return;
+        
+        let listHtml = `
+            <div style="margin-bottom: 15px; text-align: left;">
+                <button onclick="window.promptCreateEmptyLayer()" class="audit-btn-small" style="background-color: #2ecc71; color: white; padding: 8px 14px; font-size: 14px; border-radius: 6px; border: none; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; font-weight: bold;">
+                    ➕ 建立空白清查圖層
+                </button>
+            </div>
+            <div class="audit-action-list">`;
 
-        let listHtml = '<div class="audit-action-list">';
-        Array.from(select.options).forEach(opt => {
-            if (!opt.value) return;
-            const config = getSafeAuditConfig(opt.value);
-            const isAuditing = !!config.isAuditing;
-            const targetPhotos = config.targetPhotos || 2;
-            const baseName = opt.getAttribute('data-basename') || opt.textContent.split(' (')[0];
-            const safeValue = safeEscape(opt.value);
+        if (select && select.options.length > 1) {
+            Array.from(select.options).forEach(opt => {
+                if (!opt.value) return;
+                const config = getSafeAuditConfig(opt.value);
+                const isAuditing = !!config.isAuditing;
+                const targetPhotos = config.targetPhotos || 2;
+                const baseName = opt.getAttribute('data-basename') || opt.textContent.split(' (')[0];
+                const safeValue = safeEscape(opt.value);
 
-            listHtml += `
-                <div class="audit-action-item">
-                    <div>
-                        <div class="audit-action-title">${safeEscape(baseName)}</div>
-                        ${isAuditing ? `<div class="audit-action-subtext-active">清查中：需照片 ${targetPhotos} 張</div>` : `<div class="audit-action-subtext-inactive">未開啟清查</div>`}
-                    </div>
-                    <div class="audit-btn-group">
-                        ${isAuditing ? `<button onclick="window.downloadAuditPhotosZip('${safeValue}')" class="audit-btn-small audit-btn-zip">下載照片</button>` : ''}
-                        <button onclick="window.toggleAuditStatus('${safeValue}', ${!isAuditing})" class="audit-btn-small ${isAuditing ? 'audit-btn-toggle-on' : 'audit-btn-toggle-off'}">
-                            ${isAuditing ? '關閉' : '開啟'}
-                        </button>
-                    </div>
-                </div>`;
-        });
+                listHtml += `
+                    <div class="audit-action-item">
+                        <div>
+                            <div class="audit-action-title">${safeEscape(baseName)}</div>
+                            ${isAuditing ? `<div class="audit-action-subtext-active">清查中：需照片 ${targetPhotos} 張</div>` : `<div class="audit-action-subtext-inactive">未開啟清查</div>`}
+                        </div>
+                        <div class="audit-btn-group">
+                            ${isAuditing ? `<button onclick="window.downloadAuditPhotosZip('${safeValue}')" class="audit-btn-small audit-btn-zip">下載照片</button>` : ''}
+                            <button onclick="window.toggleAuditStatus('${safeValue}', ${!isAuditing})" class="audit-btn-small ${isAuditing ? 'audit-btn-toggle-on' : 'audit-btn-toggle-off'}">
+                                ${isAuditing ? '關閉' : '開啟'}
+                            </button>
+                        </div>
+                    </div>`;
+            });
+        } else {
+            listHtml += `<div style="text-align: center; color: #7f8c8d; padding: 15px;">目前尚無任何圖層，請點擊上方按鈕建立空白圖層！</div>`;
+        }
         listHtml += '</div>';
         
-        Swal.fire({ title: '圖層清查管理', html: listHtml, showConfirmButton: false, showCloseButton: true });
+        Swal.fire({ title: '圖層清查管理', html: listHtml, showConfirmButton: false, showCloseButton: true, width: '600px' });
+    };
+
+    // 新增空白圖層互動視窗
+    window.promptCreateEmptyLayer = async function() {
+        const savedOptions = localStorage.getItem('audit_status_options');
+        const defaultStatusStr = savedOptions ? JSON.parse(savedOptions).join(', ') : '正常, 損壞, 遺失';
+
+        const { value: formValues } = await Swal.fire({
+            title: '📂 建立空白清查圖層',
+            html: `
+                <div class="audit-form-container" style="text-align: left;">
+                    <div class="audit-form-group" style="margin-bottom: 12px;">
+                        <label class="audit-form-label">1. 圖層名稱 <span class="required" style="color:red;">*必填</span></label>
+                        <input id="swal-input-layer-name" type="text" class="swal2-input audit-form-input" placeholder="例如：手動巡檢點位" style="width:100%; box-sizing:border-box;">
+                    </div>
+                    <div class="audit-form-group" style="margin-bottom: 12px;">
+                        <label class="audit-form-label">2. 必填照片張數 (1~12 張)</label>
+                        <input id="swal-input-count" type="number" class="swal2-input audit-form-input" value="2" min="1" max="12" step="1" style="width:100%; box-sizing:border-box;">
+                    </div>
+                    <div>
+                        <label class="audit-form-label">3. 設備狀態選項 (用逗號或換行分隔)</label>
+                        <textarea id="swal-input-status" class="swal2-textarea audit-form-textarea" style="width:100%; box-sizing:border-box; height:80px;">${defaultStatusStr}</textarea>
+                    </div>
+                </div>`,
+            showCancelButton: true,
+            confirmButtonText: '建立並啟用',
+            cancelButtonText: '返回',
+            focusConfirm: false,
+            preConfirm: () => {
+                const layerName = document.getElementById('swal-input-layer-name').value.trim();
+                const countVal = parseInt(document.getElementById('swal-input-count').value, 10);
+                const statusVal = document.getElementById('swal-input-status').value.trim();
+
+                if (!layerName) {
+                    Swal.showValidationMessage('請輸入圖層名稱！');
+                    return false;
+                }
+                if (!countVal || countVal < 1 || countVal > 12) {
+                    Swal.showValidationMessage('照片張數必須介於 1 到 12 張之間！');
+                    return false;
+                }
+                const optionsArray = statusVal.split(/[,，\n]/).map(s => s.trim()).filter(Boolean);
+                if (!optionsArray.length) {
+                    Swal.showValidationMessage('請至少輸入一個有效的設備狀態選項！');
+                    return false;
+                }
+                return { layerName, count: countVal, options: optionsArray };
+            }
+        });
+
+        if (formValues) {
+            try {
+                Swal.fire({ title: '正在建立空白圖層...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+
+                const uniqueId = 'empty_layer_' + Date.now();
+                const cleanName = formValues.layerName.replace(/\.kml$/i, '').trim();
+
+                // 1. 同步寫入 Firestore 設定
+                await firebase.firestore().collection(APP_PATH).doc(uniqueId).set({ 
+                    isAuditing: true, 
+                    targetPhotos: formValues.count, 
+                    statusOptions: formValues.options,
+                    layerName: cleanName
+                }, { merge: true });
+
+                window.globalAuditConfigs ||= {};
+                window.globalAuditConfigs[uniqueId] = {
+                    isAuditing: true,
+                    targetPhotos: formValues.count,
+                    statusOptions: formValues.options
+                };
+
+                // 2. 自動將這個新圖層加入下拉選單
+                const selectEl = document.getElementById('kmlLayerSelect');
+                if (selectEl) {
+                    const opt = document.createElement('option');
+                    opt.value = uniqueId;
+                    opt.setAttribute('data-basename', cleanName);
+                    opt.textContent = `${cleanName} (清查中:${formValues.count}張)`;
+                    selectEl.appendChild(opt);
+                    selectEl.value = uniqueId;
+                    
+                    // 觸發切換事件讓地圖對應載入
+                    selectEl.dispatchEvent(new Event('change'));
+                }
+
+                window.currentActiveKmlId = uniqueId;
+                window.currentActiveKmlName = cleanName;
+
+                // 清空該圖層的features並重繪
+                if (window.mapNamespace) {
+                    window.mapNamespace.currentKmlLayerId = uniqueId;
+                    window.mapNamespace.allKmlFeatures = [];
+                }
+
+                forceMapRefresh();
+                Swal.fire({ icon: 'success', title: '已成功建立並開啟空白清查圖層！', timer: 1500, showConfirmButton: false });
+
+            } catch (error) {
+                Swal.fire({ icon: 'error', title: '建立失敗', text: error.message });
+            }
+        } else {
+            window.showAuditActionModal();
+        }
     };
 
     window.toggleAuditStatus = async function(kmlId, status) {
@@ -759,7 +872,7 @@
                 await firebase.firestore().collection(APP_PATH).doc(kmlId).collection('auditRecords').doc(oldPointKey).delete();
             }
     
-            const nowTime = new Date(); // ⏱️ 確保本地與 CSV 立即有時間
+            const nowTime = new Date(); 
             const structuredData = {
                 pointName: trimmedPointKey, 
                 status: "已完成", 
@@ -1013,7 +1126,7 @@
             Swal.fire({ title: '正在上傳與更新資料...', didOpen: () => Swal.showLoading(), allowOutsideClick: false });
             try {
                 const photoUrls = await window.uploadPhotosToStorage(res.photos, kmlId, pointKey, kmlLayerName);
-                const nowTime = new Date(); // ⏱️ 確保本地與 CSV 立即有時間
+                const nowTime = new Date(); 
                 const structuredData = {
                     pointName: pointKey, 
                     status: "已完成", 
