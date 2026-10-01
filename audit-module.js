@@ -424,7 +424,7 @@
         document.body.removeChild(link);
     };
 
-    // ---------------------------------------------------------
+// ---------------------------------------------------------
     // 4-1. 清查管理對話框與開關 (含縮小版橘色正方形新增按鈕)
     // ---------------------------------------------------------
     window.showAuditActionModal = async function() {
@@ -633,6 +633,16 @@
                     statusOptions: formValues.options,
                     layerName: cleanName
                 }, { merge: true });
+
+                // 💡 修正：清除本地清單快取，並更新雲端同步時間戳，確保重整後不會消失
+                localStorage.removeItem('kml_list_cache_data');
+
+                const now = Date.now();
+                await db.collection('artifacts').doc(currentAppId).collection('public').doc('data')
+                  .collection('metadata').doc('sync').set({ 
+                      lastUpdate: now, 
+                      lastUpdateTime: new Date(now).toLocaleString('zh-TW') 
+                  }, { merge: true });
 
                 window.globalAuditConfigs ||= {};
                 window.globalAuditConfigs[uniqueId] = {
