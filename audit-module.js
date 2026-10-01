@@ -570,7 +570,7 @@
     };
 
     // ---------------------------------------------------------
-    // 4-2. 建立空白清查圖層功能 (帶有 KML_ 前綴與完全一致的命名)
+    // 4-2. 建立空白清查圖層功能 (交由系統統一自動加上 KML_ 前綴)
     // ---------------------------------------------------------
     window.promptCreateEmptyLayer = async function() {
         const savedOptions = localStorage.getItem('audit_status_options');
@@ -582,8 +582,8 @@
                 <div class="audit-form-container" style="text-align: left;">
                     <div class="audit-form-group" style="margin-bottom: 12px;">
                         <label class="audit-form-label">1. 圖層名稱 <span class="required" style="color:red;">*必填</span></label>
-                        <input id="swal-input-layer-name" type="text" class="swal2-input audit-form-input" value="KML_" placeholder="KML_自訂名稱" style="width:100%; box-sizing:border-box;">
-                        <div style="font-size: 12px; color: #7f8c8d; margin-top: 4px;">提示：維持 KML_ 前綴可與一般上傳圖層完美識別與整合。</div>
+                        <input id="swal-input-layer-name" type="text" class="swal2-input audit-form-input" placeholder="例如：測試01" style="width:100%; box-sizing:border-box;">
+                        <div style="font-size: 12px; color: #7f8c8d; margin-top: 4px;">提示：輸入名稱後，系統將自動以 KML_ 格式統一建立圖層與儲存空間。</div>
                     </div>
                     <div class="audit-form-group" style="margin-bottom: 12px;">
                         <label class="audit-form-label">2. 必填照片張數 (1~12 張)</label>
@@ -598,24 +598,17 @@
             confirmButtonText: '建立並啟用',
             cancelButtonText: '返回',
             focusConfirm: false,
-            didOpen: () => {
-                // 自動將輸入框焦點移至字尾，方便使用者直接接著打字
-                const inputEl = document.getElementById('swal-input-layer-name');
-                if (inputEl) {
-                    inputEl.focus();
-                    inputEl.setSelectionRange(inputEl.value.length, inputEl.value.length);
-                }
-            },
             preConfirm: () => {
                 let layerName = document.getElementById('swal-input-layer-name').value.trim();
                 const countVal = parseInt(document.getElementById('swal-input-count').value, 10);
                 const statusVal = document.getElementById('swal-input-status').value.trim();
 
-                if (!layerName || layerName === 'KML_') {
-                    Swal.showValidationMessage('請輸入完整的圖層名稱！');
+                if (!layerName) {
+                    Swal.showValidationMessage('請輸入圖層名稱！');
                     return false;
                 }
-                // 確保若使用者不小心刪掉前綴，系統也會自動補上，確保格式統一
+                
+                // 確保若使用者自己沒打 KML_，系統才自動補上，若已經有了就不重複加
                 if (!layerName.startsWith('KML_')) {
                     layerName = 'KML_' + layerName;
                 }
@@ -637,11 +630,11 @@
             try {
                 Swal.fire({ title: '正在建立空白圖層...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
 
-                // 統一以帶有 KML_ 的名稱作為 Firestore 的 Document ID 檔名與圖層名稱
+                // 統一取得帶有單一 KML_ 前綴的名稱
                 const cleanName = formValues.layerName;
                 const uniqueId = cleanName; 
 
-                // 1. 同步寫入 Firestore 設定 (layerName 與 ID 保持一致)
+                // 1. 同步寫入 Firestore 設定
                 await firebase.firestore().collection(APP_PATH).doc(uniqueId).set({ 
                     isAuditing: true, 
                     targetPhotos: formValues.count, 
