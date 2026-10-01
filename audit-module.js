@@ -570,7 +570,7 @@
     };
 
     // ---------------------------------------------------------
-    // 4-2. 建立空白清查圖層功能 (純輸入名稱，交由系統統一自動加上 KML_ 前綴)
+    // 4-2. 建立空白清查圖層功能 (修復下拉選單顯示雙重 KML_ 的問題)
     // ---------------------------------------------------------
     window.promptCreateEmptyLayer = async function() {
         const savedOptions = localStorage.getItem('audit_status_options');
@@ -582,8 +582,8 @@
                 <div class="audit-form-container" style="text-align: left;">
                     <div class="audit-form-group" style="margin-bottom: 12px;">
                         <label class="audit-form-label">1. 圖層名稱 <span class="required" style="color:red;">*必填</span></label>
-                        <input id="swal-input-layer-name" type="text" class="swal2-input audit-form-input" placeholder="例如：測試03" style="width:100%; box-sizing:border-box;">
-                        <div style="font-size: 12px; color: #7f8c8d; margin-top: 4px;">提示：直接輸入名稱，系統會自動整合 KML_ 格式。</div>
+                        <input id="swal-input-layer-name" type="text" class="swal2-input audit-form-input" placeholder="例如：測試05" style="width:100%; box-sizing:border-box;">
+                        <div style="font-size: 12px; color: #7f8c8d; margin-top: 4px;">提示：直接輸入名稱，系統會自動建立 KML_ 格式。</div>
                     </div>
                     <div class="audit-form-group" style="margin-bottom: 12px;">
                         <label class="audit-form-label">2. 必填照片張數 (1~12 張)</label>
@@ -608,7 +608,7 @@
                     return false;
                 }
                 
-                // 💡 如果使用者不小心自己打了 KML_，我們把它拔掉，確保後面交給系統統一處理不重複
+                // 濾掉使用者可能不小心多打的 KML_
                 layerName = layerName.replace(/^KML_+/i, '');
 
                 if (!layerName) {
@@ -625,7 +625,6 @@
                     Swal.showValidationMessage('請至少輸入一個有效的設備狀態選項！');
                     return false;
                 }
-                // 這裡回傳乾淨的名字給後續處理
                 return { layerName, count: countVal, options: optionsArray };
             }
         });
@@ -634,7 +633,7 @@
             try {
                 Swal.fire({ title: '正在建立空白圖層...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
 
-                // 💡 配合系統會自動帶入前綴的特性，我們在此組裝成最終的 KML_名稱
+                // 確保 Firebase 上的名稱是完美的單一 KML_ 開頭
                 const cleanName = 'KML_' + formValues.layerName;
                 const uniqueId = cleanName; 
 
@@ -667,7 +666,7 @@
                     statusOptions: formValues.options
                 };
 
-                // 2. 自動將這個新圖層加入下拉選單
+                // 2. 自動將這個新圖層加入下拉選單（強制確保顯示名稱只帶有一個 KML_）
                 const selectEl = document.getElementById('kmlLayerSelect');
                 if (selectEl) {
                     const opt = document.createElement('option');
