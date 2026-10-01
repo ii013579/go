@@ -570,7 +570,7 @@
     };
 
     // ---------------------------------------------------------
-    // 4-2. 建立空白清查圖層功能
+    // 4-2. 建立空白清查圖層功能 (以輸入名稱作為文件 ID)
     // ---------------------------------------------------------
     window.promptCreateEmptyLayer = async function() {
         const savedOptions = localStorage.getItem('audit_status_options');
@@ -582,7 +582,7 @@
                 <div class="audit-form-container" style="text-align: left;">
                     <div class="audit-form-group" style="margin-bottom: 12px;">
                         <label class="audit-form-label">1. 圖層名稱 <span class="required" style="color:red;">*必填</span></label>
-                        <input id="swal-input-layer-name" type="text" class="swal2-input audit-form-input" placeholder="例如：手動巡檢點位" style="width:100%; box-sizing:border-box;">
+                        <input id="swal-input-layer-name" type="text" class="swal2-input audit-form-input" placeholder="例如：123 或 手動巡檢點位" style="width:100%; box-sizing:border-box;">
                     </div>
                     <div class="audit-form-group" style="margin-bottom: 12px;">
                         <label class="audit-form-label">2. 必填照片張數 (1~12 張)</label>
@@ -623,8 +623,10 @@
             try {
                 Swal.fire({ title: '正在建立空白圖層...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
 
-                const uniqueId = 'empty_layer_' + Date.now();
                 const cleanName = formValues.layerName.replace(/\.kml$/i, '').trim();
+                
+                // 💡 直接使用輸入的名稱作為 Firestore 的文件 ID (若有空格或特殊字元可做簡單取代)
+                const uniqueId = cleanName; 
 
                 // 1. 同步寫入 Firestore 設定
                 await firebase.firestore().collection(APP_PATH).doc(uniqueId).set({ 
@@ -634,10 +636,10 @@
                     layerName: cleanName
                 }, { merge: true });
 
-                // 💡 清除前端本地快取
+                // 清除前端本地快取
                 localStorage.removeItem('kml_list_cache_data');
 
-                // 💡 精準寫入正確路徑的 metadata/sync 時間戳
+                // 精準寫入正確路徑的 metadata/sync 時間戳
                 const now = Date.now();
                 const syncPath = APP_PATH.includes('kmlLayers') 
                     ? APP_PATH.replace('kmlLayers', 'metadata/sync') 
