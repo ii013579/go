@@ -959,8 +959,49 @@
         }
     };
     
+// ---------------------------------------------------------
+    // 照片壓縮輔助函數：寬度固定 1920，高度按原比例自動縮放
     // ---------------------------------------------------------
-    // 照片上傳與點位刪除
+    async function compressImageToCanvas(source) {
+        return new Promise((resolve) => {
+            const img = new Image();
+            const url = typeof source === 'string' ? source : URL.createObjectURL(source);
+            
+            img.onload = () => {
+                if (typeof source !== 'string') URL.revokeObjectURL(url);
+                
+                const canvas = document.createElement('canvas');
+                let width = img.width;
+                let height = img.height;
+                const targetWidth = 1920;
+
+                // 若寬度大於 1920，固定寬度為 1920，高度等比例縮放
+                if (width > targetWidth) {
+                    height = Math.round(height * (targetWidth / width));
+                    width = targetWidth;
+                }
+
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, width, height);
+                
+                canvas.toBlob((blob) => {
+                    resolve(blob || source);
+                }, 'image/jpeg', 0.82); // 畫質維持 0.82
+            };
+            
+            img.onerror = () => {
+                if (typeof source !== 'string') URL.revokeObjectURL(url);
+                resolve(source); 
+            };
+            
+            img.src = url;
+        });
+    }
+
+    // ---------------------------------------------------------
+    // 照片上傳與點位刪除 (已加入自動強制壓縮邏輯)
     // ---------------------------------------------------------
     window.uploadPhotosToStorage = async function(photos, kmlId, pointKey, kmlLayerName) {
         if (!photos || !Array.isArray(photos) || !photos.length) return [];
@@ -972,19 +1013,18 @@
 
         return Promise.all(photos.map(async (photoData, index) => {
             if (!photoData) return '';
-            if (typeof photoData === 'string' && !photoData.startsWith('data:image')) return photoData;
+            // 如果已經是遠端網址（http 開頭），則直接跳過不重複上傳
+            if (typeof photoData === 'string' && !photoData.startsWith('data:image') && !photoData.startsWith('blob:') && !(photoData instanceof File || photoData instanceof Blob)) {
+                return photoData;
+            }
 
             const customStoragePath = `${STORAGE_ROOT}/${targetLayerName}/${safePointKey}_${String(index + 1).padStart(2, '0')}.jpg`;
             const ref = storageRef.child(customStoragePath);
 
-            let blob = photoData;
-            if (typeof photoData === 'string' && photoData.startsWith('data:image')) {
-                blob = await (await fetch(photoData)).blob();
-            } else if (!(photoData instanceof File || photoData instanceof Blob)) {
-                return photoData;
-            }
+            // 關鍵修改：無論是 Base64、File、Blob，上傳前全部強制透過 Canvas 壓縮至寬度 1920
+            const compressedBlob = await compressImageToCanvas(photoData);
 
-            await ref.put(blob);
+            await ref.put(compressedBlob);
             return await ref.getDownloadURL();
         }));
     };
@@ -1025,7 +1065,6 @@
             Swal.fire('錯誤', e.message || '刪除失敗', 'error');
         }
     };
-
     // ---------------------------------------------------------
     // 6. 清查資料彈窗 (編輯與查看)
     // ---------------------------------------------------------
