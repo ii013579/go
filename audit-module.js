@@ -424,7 +424,7 @@
         document.body.removeChild(link);
     };
 
-// ---------------------------------------------------------
+    // ---------------------------------------------------------
     // 4-1. 清查管理對話框與開關 (含縮小版橘色正方形新增按鈕)
     // ---------------------------------------------------------
     window.showAuditActionModal = async function() {
@@ -634,15 +634,19 @@
                     layerName: cleanName
                 }, { merge: true });
 
-                // 💡 修正：清除本地清單快取，並更新雲端同步時間戳，確保重整後不會消失
+                // 💡 清除前端本地快取
                 localStorage.removeItem('kml_list_cache_data');
 
+                // 💡 精準寫入正確路徑的 metadata/sync 時間戳
                 const now = Date.now();
-                await db.collection('artifacts').doc(currentAppId).collection('public').doc('data')
-                  .collection('metadata').doc('sync').set({ 
-                      lastUpdate: now, 
-                      lastUpdateTime: new Date(now).toLocaleString('zh-TW') 
-                  }, { merge: true });
+                const syncPath = APP_PATH.includes('kmlLayers') 
+                    ? APP_PATH.replace('kmlLayers', 'metadata/sync') 
+                    : APP_PATH + '/../metadata/sync';
+
+                await firebase.firestore().doc(syncPath).set({ 
+                    lastUpdate: now, 
+                    lastUpdateTime: new Date(now).toLocaleString('zh-TW') 
+                }, { merge: true });
 
                 window.globalAuditConfigs ||= {};
                 window.globalAuditConfigs[uniqueId] = {
