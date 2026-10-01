@@ -1114,11 +1114,20 @@
                             const img = new Image();
                             img.onload = () => {
                                 const canvas = document.createElement('canvas');
-                                let width = img.width, height = img.height, max_size = 1920;
-                                if (width > height) { if (width > max_size) { height *= max_size / width; width = max_size; } } 
-                                else { if (height > max_size) { width *= max_size / height; height = max_size; } }
-                                canvas.width = width; canvas.height = height;
-                                canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+                                let width = img.width;
+                                let height = img.height;
+                                const targetWidth = 1920;
+
+                                // 寬度固定為 1920（若原圖大於 1920），高度按原比例自動縮放
+                                if (width > targetWidth) {
+                                    height = Math.round(height * (targetWidth / width));
+                                    width = targetWidth;
+                                }
+
+                                canvas.width = width;
+                                canvas.height = height;
+                                const ctx = canvas.getContext('2d');
+                                ctx.drawImage(img, 0, 0, width, height);
                                 const base64 = canvas.toDataURL('image/jpeg', 0.82);
                                 
                                 const prevEl = document.getElementById(`audit-prev-${index}`);
