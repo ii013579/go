@@ -639,11 +639,21 @@
                 const cleanName = 'KML_' + formValues.layerName;
                 const uniqueId = cleanName; 
 
+                // 取得當前使用者 Email 與角色
+                const currentUserEmail = auth.currentUser?.email || firebase.auth()?.currentUser?.email || '';
+                const currentUserRole = window.currentUserRole || 'user';
+
+                // 【修改重點】建構與傳統上傳 KML 100% 一致的資料欄位
                 await firebase.firestore().collection(APP_PATH).doc(uniqueId).set({ 
-                    isAuditing: true, 
-                    targetPhotos: formValues.count, 
-                    statusOptions: formValues.options,
-                    layerName: cleanName
+                    name: cleanName,                                                // 對齊上傳 KML 核心欄位
+                    layerName: cleanName,                                           // 保留向下相容
+                    geojson: '{"type":"FeatureCollection","features":[]}',           // 提供標準空 GeoJSON 結構
+                    isAuditing: true,                                               // 啟用清查狀態
+                    statusOptions: formValues.options,                              // 設備狀態選項
+                    targetPhotos: formValues.count,                                 // 照片必填張數
+                    uploadTime: firebase.firestore.FieldValue.serverTimestamp(),   // 建立時間戳記
+                    uploadedBy: currentUserEmail,                                   // 建立者 Email
+                    uploadedByRole: currentUserRole                                 // 建立者角色
                 }, { merge: true });
 
                 localStorage.removeItem('kml_list_cache_data');
