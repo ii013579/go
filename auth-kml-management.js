@@ -728,35 +728,25 @@ if (els.hiddenKmlFileInput) {
   });
 }
 
-// 刪除邏輯：彈窗內選取圖層（支援一般圖層與手動建立的空白清查圖層，並同步刪除 Firebase 設定）
+// 刪除邏輯：彈窗內選取圖層（無權限之選項設為 disable 且灰色無法選取）
 if (els.triggerDeleteBtn) {
   els.triggerDeleteBtn.addEventListener('click', async () => {
+    const currentUserEmail = auth.currentUser?.email;
     const isOwner = (window.currentUserRole === 'owner');
 
-    // 改從畫面的圖層下拉選單（kmlLayerSelect）讀取目前所有的圖層選項
-    const select = document.getElementById('kmlLayerSelect');
-    if (!select || select.options.length <= 1) {
-      window.showMessage?.('提示', '目前沒有可刪除的 KML 或清查圖層。');
-      return;
-    }
+    const options = currentKmlLayers
+      .map(layer => {
+        const canDelete = isOwner || (window.currentUserRole === 'editor' && layer.uploadedBy === currentUserEmail);
+        if (canDelete) {
+          return `<option value="${layer.id}">${layer.name}</option>`;
+        } else {
+          return `<option value="${layer.id}" disabled style="color: #999; background-color: #f2f2f2;">${layer.name} (無刪除權限)</option>`;
+        }
+      })
+      .join('');
 
-    let optionsHtml = '';
-    Array.from(select.options).forEach(opt => {
-      if (!opt.value) return;
-      const layerId = opt.value;
-      const layerName = opt.getAttribute('data-basename') || opt.textContent.split(' (')[0];
-      
-      const canDelete = isOwner || (window.currentUserRole === 'editor') || layerId.startsWith('empty_layer_');
-
-      if (canDelete) {
-        optionsHtml += `<option value="${layerId}">${safeEscape(layerName)}</option>`;
-      } else {
-        optionsHtml += `<option value="${layerId}" disabled style="color: #999; background-color: #f2f2f2;">${safeEscape(layerName)} (無刪除權限)</option>`;
-      }
-    });
-
-    if (!optionsHtml) {
-      window.showMessage?.('提示', '目前沒有您有權限刪除的圖層。');
+    if (!options) {
+      window.showMessage?.('提示', '目前沒有可刪除的 KML 圖層。');
       return;
     }
 
@@ -765,9 +755,9 @@ if (els.triggerDeleteBtn) {
         <p>請選擇要刪除的圖層：</p>
         <select id="modalKmlDeletePicker" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #ddd; margin-top: 5px;">
           <option value="" disabled selected>-- 請選擇要刪除的圖層 --</option>
-          ${optionsHtml}
+          ${options}
         </select>
-        <p style="color: #d32f2f; font-size: 12px; margin-top: 10px; font-weight: bold;">⚠️ 警告：刪除後 Firebase 上的資料與圖層設定將無法復原。</p>
+        <p style="color: #d32f2f; font-size: 12px; margin-top: 10px; font-weight: bold;">⚠️ 警告：刪除後資料將無法復原。</p>
       </div>`;
 
     const confirmDelete = await window.showConfirmationModal('刪除圖層', modalContent);
@@ -778,44 +768,8 @@ if (els.triggerDeleteBtn) {
       const selectedOpt = picker ? picker.options[picker.selectedIndex] : null;
 
       if (selectedId && selectedOpt && !selectedOpt.disabled) {
-        try {
-          Swal.fire({ title: '正在從 Firebase 刪除圖層...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-
-          // 1. 使用正確的 KmlCollection 參照直接刪除 Firebase 上的文件
-          await getKmlCollectionRef().doc(selectedId).delete();
-
-          // 2. 清除全域設定快取
-          if (window.globalAuditConfigs && window.globalAuditConfigs[selectedId]) {
-            delete window.globalAuditConfigs[selectedId];
-          }
-
-          // 3. 刪除對應的本地快取，強制下次重新抓取
-          localStorage.removeItem('kml_list_cache_data');
-          localStorage.removeItem(`kml_data_${selectedId}`);
-
-          // 4. 更新雲端同步時間戳（通知系統資料已變更，使其他快取失效）
-          const now = Date.now();
-          await db.collection('artifacts').doc(currentAppId).collection('public').doc('data')
-            .collection('metadata').doc('sync').set({ lastUpdate: now, lastUpdateTime: new Date(now).toLocaleString('zh-TW') }, { merge: true });
-
-          // 5. 重新載入下拉選單與畫面
-          if (typeof optimizedUpdateKmlLayerSelects === 'function') {
-            await optimizedUpdateKmlLayerSelects();
-          }
-
-          if (typeof window.clearAllKmlLayers === 'function') {
-            window.clearAllKmlLayers();
-          }
-
-          if (typeof forceMapRefresh === 'function') {
-            forceMapRefresh();
-          }
-
-          Swal.fire({ icon: 'success', title: '圖層已成功刪除', timer: 1200, showConfirmButton: false });
-
-        } catch (error) {
-          Swal.fire({ icon: 'error', title: '刪除失敗', text: error.message });
-        }
+        els.kmlLayerSelectDashboard.value = selectedId;
+        els.deleteSelectedKmlBtn.click();
       } else {
         window.showMessage?.('提示', '您未選擇有效的可刪除圖層，或無權限刪除該圖層。');
       }
