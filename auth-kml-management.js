@@ -221,48 +221,43 @@
           }
   
           // 清空並重新填充 DOM (防止 UI 閃爍)
-select.innerHTML = '<option value="">-- 請選擇 KML 圖層 --</option>';
-if (selectDashboard) selectDashboard.innerHTML = '<option value="">-- 請選擇 KML 圖層 --</option>';
+          select.innerHTML = '<option value="">-- 請選擇 KML 圖層 --</option>';
+          if (selectDashboard) selectDashboard.innerHTML = '<option value="">-- 請選擇 KML 圖層 --</option>';
+          
+          currentKmlLayers = []; 
+          
+          const currentUserEmail = auth.currentUser?.email;
+          const isOwner = (window.currentUserRole === 'owner');
 
-currentKmlLayers = []; 
+          layersToRender.forEach(layer => {
+              const kmlId = layer.id;
+              const kmlName = layer.name || `KML_${kmlId.substring(0, 8)}`;
+              const uploadedBy = layer.uploadedBy || '';
+              
+              const opt1 = createOption(kmlId, kmlName);
+              const opt2 = createOption(kmlId, kmlName);
+              
+              // 判斷當前使用者是否有權限刪除該圖層 (Owner 可全刪，Editor 只能刪自己上傳的)
+              const canDelete = isOwner || (window.currentUserRole === 'editor' && uploadedBy === currentUserEmail);
+              
+              if (!canDelete && selectDashboard) {
+                  opt2.disabled = true;
+                  opt2.style.color = '#999';
+                  opt2.textContent = `${kmlName} (無刪除權限)`;
+              }
 
-const currentUserEmail = auth.currentUser?.email;
-const isOwner = (window.currentUserRole === 'owner');
-
-layersToRender.forEach(layer => {
-    const kmlId = layer.id;
-    
-    // 【關鍵修正】取得原始名稱，並用正則表達式清除開頭所有重複的 KML_ / kml_
-    let rawName = layer.name || kmlId.substring(0, 8);
-    let cleanName = rawName.replace(/^(KML_)+/gi, ''); // 自動將多重 KML_ 清除為純名稱
-    const kmlName = `KML_${cleanName}`;               // 統一加上單一的 KML_ 前綴
-    
-    const uploadedBy = layer.uploadedBy || '';
-    
-    const opt1 = createOption(kmlId, kmlName);
-    const opt2 = createOption(kmlId, kmlName);
-    
-    // 判斷當前使用者是否有權限刪除該圖層 (Owner 可全刪，Editor 只能刪自己上傳的)
-    const canDelete = isOwner || (window.currentUserRole === 'editor' && uploadedBy === currentUserEmail);
-    
-    if (!canDelete && selectDashboard) {
-        opt2.disabled = true;
-        opt2.style.color = '#999';
-        opt2.textContent = `${kmlName} (無刪除權限)`;
-    }
-
-    select.appendChild(opt1);
-    if (selectDashboard) selectDashboard.appendChild(opt2);
-    
-    currentKmlLayers.push({ id: kmlId, name: kmlName, uploadedBy: uploadedBy });
-});
-
-if (currentKmlLayers.length > 0 && canEdit && deleteBtn) {
-    deleteBtn.disabled = false;
-}
-
-// 觸發釘選圖層載入
-tryLoadPinnedKmlLayerWhenReady();
+              select.appendChild(opt1);
+              if (selectDashboard) selectDashboard.appendChild(opt2);
+              
+              currentKmlLayers.push({ id: kmlId, name: kmlName, uploadedBy: uploadedBy });
+          });
+  
+          if (currentKmlLayers.length > 0 && canEdit && deleteBtn) {
+              deleteBtn.disabled = false;
+          }
+  
+          // 觸發釘選圖層載入
+          tryLoadPinnedKmlLayerWhenReady();
   
       } catch (error) {
           console.error("更新 KML 圖層列表時出錯:", error);
