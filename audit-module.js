@@ -1379,10 +1379,10 @@
                 // 2. 組立勾選的水印文字陣列
                 const textLines = [];
                 if (showPoint && pointName) {
-                    textLines.push(`點號: ${pointName}`);
+                    textLines.push(`${pointName}`);
                 }
                 if (showTime && photoTime) {
-                    textLines.push(`時間: ${photoTime}`);
+                    textLines.push(`${photoTime}`);
                 }
 
                 if (textLines.length === 0) {
@@ -1390,7 +1390,7 @@
                 }
 
                 // 3. 計算字型大小與邊距 (依自訂大小 baseFontSize 搭配照片寬度等比例縮放)
-                const baseFontSize = parseInt(customFontSize, 10) || 12;
+                const baseFontSize = parseInt(customFontSize, 10) || 20;
                 const scaleFactor = canvas.width / 1000; 
                 const fontSize = Math.max(baseFontSize, Math.round(baseFontSize * scaleFactor)); 
                 const padding = Math.max(6, Math.round(fontSize * 0.5));
