@@ -1641,7 +1641,7 @@
                     </div>
                     <div>
                         <label class="audit-form-label" style="font-weight: bold; display: block; margin-bottom: 6px;">3. 水印字體大小 (px)：</label>
-                        <input id="swal-wm-size" type="number" class="swal2-input audit-form-input" value="12" min="10" max="72" step="1" style="margin-top: 0; width: 100%; box-sizing: border-box;">
+                        <input id="swal-wm-size" type="number" class="swal2-input audit-form-input" value="20" min="10" max="72" step="1" style="margin-top: 0; width: 100%; box-sizing: border-box;">
                     </div>
                 </div>`,
             showCancelButton: true,
