@@ -1605,7 +1605,7 @@
     };
 
     // ---------------------------------------------------------
-    // 7-2. 打包 Firebase Storage 照片 (帶水印選單對話框)
+    // 7-2. 打包 Firebase Storage 照片 (水印預設不勾選版)
     // ---------------------------------------------------------
     window.downloadAuditPhotosZip = async function(kmlId) {
         if (typeof JSZip === 'undefined' || typeof saveAs === 'undefined') {
@@ -1614,7 +1614,7 @@
 
         const cleanLayerName = getLayerFolderName(kmlId, kmlId);
 
-        // 💡 點擊「下載照片」後，第一個被執行的就是這個 Swal.fire 水印對話框！
+        // 💡 點號與時間選項預設不勾選 (未加上 checked)
         const { value: watermarkSettings } = await Swal.fire({
             title: '📸 打包照片與水印設定',
             html: `
@@ -1623,11 +1623,11 @@
                         <label class="audit-form-label" style="font-weight: bold; display: block; margin-bottom: 6px;">1. 水印內容：</label>
                         <div style="display: flex; gap: 20px; align-items: center; padding: 2px 0;">
                             <label style="cursor: pointer; display: flex; align-items: center; gap: 6px;">
-                                <input type="checkbox" id="swal-wm-chk-point" checked style="width: 18px; height: 18px; cursor: pointer;">
+                                <input type="checkbox" id="swal-wm-chk-point" style="width: 18px; height: 18px; cursor: pointer;">
                                 <span>點號名稱 (例: NVA015)</span>
                             </label>
                             <label style="cursor: pointer; display: flex; align-items: center; gap: 6px;">
-                                <input type="checkbox" id="swal-wm-chk-time" checked style="width: 18px; height: 18px; cursor: pointer;">
+                                <input type="checkbox" id="swal-wm-chk-time" style="width: 18px; height: 18px; cursor: pointer;">
                                 <span>拍攝/上傳時間</span>
                             </label>
                         </div>
@@ -1641,7 +1641,7 @@
                     </div>
                     <div>
                         <label class="audit-form-label" style="font-weight: bold; display: block; margin-bottom: 6px;">3. 水印字體大小 (px)：</label>
-                        <input id="swal-wm-size" type="number" class="swal2-input audit-form-input" value="20" min="10" max="72" step="1" style="margin-top: 0; width: 100%; box-sizing: border-box;">
+                        <input id="swal-wm-size" type="number" class="swal2-input audit-form-input" value="20" min="10" max="100" step="1" style="margin-top: 0; width: 100%; box-sizing: border-box;">
                     </div>
                 </div>`,
             showCancelButton: true,
@@ -1650,8 +1650,8 @@
             focusConfirm: false,
             preConfirm: () => {
                 const fontSize = parseInt(document.getElementById('swal-wm-size').value, 10);
-                if (!fontSize || fontSize < 10 || fontSize > 72) {
-                    Swal.showValidationMessage('字體大小請輸入介於 10 到 72 之間的數字！');
+                if (!fontSize || fontSize < 10 || fontSize > 100) {
+                    Swal.showValidationMessage('字體大小請輸入介於 10 到 100 之間的數字！');
                     return false;
                 }
                 return {
@@ -1663,7 +1663,7 @@
             }
         });
 
-        if (!watermarkSettings) return; // 使用者點選取消
+        if (!watermarkSettings) return;
 
         Swal.fire({
             title: '正在搜尋 Storage 照片...',
@@ -1683,7 +1683,7 @@
             }
 
             const items = listResult.items;
-            if (progressEl) progressEl.textContent = `找到 ${items.length} 個檔案，準備下載並處理水印...`;
+            if (progressEl) progressEl.textContent = `找到 ${items.length} 個檔案，準備下載並處理...`;
 
             const zip = new JSZip();
             const rootFolder = zip.folder(cleanLayerName);
@@ -1707,6 +1707,7 @@
                         
                         let imageBlob = await response.blob();
 
+                        // 至少有勾選一項時才壓製水印，否則直接打包原圖
                         if (watermarkSettings.showPoint || watermarkSettings.showTime) {
                             const fileName = fileRef.name;
                             const parsedPointKey = fileName.replace(/_\d+\.[^/.]+$/, '').trim();
@@ -1745,14 +1746,14 @@
             }
 
             if (completedCount - failCount === 0) throw new Error('所有檔案下載皆失敗，請確認網路連線或 CORS 設定。');
-            if (progressEl) progressEl.textContent = '檔案下載與水印壓製完成，正在壓縮 ZIP...';
+            if (progressEl) progressEl.textContent = '檔案下載與壓縮完成，正在匯出 ZIP...';
 
             saveAs(await zip.generateAsync({ type: 'blob' }), `${cleanLayerName}_Storage照片總集.zip`);
 
             Swal.fire({
                 icon: failCount > 0 ? 'warning' : 'success',
                 title: '打包下載完成！',
-                text: failCount > 0 ? `成功打包 ${completedCount - failCount} 個檔案，失敗 ${failCount} 個` : `已成功壓製水印並下載 ${completedCount} 個照片檔案與 CSV 清冊`,
+                text: failCount > 0 ? `成功打包 ${completedCount - failCount} 個檔案，失敗 ${failCount} 個` : `已成功下載 ${completedCount} 個照片檔案與 CSV 清冊`,
                 timer: 2500,
                 showConfirmButton: false
             });
