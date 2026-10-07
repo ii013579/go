@@ -1329,7 +1329,7 @@
         });
     };
           
-// ---------------------------------------------------------
+    // ---------------------------------------------------------
     // 7-1. 水印壓製工具函數 (讀取 Storage 上傳時間，支援動態字體與位置)
     // ---------------------------------------------------------
     async function getStoragePhotoTime(fileRef, fallbackRecordTime = "") {
@@ -1389,9 +1389,9 @@
                     return canvas.toBlob(blob => resolve(blob || imageBlob), 'image/jpeg', 0.85);
                 }
 
-                // 3. 計算字型大小與邊距 (依自訂大小 baseFontSize 搭配照片寬度縮放)
+                // 3. 計算字型大小與邊距 (依自訂大小 baseFontSize 搭配照片寬度等比例縮放)
                 const baseFontSize = parseInt(customFontSize, 10) || 12;
-                const scaleFactor = canvas.width / 1000; // 以 1000px 寬度為基準比例縮放
+                const scaleFactor = canvas.width / 1000; 
                 const fontSize = Math.max(baseFontSize, Math.round(baseFontSize * scaleFactor)); 
                 const padding = Math.max(6, Math.round(fontSize * 0.5));
                 const lineHeight = Math.round(fontSize * 1.3);
@@ -1448,91 +1448,76 @@
     }
 
     // ---------------------------------------------------------
-    // 7-2. 打包 Firebase Storage 照片 (帶 console 除錯訊息版)
+    // 7-2. 打包 Firebase Storage 照片 (帶水印選單對話框)
     // ---------------------------------------------------------
     window.downloadAuditPhotosZip = async function(kmlId) {
-        console.log("開始執行 downloadAuditPhotosZip, kmlId:", kmlId);
-
         if (typeof JSZip === 'undefined' || typeof saveAs === 'undefined') {
-            console.error("缺少 JSZip 或 FileSaver 套件！");
             return Swal.fire('套件缺失', '請確保 HTML 已引入 JSZip 與 FileSaver 套件！', 'error');
         }
 
-        const role = getUserRole();
-        console.log("當前使用者 Role:", role);
-
-        // 如果要先測試，可以將權限檢查註解掉
-        if (!['owner', 'editor', 'user', 'admin'].includes(role)) {
-            return Swal.fire('權限不足', `您的角色 (${role}) 無法下載清查照片！`, 'warning');
-        }
-    
         const cleanLayerName = getLayerFolderName(kmlId, kmlId);
-        console.log("解析圖層名稱為:", cleanLayerName);
+
+        // 💡 點擊「下載照片」後，第一個被執行的就是這個 Swal.fire 水印對話框！
+        const { value: watermarkSettings } = await Swal.fire({
+            title: '📸 打包照片與水印設定',
+            html: `
+                <div style="text-align: left; font-size: 14px;" class="audit-form-container">
+                    <div style="margin-bottom: 12px;">
+                        <label class="audit-form-label" style="font-weight: bold; display: block; margin-bottom: 6px;">1. 水印內容：</label>
+                        <div style="display: flex; gap: 20px; align-items: center; padding: 2px 0;">
+                            <label style="cursor: pointer; display: flex; align-items: center; gap: 6px;">
+                                <input type="checkbox" id="swal-wm-chk-point" checked style="width: 18px; height: 18px; cursor: pointer;">
+                                <span>點號名稱 (例: NVA015)</span>
+                            </label>
+                            <label style="cursor: pointer; display: flex; align-items: center; gap: 6px;">
+                                <input type="checkbox" id="swal-wm-chk-time" checked style="width: 18px; height: 18px; cursor: pointer;">
+                                <span>拍攝/上傳時間</span>
+                            </label>
+                        </div>
+                    </div>
+                    <div style="margin-bottom: 12px;">
+                        <label class="audit-form-label" style="font-weight: bold; display: block; margin-bottom: 6px;">2. 水印位置：</label>
+                        <select id="swal-wm-pos" class="swal2-input audit-form-select" style="margin-top: 0; width: 100%;">
+                            <option value="bottom-right" selected>↘ 靠右下角</option>
+                            <option value="bottom-left">↙ 靠左下角</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="audit-form-label" style="font-weight: bold; display: block; margin-bottom: 6px;">3. 水印字體大小 (px)：</label>
+                        <input id="swal-wm-size" type="number" class="swal2-input audit-form-input" value="12" min="10" max="72" step="1" style="margin-top: 0; width: 100%; box-sizing: border-box;">
+                    </div>
+                </div>`,
+            showCancelButton: true,
+            confirmButtonText: '開始打包下載',
+            cancelButtonText: '取消',
+            focusConfirm: false,
+            preConfirm: () => {
+                const fontSize = parseInt(document.getElementById('swal-wm-size').value, 10);
+                if (!fontSize || fontSize < 10 || fontSize > 72) {
+                    Swal.showValidationMessage('字體大小請輸入介於 10 到 72 之間的數字！');
+                    return false;
+                }
+                return {
+                    showPoint: document.getElementById('swal-wm-chk-point').checked,
+                    showTime: document.getElementById('swal-wm-chk-time').checked,
+                    position: document.getElementById('swal-wm-pos').value,
+                    fontSize: fontSize
+                };
+            }
+        });
+
+        if (!watermarkSettings) return; // 使用者點選取消
+
+        Swal.fire({
+            title: '正在搜尋 Storage 照片...',
+            html: `<div id="zip-progress-text" style="font-size:14px; margin-top:10px;">請稍候...</div>`,
+            allowOutsideClick: false,
+            didOpen: () => Swal.showLoading()
+        });
+
+        const progressEl = document.getElementById('zip-progress-text');
 
         try {
-            // 跳出水印對話框
-            const { value: watermarkSettings } = await Swal.fire({
-                title: '📸 打包照片與水印設定',
-                html: `
-                    <div style="text-align: left; font-size: 14px;" class="audit-form-container">
-                        <div style="margin-bottom: 12px;">
-                            <label class="audit-form-label" style="font-weight: bold; display: block; margin-bottom: 6px;">1. 水印內容：</label>
-                            <div style="display: flex; gap: 20px; align-items: center; padding: 2px 0;">
-                                <label style="cursor: pointer; display: flex; align-items: center; gap: 6px;">
-                                    <input type="checkbox" id="swal-wm-chk-point" checked style="width: 18px; height: 18px; cursor: pointer;">
-                                    <span>點號名稱 (例: NVA015)</span>
-                                </label>
-                                <label style="cursor: pointer; display: flex; align-items: center; gap: 6px;">
-                                    <input type="checkbox" id="swal-wm-chk-time" checked style="width: 18px; height: 18px; cursor: pointer;">
-                                    <span>拍攝/上傳時間</span>
-                                </label>
-                            </div>
-                        </div>
-                        <div style="margin-bottom: 12px;">
-                            <label class="audit-form-label" style="font-weight: bold; display: block; margin-bottom: 6px;">2. 水印位置：</label>
-                            <select id="swal-wm-pos" class="swal2-input audit-form-select" style="margin-top: 0; width: 100%;">
-                                <option value="bottom-right" selected>↘ 靠右下角</option>
-                                <option value="bottom-left">↙ 靠左下角</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label class="audit-form-label" style="font-weight: bold; display: block; margin-bottom: 6px;">3. 水印字體大小 (px)：</label>
-                            <input id="swal-wm-size" type="number" class="swal2-input audit-form-input" value="12" min="10" max="72" step="1" style="margin-top: 0; width: 100%; box-sizing: border-box;">
-                        </div>
-                    </div>`,
-                showCancelButton: true,
-                confirmButtonText: '開始打包下載',
-                cancelButtonText: '取消',
-                focusConfirm: false,
-                preConfirm: () => {
-                    const fontSize = parseInt(document.getElementById('swal-wm-size').value, 10);
-                    if (!fontSize || fontSize < 10 || fontSize > 72) {
-                        Swal.showValidationMessage('字體大小請輸入介於 10 到 72 之間的數字！');
-                        return false;
-                    }
-                    return {
-                        showPoint: document.getElementById('swal-wm-chk-point').checked,
-                        showTime: document.getElementById('swal-wm-chk-time').checked,
-                        position: document.getElementById('swal-wm-pos').value,
-                        fontSize: fontSize
-                    };
-                }
-            });
-
-            if (!watermarkSettings) {
-                console.log("使用者取消了水印設定視窗");
-                return;
-            }
-
-            Swal.fire({
-                title: '正在搜尋 Storage 照片...',
-                html: `<div id="zip-progress-text" style="font-size:14px; margin-top:10px;">請稍候...</div>`,
-                allowOutsideClick: false,
-                didOpen: () => Swal.showLoading()
-            });
-
-            const progressEl = document.getElementById('zip-progress-text');
-
             const storageFolderPath = `${STORAGE_ROOT}/${cleanLayerName}`;
             const listResult = await firebase.storage().ref(storageFolderPath).listAll();
 
@@ -1595,7 +1580,6 @@
                         rootFolder.file(fileRef.name, imageBlob);
                     } catch (err) {
                         failCount++;
-                        console.error("下載/加水印失敗檔案:", fileRef.name, err);
                     } finally {
                         completedCount++;
                         if (progressEl) progressEl.textContent = `打包進度: (${completedCount}/${items.length})`;
@@ -1617,7 +1601,6 @@
             });
 
         } catch (error) {
-            console.error("打包過程發生錯誤:", error);
             Swal.fire({ icon: 'error', title: '打包失敗', text: error.message || '發生未知錯誤' });
         }
     };
