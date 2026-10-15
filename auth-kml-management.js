@@ -712,18 +712,48 @@ if (els.triggerUploadBtn) {
 
 if (els.hiddenKmlFileInput) {
   els.hiddenKmlFileInput.addEventListener('change', async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
 
-    const confirmUpload = await window.showConfirmationModal(
-      '確認上傳',
-      `您選擇了檔案：<br><strong style="color: red;">${file.name}</strong><br>確定要執行上傳嗎？`
-    );
+    // 預設圖層名稱：若單檔用該檔名，若多檔用第一個檔名（或自訂合併名稱）
+    const defaultLayerName = files.length === 1 
+      ? files[0].name 
+      : `${files[0].name} 等 ${files.length} 個檔案合併`;
+
+    // 將所有選取的檔案名稱轉為 HTML 清單
+    const fileNamesHtml = Array.from(files)
+      .map(file => `<strong style="color: red;">${file.name}</strong>`)
+      .join('<br>');
+
+    // 組合包含文字輸入框的彈窗內容 HTML
+    const modalContent = `
+      <div style="text-align: left; margin-top: 10px;">
+        <p>您選擇了以下 ${files.length} 個檔案：<br>${fileNamesHtml}</p>
+        <div style="margin-top: 15px;">
+          <label style="display: block; font-size: 13px; font-weight: bold; margin-bottom: 5px; color: #333;">自訂圖層名稱（留空則使用預設名稱）：</label>
+          <input type="text" id="modalCustomLayerName" value="${defaultLayerName}" style="width: 100%; padding: 8px; box-sizing: border-box; border-radius: 4px; border: 1px solid #ccc; font-size: 14px;" />
+        </div>
+        <p style="margin-top: 10px; font-size: 13px;">確定要執行上傳嗎？</p>
+      </div>`;
+
+    const confirmUpload = await window.showConfirmationModal('確認上傳', modalContent);
 
     if (confirmUpload) {
+      // 取得使用者輸入的自訂名稱
+      const customInput = document.getElementById('modalCustomLayerName');
+      const finalLayerName = customInput && customInput.value.trim() !== '' 
+        ? customInput.value.trim() 
+        : defaultLayerName;
+
+      // 將自訂名稱暫存到 DOM 元素或全域變數，供後續上傳按鈕點擊時讀取
+      els.hiddenKmlFileInput.dataset.customLayerName = finalLayerName;
+
       els.uploadKmlSubmitBtnDashboard.click();
     } else {
       els.hiddenKmlFileInput.value = '';
+      if (els.selectedKmlFileNameDashboard) {
+        els.selectedKmlFileNameDashboard.textContent = '尚未選擇檔案';
+      }
     }
   });
 }
