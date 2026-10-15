@@ -1,5 +1,5 @@
 ﻿/**
- * audit-module.js - 清查與修改覆蓋整合優化版 (v3.25 介面精簡優化版)
+ * audit-module.js - 清查與修改覆蓋整合優化版 (v3.26 重複點名阻擋優化版)
  */
 (function() {
     'use strict';
@@ -367,7 +367,9 @@
                 <button onclick="window.toggleAuditedPointsVisibility()" 
                         title="${isAuditedVisible ? '隱藏已清查黃點' : '顯示已清查黃點'}"
                         style="background: #ffffff; color: #333; border: 2px solid rgba(0,0,0,0.2); width: 34px; height: 34px; border-radius: 4px; font-weight: bold; font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 1px 5px rgba(0,0,0,0.4); pointer-events: auto; padding: 0; position: relative;">
-                    <span style="display: inline-block; width: 14px; height: 14px; background: #f1c40f; border-radius: 50%; border: 1.5px solid #fff; box-shadow: 0 0 2px rgba(0,0,0,0.3);"></span>
+                    <span style="display: flex; align-items: center; justify-content: center; width: 16px; height: 16px; background: #ffffff; border-radius: 50%; box-shadow: 0 0 2px rgba(0,0,0,0.4);">
+                        <span style="display: block; width: 10px; height: 10px; background: #f1c40f; border-radius: 50%;"></span>
+                    </span>
                     ${!isAuditedVisible ? '<span style="position: absolute; color: #e74c3c; font-size: 18px; font-weight: 900; line-height: 1; text-shadow: 0 0 2px #fff;">❌</span>' : ''}
                 </button>
             `;
@@ -398,7 +400,7 @@
                 const safePointKey = safeEscape(pointKey);
                 const isAudited = (window.auditLayersState[kmlId] || {})[pointKey] !== undefined;
 
-                const btnBaseStyle = `color: white; border: none; padding: 6px 16px; border-radius: 50px; font-weight: bold; font-size: 13px; box-shadow: 0 2px 8px rgba(0,0,0,0.3); cursor: pointer; outline: none; line-height: 1.4; white-space: nowrap;`;
+                const btnBaseStyle = `color: white; border: none; padding: 6px 14px; border-radius: 4px; font-weight: bold; font-size: 13px; box-shadow: 0 1px 3px rgba(0,0,0,0.3); cursor: pointer; outline: none; line-height: 1.4; white-space: nowrap;`;
 
                 const btnHtml = isAudited ? `
                     <button onclick="window.viewAuditDetailOnly('${safePointKey}')" style="background: #e91e63; ${btnBaseStyle}">🔍 查看</button>
@@ -409,7 +411,7 @@
 
                 bottomControl._container.style.display = 'block';
                 bottomControl._container.innerHTML = `
-                    <div style="text-align: center; pointer-events: auto; display: flex; gap: 6px; align-items: center; justify-content: center; background: rgba(0,0,0,0.8); padding: 6px 14px; border-radius: 50px; backdrop-filter: blur(5px); box-shadow: 0 4px 15px rgba(0,0,0,0.4);">
+                    <div style="text-align: center; pointer-events: auto; display: flex; gap: 6px; align-items: center; justify-content: center; background: rgba(255, 255, 255, 0.95); border: 2px solid rgba(0,0,0,0.2); padding: 5px 10px; border-radius: 4px; box-shadow: 0 1px 5px rgba(0,0,0,0.4);">
                         ${btnHtml}
                     </div>`;
             } else {
@@ -701,7 +703,7 @@
     };
     
     // =========================================================
-    // 5-2. 動態渲染獨立「新增點位」按鈕
+    // 5-2. 動態渲染獨立「新增點位」按鈕 (取消綠色底色，改為白底黑字)
     // =========================================================
     (function renderStandaloneAddButton() {
         let btn = document.getElementById('btn-standalone-add-point');
@@ -712,11 +714,12 @@
             document.body.appendChild(btn);
         }
     
+        // 🔴 background 改為純白/半透明白，color 改為黑色 (#2c3e50)
         btn.setAttribute('style', `
             position: fixed !important; bottom: 20px !important; right: 15px !important; z-index: 4000 !important;
-            background-color: #2ecc71 !important; color: #ffffff !important; border: none !important;
-            padding: 8px 20px !important; border-radius: 25px !important; font-weight: bold !important; font-size: 15px !important;
-            box-shadow: 0 3px 10px rgba(0,0,0,0.3) !important; cursor: pointer !important; display: none !important;
+            background-color: rgba(255, 255, 255, 0.95) !important; color: #2c3e50 !important; border: 2px solid rgba(0,0,0,0.2) !important;
+            padding: 5px 10px !important; border-radius: 4px !important; font-weight: bold !important; font-size: 12px !important;
+            box-shadow: 0 1px 5px rgba(0,0,0,0.4) !important; cursor: pointer !important; display: none !important;
             align-items: center !important; justify-content: center !important; gap: 6px !important; outline: none !important;
             line-height: 1.4 !important; white-space: nowrap !important;
         `);
@@ -728,12 +731,6 @@
     
         syncAuditButtonVisibility();
     })();
-    
-    document.addEventListener('change', (e) => {
-        if (e.target?.id === 'kmlLayerSelect') {
-            setTimeout(syncAuditButtonVisibility, 100);
-        }
-    });
     
     // =========================================================
     // 5-3. 彈窗 UI 介面與照片預覽
@@ -852,6 +849,18 @@
                 }
     
                 if (!name) return Swal.showValidationMessage('請填寫點位名稱！');
+
+                // 🟢【核心修復：攔截重複點名】不關閉彈窗，保留照片與輸入內容供使用者修正
+                const ns = window.mapNamespace;
+                const currentRecords = window.auditLayersState?.[kmlId] || {};
+                if (!isEditMode || (isEditMode && defaultName !== name)) {
+                    const isDuplicateInKml = ns?.allKmlFeatures?.some(f => getPointKey(f.properties) === name);
+                    const isDuplicateInState = !!currentRecords[name];
+                    if (isDuplicateInKml || isDuplicateInState) {
+                        return Swal.showValidationMessage(`點名「${name}」已存在，請修改點位名稱！`);
+                    }
+                }
+
                 if (photosArray.length < maxPhotos) return Swal.showValidationMessage(`請上傳完整 ${maxPhotos} 張現場照片！`);
     
                 return {
@@ -883,21 +892,6 @@
         if (isNaN(numLat) || isNaN(numLng)) return Swal.fire('錯誤', '請提供有效的經緯度座標', 'error');
     
         const ns = window.mapNamespace;
-        const currentRecords = window.auditLayersState?.[kmlId] || {};
-    
-        if (!isEditMode || (isEditMode && oldPointKey !== trimmedPointKey)) {
-            const isDuplicateInKml = ns?.allKmlFeatures?.some(f => getPointKey(f.properties) === trimmedPointKey);
-            const isDuplicateInState = !!currentRecords[trimmedPointKey];
-    
-            if (isDuplicateInKml || isDuplicateInState) {
-                return Swal.fire({
-                    icon: 'warning',
-                    title: '點位名稱重複',
-                    text: `點名「${trimmedPointKey}」已存在！請直接修改點名後重新送出。`,
-                    confirmButtonText: '返回修改點名'
-                });
-            }
-        }
     
         Swal.fire({ title: '正在處理並儲存資料...', didOpen: () => Swal.showLoading(), allowOutsideClick: false });
     
@@ -1346,7 +1340,7 @@
                 const data = doc.data();
                 window.globalAuditConfigs[doc.id] = data; 
                 
-                // 修正：取消 isAuditing 條件限制，所有人與所有圖層均即時監聽新增點位
+                // 所有人與所有圖層均即時監聽新增點位
                 startAuditDataListener(doc.id);
             });
             updateKmlSelectUI();
@@ -1365,7 +1359,6 @@
             .onSnapshot(snapshot => {
                 const updates = {};
                 snapshot.forEach(doc => {
-                    // doc.id 即為 {pointKey}
                     updates[doc.id] = doc.data();
                 });
                 
@@ -1377,7 +1370,6 @@
                     if (!Array.isArray(ns.allKmlFeatures)) ns.allKmlFeatures = [];
     
                     Object.entries(updates).forEach(([pointKey, data]) => {
-                        // 判斷是否為新增自訂點位且具備經緯度座標
                         if ((data.isCustomPoint || data.deviceStatus === "新增") && data.lat && data.lng) {
                             const numLat = parseFloat(data.lat);
                             const numLng = parseFloat(data.lng);
@@ -1405,8 +1397,7 @@
                                     fillOpacity: 0.85
                                 }
                             };
-    
-                            // 避免重複展點，若已存在該 pointKey 則更新，否則加入
+
                             const idx = ns.allKmlFeatures.findIndex(f => getPointKey(f.properties) === pointKey);
                             if (idx >= 0) {
                                 ns.allKmlFeatures[idx] = customFeature;
@@ -1434,7 +1425,6 @@
         const select = document.getElementById('kmlLayerSelect');
         if (!select) return;
 
-        // 檢查目前使用者是否具備查看/參與清查的權限
         const hasPermission = (typeof canSeeAuditColors === 'function') ? canSeeAuditColors() : false;
 
         Array.from(select.options).forEach(opt => {
@@ -1443,7 +1433,6 @@
             const baseName = opt.getAttribute('data-basename') || opt.textContent.split(' (')[0];
             if (!opt.getAttribute('data-basename')) opt.setAttribute('data-basename', baseName);
 
-            // 只有當「具備權限」且「圖層開啟清查」時，才顯示清查標籤
             if (hasPermission && config?.isAuditing) {
                 opt.textContent = `${baseName} (清查中:${config.targetPhotos}張)`;
             } else {
@@ -1496,12 +1485,11 @@
             yellowDotControl = new YellowDotControl();
             yellowDotControl.addTo(map);
 
-            // 3. 📊 清查進度條 Control (放置於右上角縮放鈕左側紫框位置)
+            // 3. 📊 清查進度條 Control (放置於右上角縮放鈕左側位置)
             const ProgressControl = L.Control.extend({
                 options: { position: 'topright' },
                 onAdd: function() {
                     this._container = L.DomUtil.create('div', 'leaflet-control-audit-progress');
-                    // 設定 absolute 定位：對齊頂端 10px，並往左推開 55px 避開 + / - 縮放按鈕
                     this._container.style.cssText = `
                         position: absolute;
                         right: 55px;
