@@ -777,49 +777,81 @@ if (els.triggerDeleteBtn) {
   });
 }
 
-// 上傳 KML 處理 (與 Firebase 對接)
+// 上傳 KML 處理 (支援多檔案選擇並合併為同一個圖層)
 if (els.uploadKmlSubmitBtnDashboard) {
   els.uploadKmlSubmitBtnDashboard.addEventListener('click', async () => {
-    const file = els.hiddenKmlFileInput?.files?.[0];
-    if (!file || !auth.currentUser) return;
+    const files = els.hiddenKmlFileInput?.files;
+    if (!files || files.length === 0 || !auth.currentUser) return;
 
     if (window.currentUserRole !== 'owner' && window.currentUserRole !== 'editor') {
       window.showMessage?.('錯誤', '您沒有權限上傳 KML。');
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = async () => {
-      try {
-        const geojson = toGeoJSON.kml(new DOMParser().parseFromString(reader.result, 'text/xml'));
-        const kmlLayersCollectionRef = getKmlCollectionRef();
-        const existingKmlQuery = await kmlLayersCollectionRef.where('name', '==', file.name).get();
-        let kmlLayerDocRef = existingKmlQuery.empty ? kmlLayersCollectionRef.doc() : existingKmlQuery.docs[0].ref;
+    try {
+      const mergedFeatures = [];
+      const primaryFileName = files[0].name;
 
-        await kmlLayerDocRef.set({
-          name: file.name,
-          uploadTime: firebase.firestore.FieldValue.serverTimestamp(),
-          uploadedBy: auth.currentUser.email,
-          uploadedByRole: window.currentUserRole,
-          geojson: JSON.stringify(geojson)
-        }, { merge: true });
+      // 依序讀取並解析每一個檔案
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        
+        // 將原本的 FileReader 包裝成 Promise 讀取
+        const fileText = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = (e) => resolve(e.target.result);
+          reader.onerror = (err) => reject(err);
+          reader.readAsText(file);
+        });
 
-        const now = Date.now();
-        await db.collection('artifacts').doc(appId).collection('public').doc('data')
-          .collection('metadata').doc('sync').set({ lastUpdate: now, lastUpdateTime: new Date(now).toLocaleString('zh-TW') }, { merge: true });
+        // 使用原本就有的轉 JSON 邏輯解析
+        const dom = new DOMParser().parseFromString(fileText, 'text/xml');
+        const geojson = toGeoJSON.kml(dom);
 
-        localStorage.removeItem('kml_list_cache_data');
-        localStorage.removeItem(`kml_data_${kmlLayerDocRef.id}`);
-
-        window.showMessage?.('成功', `KML "${file.name}" 已處理成功。`);
-        await optimizedUpdateKmlLayerSelects();
-        updatePinButtonState();
-        els.hiddenKmlFileInput.value = '';
-      } catch (error) {
-        window.showMessage?.('錯誤', error.message);
+        // 收集所有特徵
+        if (geojson && Array.isArray(geojson.features)) {
+          mergedFeatures.push(...geojson.features);
+        }
       }
-    };
-    reader.readAsText(file);
+
+      // 組合出合併後的 FeatureCollection
+      const combinedGeoJson = {
+        type: "FeatureCollection",
+        features: mergedFeatures
+      };
+
+      // 決定圖層名稱（多檔時自動命名，單檔維持原檔名）
+      const layerName = files.length > 1 
+        ? `${primaryFileName} 等 ${files.length} 個檔案合併` 
+        : primaryFileName;
+
+      const kmlLayersCollectionRef = getKmlCollectionRef();
+      const existingKmlQuery = await kmlLayersCollectionRef.where('name', '==', layerName).get();
+      let kmlLayerDocRef = existingKmlQuery.empty ? kmlLayersCollectionRef.doc() : existingKmlQuery.docs[0].ref;
+
+      // 寫入 Firestore
+      await kmlLayerDocRef.set({
+        name: layerName,
+        uploadTime: firebase.firestore.FieldValue.serverTimestamp(),
+        uploadedBy: auth.currentUser.email,
+        uploadedByRole: window.currentUserRole,
+        geojson: JSON.stringify(combinedGeoJson)
+      }, { merge: true });
+
+      const now = Date.now();
+      await db.collection('artifacts').doc(appId).collection('public').doc('data')
+        .collection('metadata').doc('sync').set({ lastUpdate: now, lastUpdateTime: new Date(now).toLocaleString('zh-TW') }, { merge: true });
+
+      localStorage.removeItem('kml_list_cache_data');
+      localStorage.removeItem(`kml_data_${kmlLayerDocRef.id}`);
+
+      window.showMessage?.('成功', `已成功合併並上傳 ${files.length} 個檔案至圖層 "${layerName}"。`);
+      await optimizedUpdateKmlLayerSelects();
+      updatePinButtonState();
+      els.hiddenKmlFileInput.value = '';
+    } catch (error) {
+      window.showMessage?.('錯誤', error.message);
+    }
   });
 }
 
