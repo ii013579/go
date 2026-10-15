@@ -1262,7 +1262,6 @@
             return Swal.fire('提示', '無法辨識點位名稱！', 'warning');
         }
 
-        // 優先讀取前端快取的記憶體狀態，若無則退回 layerProps
         const record = window.auditLayersState?.[kmlId]?.[pointKey] || layerProps;
 
         if (!record || (!record.deviceStatus && !record.status && !record.photos)) {
@@ -1278,13 +1277,12 @@
         if (photos.length > 0) {
             photos.forEach((url, idx) => {
                 const safeUrl = safeEscape(url);
-                const encodedUrl = encodeURI(url);
                 photoHtml += `
                     <div class="audit-photo-item-editor">
-                        <div class="audit-photo-box-editor readonly-clickable" onclick="window.open('${encodedUrl}', '_blank')" title="點擊檢視原圖">
+                        <div class="audit-photo-box-editor readonly-clickable" onclick="window.open('${safeUrl}', '_blank')" title="點擊檢視原圖">
                             <img src="${safeUrl}" class="audit-photo-preview-img">
                         </div>
-                        <div class="audit-photo-tag-editor" onclick="window.open('${encodedUrl}', '_blank')" title="點擊檢視原圖">
+                        <div class="audit-photo-tag-editor" onclick="window.open('${safeUrl}', '_blank')" title="點擊檢視原圖">
                             <span>🖼️</span> 檢視照片 ${idx + 1}
                         </div>
                     </div>`;
@@ -1297,6 +1295,8 @@
             title: `查看清查紀錄：${safeEscape(pointKey)}`,
             html: `
                 <div class="audit-form-container">
+                    
+                    <!-- 1. 設備狀態 (唯讀下拉選單) -->
                     <div class="audit-form-group-inline">
                         <label class="audit-form-label">設備狀態</label>
                         <select class="swal2-input audit-form-select" disabled>
@@ -1304,6 +1304,7 @@
                         </select>
                     </div>
 
+                    <!-- 2. 現場照片 (與編輯框樣式相同的外框與外觀) -->
                     <div class="audit-form-group">
                         <label class="audit-form-label">現場照片 (共 ${photos.length} 張)</label>
                         <div class="audit-photo-grid-editor">
@@ -1311,15 +1312,18 @@
                         </div>
                     </div>
 
+                    <!-- 3. 敘述 (唯讀輸入框) -->
                     <div class="audit-form-group">
                         <label class="audit-form-label">敘述 <span class="optional">(選填)</span></label>
                         <input type="text" class="swal2-input audit-form-input" value="${safeEscape(description)}" readonly placeholder="無敘述">
                     </div>
 
+                    <!-- 4. 備註事項 (唯讀文字框) -->
                     <div class="audit-form-group">
                         <label class="audit-form-label">備註事項 <span class="optional">(選填)</span></label>
                         <textarea class="swal2-textarea audit-form-textarea" readonly placeholder="無備註事項">${safeEscape(note)}</textarea>
                     </div>
+
                 </div>`,
             confirmButtonText: '關閉',
             confirmButtonColor: '#34495e',
