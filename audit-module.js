@@ -1,5 +1,5 @@
 ﻿/**
- * audit-module.js - 清查與修改覆蓋整合優化版 (v4.1 完整修復版)
+ * audit-module.js - 清查與修改覆蓋整合優化版 (v3.57 效能優化與 ZIP 整合 CSV 版)
  */
 (function() {
     'use strict';
@@ -18,7 +18,7 @@
     const APP_PATH = 'artifacts/kmldata-d22fb/public/data/kmlLayers';
     const STORAGE_ROOT = 'kmldata-d22fb/storage';
 
-    // 全域安全轉義工具 (防止外部呼叫 safeEscape 報錯)
+    // 全域安全轉義工具
     function safeEscape(str) {
         if (str == null) return '';
         if (typeof str !== 'string') str = String(str);
@@ -27,9 +27,6 @@
     window.safeEscape = safeEscape;
     window.escapeHtml = safeEscape;
 
-    // ---------------------------------------------------------
-    // 共用輔助函式與權限判定
-    // ---------------------------------------------------------
     function getUserRole() {
         try {
             return (window.currentUserData?.role || window.currentUserRole || window.userRole || 
@@ -106,7 +103,7 @@
     };
 
     // ---------------------------------------------------------
-    // 1. 樣式攔截與重繪 (修復陣列污染、未清查點更新與 DOM 顯隱問題)
+    // 1. 樣式攔截與重繪
     // ---------------------------------------------------------
     (function hookAddGeoJsonLayers() {
         if (window.addGeoJsonLayers && window.addGeoJsonLayers.__isHooked) return;
@@ -117,7 +114,6 @@
             const ns = window.mapNamespace;
             const kmlId = ns?.currentKmlLayerId || window.currentActiveKmlId;
 
-            // 複製傳入陣列，避免修改到原始 features 造成資料重複污染
             let processingFeatures = Array.isArray(features) ? [...features] : features;
 
             if (kmlId && Array.isArray(processingFeatures)) {
@@ -207,7 +203,6 @@
                     }
 
                     if (props.isAudited) {
-                        // 已清查點 (黃點) 控制
                         layer.options.interactive = isAuditedVisible;
                         if (typeof layer.setStyle === 'function') {
                             layer.setStyle({
@@ -220,7 +215,6 @@
                             });
                         }
                     } else {
-                        // 未清查點 (藍點) 控制 - 補上明確更新
                         layer.options.interactive = true;
                         if (typeof layer.setStyle === 'function') {
                             layer.setStyle({
@@ -270,7 +264,7 @@
     window.forceMapRefresh = forceMapRefresh;
 
     // ---------------------------------------------------------
-    // 2. 底部控制按鈕與右上角元件
+    // 2. 底部控制按鈕與元件
     // ---------------------------------------------------------
     function updateBottomBtnState() {
         const kmlId = window.mapNamespace?.currentKmlLayerId || window.currentActiveKmlId;
@@ -284,7 +278,6 @@
             return;
         }
 
-        // 1. 黃點切換按鈕
         if (yellowDotControl?._container) {
             const isAuditedVisible = window.showAuditedPoints !== false;
             yellowDotControl._container.style.display = 'block';
@@ -297,7 +290,6 @@
                 </button>`;
         }
 
-        // 2. 清查進度條
         if (progressControl?._container) {
             const progress = window.getAuditProgress();
             if (progress) {
@@ -311,7 +303,6 @@
             }
         }
 
-        // 3. 底部點位操作按鈕
         if (bottomControl?._container) {
             const active = window.currentSelectedPoint;
             if (active) {
@@ -322,7 +313,7 @@
 
                 const btnHtml = isAudited ? `
                     <button onclick="window.viewAuditDetailOnly('${safePointKey}')" class="audit-btn-action btn-view">🔍 查看</button>
-                    <button onclick="window.openAuditEditor(true)" class="audit-btn-action btn-edit">✏️ 修改</button>
+                    <button onclick="window.openAuditEditor(true)" class="audit-btn-action btn-edit">✏ 修改</button>
                 ` : `
                     <button onclick="window.openAuditEditor(false)" class="audit-btn-action btn-audit">📋 清查點位</button>
                 `;
@@ -342,9 +333,9 @@
     });
 
     // ---------------------------------------------------------
-    // 3. CSV 報告生成
+    // 3. CSV 報告生成構建器 (獨立模組，強制 UTC+8 台灣時間)
     // ---------------------------------------------------------
-    async function generateLayerCsvReport(kmlId, kmlLayerName, maxPhotos) {
+    function buildCsvContent(kmlId, kmlLayerName, maxPhotos) {
         const activeKmlId = kmlId || window.currentActiveKmlId || window.mapNamespace?.currentKmlLayerId;
         const records = window.auditLayersState?.[activeKmlId] || {};
         const features = window.mapNamespace?.allKmlFeatures || [];
@@ -358,11 +349,11 @@
             }
         };
 
-        const photoCount = parseInt(maxPhotos) || 2;
-        // ⬇️ 表頭加入「敘述」欄位 ⬇️
+        const photoCount = parseInt(maxPhotos, 10) || 2;
         let headerArr = ["點名", "經度", "緯度", "設備狀態", "敘述"];
         for (let i = 1; i <= photoCount; i++) headerArr.push(`照片${i}`);
         headerArr.push("備註");
+        headerArr.push("清查時間");
         
         let csvContent = "\uFEFF" + headerArr.join(",") + "\n";
         const featureMap = new Map();
@@ -378,28 +369,46 @@
             if (!pointKey) return;
             const record = records[pointKey]; 
             const feature = featureMap.get(pointKey);
-            let rowArr = [`"${pointKey.replace(/"/g, '""')}"`];
+            let rowArr = [`"${String(pointKey).replace(/"/g, '""')}"`];
 
             rowArr.push(`"${record?.lng ?? feature?.geometry?.coordinates?.[0] ?? ""}"`);
             rowArr.push(`"${record?.lat ?? feature?.geometry?.coordinates?.[1] ?? ""}"`);
 
-            // ⬇️ 提取敘述（優先讀取清查紀錄 record，若無則讀取原 KML 圖層 feature 屬性） ⬇️
-            const pointDesc = record?.description || record?.desc || feature?.properties?.description || feature?.properties?.desc || "";
+            const pointDesc = record?.description || record?.desc || "";
+
+            let formattedTime = "";
+            if (record?.updatedAt) {
+                try {
+                    const dateObj = record.updatedAt.toDate ? record.updatedAt.toDate() : new Date(record.updatedAt);
+                    if (!isNaN(dateObj.getTime())) {
+                        formattedTime = dateObj.toLocaleString('sv', { timeZone: 'Asia/Taipei' });
+                    }
+                } catch {
+                    formattedTime = "";
+                }
+            }
 
             if (record) {
                 rowArr.push(`"${String(record.deviceStatus || record.status || '正常').replace(/"/g, '""')}"`);
                 rowArr.push(`"${String(pointDesc).replace(/"/g, '""')}"`);
                 for (let i = 0; i < photoCount; i++) rowArr.push(`"${getCleanPhotoName(record.photos?.[i])}"`);
                 rowArr.push(`"${String(record.remark || record.note || "").replace(/"/g, '""')}"`);
+                rowArr.push(`"${formattedTime}"`);
             } else {
                 rowArr.push('""');
-                rowArr.push(`"${String(pointDesc).replace(/"/g, '""')}"`);
+                rowArr.push('""');
                 for (let i = 0; i < photoCount; i++) rowArr.push('""');
+                rowArr.push('""');
                 rowArr.push('""');
             }
             csvContent += rowArr.join(",") + "\n";
         });
 
+        return csvContent;
+    }
+
+    async function generateLayerCsvReport(kmlId, kmlLayerName, maxPhotos) {
+        const csvContent = buildCsvContent(kmlId, kmlLayerName, maxPhotos);
         try {
             const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8' });
             const safeLayerName = kmlLayerName || 'default_layer';
@@ -421,41 +430,62 @@
     };
 
     // ---------------------------------------------------------
-    // 4. 清查管理對話框與開關
+    // 4-1. 清查管理對話框與開關
     // ---------------------------------------------------------
     window.showAuditActionModal = async function() {
         if (!checkHasAuditPermission()) {
             return Swal.fire('權限不足', '您的帳號角色不允許管理清查狀態！', 'warning');
         }
         const select = document.getElementById('kmlLayerSelect');
-        if (!select || select.options.length <= 1) return;
-
+        
         let listHtml = '<div class="audit-action-list">';
-        Array.from(select.options).forEach(opt => {
-            if (!opt.value) return;
-            const config = getSafeAuditConfig(opt.value);
-            const isAuditing = !!config.isAuditing;
-            const targetPhotos = config.targetPhotos || 2;
-            const baseName = opt.getAttribute('data-basename') || opt.textContent.split(' (')[0];
-            const safeValue = safeEscape(opt.value);
 
-            listHtml += `
-                <div class="audit-action-item">
-                    <div>
-                        <div class="audit-action-title">${safeEscape(baseName)}</div>
-                        ${isAuditing ? `<div class="audit-action-subtext-active">清查中：需照片 ${targetPhotos} 張</div>` : `<div class="audit-action-subtext-inactive">未開啟清查</div>`}
-                    </div>
-                    <div class="audit-btn-group">
-                        ${isAuditing ? `<button onclick="window.downloadAuditPhotosZip('${safeValue}')" class="audit-btn-small audit-btn-zip">下載照片</button>` : ''}
-                        <button onclick="window.toggleAuditStatus('${safeValue}', ${!isAuditing})" class="audit-btn-small ${isAuditing ? 'audit-btn-toggle-on' : 'audit-btn-toggle-off'}">
-                            ${isAuditing ? '關閉' : '開啟'}
-                        </button>
-                    </div>
-                </div>`;
-        });
+        if (select && select.options.length > 1) {
+            Array.from(select.options).forEach(opt => {
+                if (!opt.value) return;
+                const config = getSafeAuditConfig(opt.value);
+                const isAuditing = !!config.isAuditing;
+                const targetPhotos = config.targetPhotos || 2;
+                const baseName = opt.getAttribute('data-basename') || opt.textContent.split(' (')[0];
+                const safeValue = safeEscape(opt.value);
+
+                listHtml += `
+                    <div class="audit-action-item">
+                        <div>
+                            <div class="audit-action-title">${safeEscape(baseName)}</div>
+                            ${isAuditing ? `<div class="audit-action-subtext-active">清查中：需照片 ${targetPhotos} 張</div>` : `<div class="audit-action-subtext-inactive">未開啟清查</div>`}
+                        </div>
+                        <div class="audit-btn-group">
+                            ${isAuditing ? `<button onclick="window.downloadAuditPhotosZip('${safeValue}')" class="audit-btn-small audit-btn-zip">📦 下載照片</button>` : ''}
+                            <button onclick="window.toggleAuditStatus('${safeValue}', ${!isAuditing})" class="audit-btn-small ${isAuditing ? 'audit-btn-toggle-on' : 'audit-btn-toggle-off'}">
+                                ${isAuditing ? '關閉' : '開啟'}
+                            </button>
+                        </div>
+                    </div>`;
+            });
+        } else {
+            listHtml += `<div style="text-align: center; color: #7f8c8d; padding: 15px;">目前尚無任何圖層，請點擊左上角橘色按鈕建立空白圖層！</div>`;
+        }
         listHtml += '</div>';
         
-        Swal.fire({ title: '圖層清查管理', html: listHtml, showConfirmButton: false, showCloseButton: true });
+        Swal.fire({
+            title: `
+                <div style="display: flex; justify-content: space-between; align-items: center; position: relative; width: 100%;">
+                    <button onclick="window.promptCreateEmptyLayer()" title="建立空白清查圖層" style="position: absolute; left: 0; background-color: #f39c12; color: white; width: 24px; height: 24px; border-radius: 4px; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: bold; line-height: 1; padding: 0; box-shadow: 0 1px 3px rgba(0,0,0,0.2);">
+                        +
+                    </button>
+                    <span style="flex-grow: 1; text-align: center;">圖層清查管理</span>
+                </div>
+            `,
+            html: listHtml,
+            showConfirmButton: false,
+            showCloseButton: true,
+            width: '600px',
+            didOpen: () => {
+                const closeBtn = document.querySelector('.swal2-close');
+                if (closeBtn) closeBtn.style.top = '10px';
+            }
+        });
     };
 
     window.toggleAuditStatus = async function(kmlId, status) {
@@ -505,14 +535,12 @@
                     localStorage.setItem('audit_status_options', JSON.stringify(formValues.options));
                     Swal.fire({ title: '正在開啟清查...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
                     
-                    // 寫入 Firestore
                     await firebase.firestore().collection(APP_PATH).doc(kmlId).set({ 
                         isAuditing: true, 
                         targetPhotos: formValues.count, 
                         statusOptions: formValues.options
                     }, { merge: true });
                     
-                    // ⬇️ 修正重點：完整更新記憶體狀態，包含張數與選項 ⬇️
                     window.globalAuditConfigs ||= {};
                     window.globalAuditConfigs[kmlId] = {
                         ...window.globalAuditConfigs[kmlId],
@@ -531,7 +559,6 @@
                 
                 await firebase.firestore().collection(APP_PATH).doc(kmlId).set({ isAuditing: false }, { merge: true });
                 
-                // ⬇️ 同步更新記憶體為關閉狀態 ⬇️
                 window.globalAuditConfigs ||= {};
                 window.globalAuditConfigs[kmlId] = {
                     ...window.globalAuditConfigs[kmlId],
@@ -543,6 +570,139 @@
             }
         } catch (error) {
             Swal.fire({ icon: 'error', title: '同步失敗', text: error.message }).then(() => window.showAuditActionModal());
+        }
+    };
+
+    // ---------------------------------------------------------
+    // 4-2. 建立空白清查圖層功能
+    // ---------------------------------------------------------
+    window.promptCreateEmptyLayer = async function() {
+        const savedOptions = localStorage.getItem('audit_status_options');
+        const defaultStatusStr = savedOptions ? JSON.parse(savedOptions).join(', ') : '正常, 損壞, 遺失';
+
+        const { value: formValues } = await Swal.fire({
+            title: '📂 建立空白清查圖層',
+            html: `
+                <div class="audit-form-container" style="text-align: left;">
+                    <div class="audit-form-group" style="margin-bottom: 12px;">
+                        <label class="audit-form-label">1. 圖層名稱 <span class="required" style="color:red;">*必填</span></label>
+                        <input id="swal-input-layer-name" type="text" class="swal2-input audit-form-input" placeholder="例如：測試05" style="width:100%; box-sizing:border-box;">
+                        <div style="font-size: 12px; color: #7f8c8d; margin-top: 4px;">提示：直接輸入名稱，系統會自動建立 KML_ 格式。</div>
+                    </div>
+                    <div class="audit-form-group" style="margin-bottom: 12px;">
+                        <label class="audit-form-label">2. 必填照片張數 (1~12 張)</label>
+                        <input id="swal-input-count" type="number" class="swal2-input audit-form-input" value="2" min="1" max="12" step="1" style="width:100%; box-sizing:border-box;">
+                    </div>
+                    <div>
+                        <label class="audit-form-label">3. 設備狀態選項 (用逗號或換行分隔)</label>
+                        <textarea id="swal-input-status" class="swal2-textarea audit-form-textarea" style="width:100%; box-sizing:border-box; height:80px;">${defaultStatusStr}</textarea>
+                    </div>
+                </div>`,
+            showCancelButton: true,
+            confirmButtonText: '建立並啟用',
+            cancelButtonText: '返回',
+            focusConfirm: false,
+            preConfirm: () => {
+                let layerName = document.getElementById('swal-input-layer-name').value.trim();
+                const countVal = parseInt(document.getElementById('swal-input-count').value, 10);
+                const statusVal = document.getElementById('swal-input-status').value.trim();
+
+                if (!layerName) {
+                    Swal.showValidationMessage('請輸入圖層名稱！');
+                    return false;
+                }
+                
+                layerName = layerName.replace(/^KML_+/i, '');
+
+                if (!layerName) {
+                    Swal.showValidationMessage('請輸入有效的圖層名稱！');
+                    return false;
+                }
+
+                if (!countVal || countVal < 1 || countVal > 12) {
+                    Swal.showValidationMessage('照片張數必須介於 1 到 12 張之間！');
+                    return false;
+                }
+                const optionsArray = statusVal.split(/[,，\n]/).map(s => s.trim()).filter(Boolean);
+                if (!optionsArray.length) {
+                    Swal.showValidationMessage('請至少輸入一個有效的設備狀態選項！');
+                    return false;
+                }
+                return { layerName, count: countVal, options: optionsArray };
+            }
+        });
+
+        if (formValues) {
+            try {
+                Swal.fire({ title: '正在建立空白圖層...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+
+                const cleanName = 'KML_' + formValues.layerName;
+                const uniqueId = cleanName; 
+
+                // 取得當前使用者 Email 與角色
+                const currentUserEmail = auth.currentUser?.email || firebase.auth()?.currentUser?.email || '';
+                const currentUserRole = window.currentUserRole || 'user';
+
+                // 【修改重點】建構與傳統上傳 KML 100% 一致的資料欄位
+                await firebase.firestore().collection(APP_PATH).doc(uniqueId).set({ 
+                    name: cleanName,                                                // 對齊上傳 KML 核心欄位
+                    layerName: cleanName,                                           // 保留向下相容
+                    geojson: '{"type":"FeatureCollection","features":[]}',           // 提供標準空 GeoJSON 結構
+                    isAuditing: true,                                               // 啟用清查狀態
+                    statusOptions: formValues.options,                              // 設備狀態選項
+                    targetPhotos: formValues.count,                                 // 照片必填張數
+                    uploadTime: firebase.firestore.FieldValue.serverTimestamp(),   // 建立時間戳記
+                    uploadedBy: currentUserEmail,                                   // 建立者 Email
+                    uploadedByRole: currentUserRole                                 // 建立者角色
+                }, { merge: true });
+
+                localStorage.removeItem('kml_list_cache_data');
+
+                const now = Date.now();
+                const syncPath = APP_PATH.includes('kmlLayers') 
+                    ? APP_PATH.replace('kmlLayers', 'metadata/sync') 
+                    : APP_PATH + '/../metadata/sync';
+
+                await firebase.firestore().doc(syncPath).set({ 
+                    lastUpdate: now, 
+                    lastUpdateTime: new Date(now).toLocaleString('zh-TW') 
+                }, { merge: true });
+
+                window.globalAuditConfigs ||= {};
+                window.globalAuditConfigs[uniqueId] = {
+                    isAuditing: true,
+                    targetPhotos: formValues.count,
+                    statusOptions: formValues.options
+                };
+
+                const selectEl = document.getElementById('kmlLayerSelect');
+                if (selectEl) {
+                    const opt = document.createElement('option');
+                    opt.value = uniqueId;
+                    opt.setAttribute('data-basename', cleanName);
+                    opt.textContent = `${cleanName} (清查中:${formValues.count}張)`;
+                    selectEl.appendChild(opt);
+                    selectEl.value = uniqueId;
+                    
+                    selectEl.dispatchEvent(new Event('change'));
+                }
+
+                window.currentActiveKmlId = uniqueId;
+                window.currentActiveKmlName = cleanName;
+
+                if (window.mapNamespace) {
+                    window.mapNamespace.currentKmlLayerId = uniqueId;
+                    window.mapNamespace.allKmlFeatures = [];
+                }
+
+                forceMapRefresh();
+                Swal.fire({ icon: 'success', title: '已成功建立並開啟空白清查圖層！', timer: 1500, showConfirmButton: false });
+
+            } catch (error) {
+                Swal.fire({ icon: 'error', title: '建立失敗', text: error.message });
+            }
+        } else {
+            window.showAuditActionModal();
         }
     };
         
@@ -652,7 +812,7 @@
                         <input type="file" id="add-photo-input-${i}" accept="image/*" capture="environment" onchange="window.handleAddPhotoPreview(this, ${i})" class="audit-photo-input" title="現場拍照">
                     </div>
                     <label for="add-photo-input-${i}" class="audit-photo-tag">
-                        <span>🖼️</span> <span id="add-tag-text-${i}">${hasPhoto ? '已選取' : '圖庫'}</span>
+                        <span>🖼️️</span> <span id="add-tag-text-${i}">${hasPhoto ? '已選取' : '圖庫'}</span>
                     </label>
                 </div>`;
         }
@@ -669,7 +829,7 @@
             </div>
             <div class="audit-form-group-inline">
                 <label class="audit-form-label">點位名稱 <span class="required">*必填</span></label>
-                <input type="text" id="add-point-name" value="${defaultName}" placeholder="例如：新設電桿-01" class="audit-form-input">
+                <input type="text" id="add-point-name" value="${safeEscape(defaultName)}" placeholder="例如：新設電桿-01" class="audit-form-input">
             </div>
             <div class="audit-form-group-inline">
                 <label class="audit-form-label">設備狀態</label>
@@ -681,14 +841,13 @@
                 <label class="audit-form-label">現場照片 (需拍 ${maxPhotos} 張) <span class="required">*必填</span></label>
                 <div class="audit-photo-grid">${photoHtml}</div>
             </div>
-            <!-- ⬇️ 新增：敘述輸入框 ⬇️ -->
             <div class="audit-form-group" style="margin-top:10px;">
                 <label class="audit-form-label">敘述 <span class="optional">(選填)</span></label>
-                <input type="text" id="add-point-desc" value="${defaultDesc}" placeholder="請輸入點位敘述..." class="audit-form-input">
+                <input type="text" id="add-point-desc" value="${safeEscape(defaultDesc)}" placeholder="請輸入點位敘述..." class="audit-form-input">
             </div>
             <div>
                 <label class="audit-form-label">備註事項 <span class="optional">(選填)</span></label>
-                <textarea id="add-point-remark" placeholder="輸入備註事項..." class="audit-form-textarea">${defaultRemark}</textarea>
+                <textarea id="add-point-remark" placeholder="輸入備註事項..." class="audit-form-textarea">${safeEscape(defaultRemark)}</textarea>
             </div>
         </div>`;
     
@@ -758,10 +917,20 @@
                 await firebase.firestore().collection(APP_PATH).doc(kmlId).collection('auditRecords').doc(oldPointKey).delete();
             }
     
+            const nowTime = new Date(); 
             const structuredData = {
-                pointName: trimmedPointKey, status: "已完成", deviceStatus: deviceStatus || "新增", auditStatus: deviceStatus || "新增",
-                description: finalDesc, desc: finalDesc,
-                note: remark || "", photos: photoUrls, lat: numLat, lng: numLng, isCustomPoint: true, updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                pointName: trimmedPointKey, 
+                status: "已完成", 
+                deviceStatus: deviceStatus || "新增", 
+                auditStatus: deviceStatus || "新增",
+                description: finalDesc, 
+                desc: finalDesc,
+                note: remark || "", 
+                photos: photoUrls, 
+                lat: numLat, 
+                lng: numLng, 
+                isCustomPoint: true, 
+                updatedAt: nowTime 
             };
     
             window.auditLayersState ||= {};
@@ -797,6 +966,56 @@
     };
     
     // ---------------------------------------------------------
+    // 照片壓縮輔助函數：寬度固定 1920，高度按原比例自動縮放 (含自動記憶體釋放)
+    // ---------------------------------------------------------
+    async function compressImageToCanvas(source) {
+        return new Promise((resolve) => {
+            if (typeof source === 'string' && source.startsWith('http')) {
+                return resolve(source);
+            }
+
+            const img = new Image();
+            const isObjectUrl = typeof source !== 'string';
+            const url = isObjectUrl ? URL.createObjectURL(source) : source;
+
+            const cleanup = () => {
+                if (isObjectUrl) {
+                    try { URL.revokeObjectURL(url); } catch {}
+                }
+            };
+            
+            img.onload = () => {
+                cleanup();
+                const canvas = document.createElement('canvas');
+                let width = img.width;
+                let height = img.height;
+                const targetWidth = 1920;
+
+                if (width > targetWidth) {
+                    height = Math.round(height * (targetWidth / width));
+                    width = targetWidth;
+                }
+
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, width, height);
+                
+                canvas.toBlob((blob) => {
+                    resolve(blob || source);
+                }, 'image/jpeg', 0.82);
+            };
+            
+            img.onerror = () => {
+                cleanup();
+                resolve(source); 
+            };
+            
+            img.src = url;
+        });
+    }
+
+    // ---------------------------------------------------------
     // 照片上傳與點位刪除
     // ---------------------------------------------------------
     window.uploadPhotosToStorage = async function(photos, kmlId, pointKey, kmlLayerName) {
@@ -809,19 +1028,15 @@
 
         return Promise.all(photos.map(async (photoData, index) => {
             if (!photoData) return '';
-            if (typeof photoData === 'string' && !photoData.startsWith('data:image')) return photoData;
+            if (typeof photoData === 'string' && !photoData.startsWith('data:image') && !photoData.startsWith('blob:') && !(photoData instanceof File || photoData instanceof Blob)) {
+                return photoData;
+            }
 
             const customStoragePath = `${STORAGE_ROOT}/${targetLayerName}/${safePointKey}_${String(index + 1).padStart(2, '0')}.jpg`;
             const ref = storageRef.child(customStoragePath);
 
-            let blob = photoData;
-            if (typeof photoData === 'string' && photoData.startsWith('data:image')) {
-                blob = await (await fetch(photoData)).blob();
-            } else if (!(photoData instanceof File || photoData instanceof Blob)) {
-                return photoData;
-            }
-
-            await ref.put(blob);
+            const compressedBlob = await compressImageToCanvas(photoData);
+            await ref.put(compressedBlob);
             return await ref.getDownloadURL();
         }));
     };
@@ -864,12 +1079,8 @@
     };
 
     // ---------------------------------------------------------
-    // 6. 清查資料彈窗 (編輯與查看)
+    // 6. 清查資料彈窗 (編輯與查看 - 同步極速預覽修復)
     // ---------------------------------------------------------
-
-    /**
-     * 6-1. 編輯/填寫清查紀錄彈窗
-     */
     window.openAuditEditor = async function(isModifyMode = false) {
         const activePoint = window.currentSelectedPoint;
         if (!activePoint) return;
@@ -892,7 +1103,7 @@
         }
     
         const currentStatus = isUserCreatedPoint ? '新增' : (historyRecord.deviceStatus || '');
-        const currentDesc = historyRecord.description || historyRecord.desc || layerProps.description || layerProps.desc || '';
+        const currentDesc = historyRecord.description || historyRecord.desc || '';
         const currentNote = historyRecord.note || '';
         const baseStatusOptions = config.statusOptions || ['正常', '損壞', '遺失'];
     
@@ -926,23 +1137,19 @@
         const { value: res, isDenied } = await Swal.fire({
             title: `<div>${isModifyMode ? '修改' : '填寫'}清查紀錄：${safeEscape(pointKey)}</div>`,
             html: `<div class="audit-form-container">
-                <!-- 1. 設備狀態 -->
                 <div class="audit-form-group-inline">
                     <label class="audit-form-label">設備狀態 <span class="required">*必選</span></label>
                     ${statusSelectHtml}
                 </div>
                 
-                <!-- 2. 現場照片 -->
                 <label class="audit-form-label">現場照片 (需滿 ${maxPhotos} 張) <span class="required">*必填</span></label>
                 <div class="audit-photo-grid-editor">${photoHtml}</div>
 
-                <!-- 3. 敘述 -->
                 <div class="audit-form-group">
                     <label class="audit-form-label">敘述 <span class="optional">(選填)</span></label>
                     <input type="text" id="swal-desc" class="swal2-input audit-form-input" value="${safeEscape(currentDesc)}" placeholder="請輸入點位敘述...">
                 </div>
 
-                <!-- 4. 備註事項 -->
                 <div class="audit-form-group">
                     <label class="audit-form-label">備註事項 <span class="optional">(選填)</span></label>
                     <textarea id="swal-note" class="swal2-textarea audit-form-textarea">${safeEscape(currentNote)}</textarea>
@@ -954,29 +1161,16 @@
                 setPointAddBtnVisible(false);
                 const handlePhotoChange = (inputEl, index) => {
                     if (inputEl.files?.[0]) {
-                        const reader = new FileReader();
-                        reader.onload = (e) => {
-                            const img = new Image();
-                            img.onload = () => {
-                                const canvas = document.createElement('canvas');
-                                let width = img.width, height = img.height, max_size = 1920;
-                                if (width > height) { if (width > max_size) { height *= max_size / width; width = max_size; } } 
-                                else { if (height > max_size) { width *= max_size / height; height = max_size; } }
-                                canvas.width = width; canvas.height = height;
-                                canvas.getContext('2d').drawImage(img, 0, 0, width, height);
-                                const base64 = canvas.toDataURL('image/jpeg', 0.82);
-                                
-                                const prevEl = document.getElementById(`audit-prev-${index}`);
-                                const iconEl = document.getElementById(`audit-icon-${index}`);
-                                const tagEl = document.getElementById(`audit-tag-${index}`);
-                                if (prevEl) { prevEl.src = base64; prevEl.style.display = 'block'; }
-                                if (iconEl) iconEl.style.display = 'none';
-                                if (tagEl) tagEl.innerHTML = '<span>🖼️</span> 新選擇';
-                                currentPhotos[index] = base64;
-                            };
-                            img.src = e.target.result;
-                        };
-                        reader.readAsDataURL(inputEl.files[0]);
+                        const file = inputEl.files[0];
+                        const previewUrl = URL.createObjectURL(file);
+                        
+                        const prevEl = document.getElementById(`audit-prev-${index}`);
+                        const iconEl = document.getElementById(`audit-icon-${index}`);
+                        const tagEl = document.getElementById(`audit-tag-${index}`);
+                        
+                        if (prevEl) { prevEl.src = previewUrl; prevEl.style.display = 'block'; }
+                        if (iconEl) iconEl.style.display = 'none';
+                        if (tagEl) tagEl.innerHTML = '<span>🖼️</span> 新選擇';
                     }
                 };
                 for (let i = 0; i < maxPhotos; i++) {
@@ -989,8 +1183,24 @@
                 const statusValue = document.getElementById('swal-status').value;
                 if (!statusValue) return Swal.showValidationMessage('請選擇設備狀態'); 
                 
-                const validPhotosCount = currentPhotos.filter(p => p && p.trim() !== '').length;
-                if (validPhotosCount < maxPhotos) return Swal.showValidationMessage(`請補滿 ${maxPhotos} 張照片 (目前 ${validPhotosCount}/${maxPhotos})`); 
+                const finalPhotos = [];
+                for (let i = 0; i < maxPhotos; i++) {
+                    const cameraInput = document.getElementById(`audit-file-input-${i}`);
+                    const galleryInput = document.getElementById(`audit-gallery-input-${i}`);
+                    const imgEl = document.getElementById(`audit-prev-${i}`);
+
+                    if (cameraInput?.files?.[0]) {
+                        finalPhotos.push(cameraInput.files[0]);
+                    } else if (galleryInput?.files?.[0]) {
+                        finalPhotos.push(galleryInput.files[0]);
+                    } else if (imgEl?.src && (imgEl.src.startsWith('http') || imgEl.src.startsWith('data:'))) {
+                        finalPhotos.push(imgEl.src);
+                    }
+                }
+
+                if (finalPhotos.length < maxPhotos) {
+                    return Swal.showValidationMessage(`請補滿 ${maxPhotos} 張照片 (目前 ${finalPhotos.length}/${maxPhotos})`);
+                }
                 
                 const descValue = document.getElementById('swal-desc')?.value.trim() || '';
 
@@ -998,8 +1208,8 @@
                     status: statusValue, 
                     description: descValue, 
                     desc: descValue, 
-                    note: document.getElementById('swal-note').value, 
-                    photos: currentPhotos 
+                    note: document.getElementById('swal-note')?.value.trim() || '', 
+                    photos: finalPhotos 
                 };
             }
         });
@@ -1010,6 +1220,7 @@
             Swal.fire({ title: '正在上傳與更新資料...', didOpen: () => Swal.showLoading(), allowOutsideClick: false });
             try {
                 const photoUrls = await window.uploadPhotosToStorage(res.photos, kmlId, pointKey, kmlLayerName);
+                const nowTime = new Date(); 
                 const structuredData = {
                     pointName: pointKey, 
                     status: "已完成", 
@@ -1018,7 +1229,7 @@
                     desc: res.desc,
                     note: res.note, 
                     photos: photoUrls, 
-                    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                    updatedAt: nowTime 
                 };
     
                 window.auditLayersState ||= {};
@@ -1041,9 +1252,6 @@
         }
     };
 
-    /**
-     * 6-2. 僅檢視詳細紀錄彈窗 (唯讀模式 - 排版與修改介面一致)
-     */
     window.viewAuditDetailOnly = function(pointKeyParam) {
         const activePoint = window.currentSelectedPoint;
         const layerProps = activePoint?.feature?.properties || activePoint?.properties || {};
@@ -1054,6 +1262,7 @@
             return Swal.fire('提示', '無法辨識點位名稱！', 'warning');
         }
 
+        // 優先讀取前端快取的記憶體狀態，若無則退回 layerProps
         const record = window.auditLayersState?.[kmlId]?.[pointKey] || layerProps;
 
         if (!record || (!record.deviceStatus && !record.status && !record.photos)) {
@@ -1069,12 +1278,13 @@
         if (photos.length > 0) {
             photos.forEach((url, idx) => {
                 const safeUrl = safeEscape(url);
+                const encodedUrl = encodeURI(url);
                 photoHtml += `
                     <div class="audit-photo-item-editor">
-                        <div class="audit-photo-box-editor readonly-clickable" onclick="window.open('${safeUrl}', '_blank')" title="點擊檢視原圖">
+                        <div class="audit-photo-box-editor readonly-clickable" onclick="window.open('${encodedUrl}', '_blank')" title="點擊檢視原圖">
                             <img src="${safeUrl}" class="audit-photo-preview-img">
                         </div>
-                        <div class="audit-photo-tag-editor" onclick="window.open('${safeUrl}', '_blank')" title="點擊檢視原圖">
+                        <div class="audit-photo-tag-editor" onclick="window.open('${encodedUrl}', '_blank')" title="點擊檢視原圖">
                             <span>🖼️</span> 檢視照片 ${idx + 1}
                         </div>
                     </div>`;
@@ -1087,8 +1297,6 @@
             title: `查看清查紀錄：${safeEscape(pointKey)}`,
             html: `
                 <div class="audit-form-container">
-                    
-                    <!-- 1. 設備狀態 (唯讀下拉選單) -->
                     <div class="audit-form-group-inline">
                         <label class="audit-form-label">設備狀態</label>
                         <select class="swal2-input audit-form-select" disabled>
@@ -1096,7 +1304,6 @@
                         </select>
                     </div>
 
-                    <!-- 2. 現場照片 (與編輯框樣式相同的外框與外觀) -->
                     <div class="audit-form-group">
                         <label class="audit-form-label">現場照片 (共 ${photos.length} 張)</label>
                         <div class="audit-photo-grid-editor">
@@ -1104,18 +1311,15 @@
                         </div>
                     </div>
 
-                    <!-- 3. 敘述 (唯讀輸入框) -->
                     <div class="audit-form-group">
                         <label class="audit-form-label">敘述 <span class="optional">(選填)</span></label>
                         <input type="text" class="swal2-input audit-form-input" value="${safeEscape(description)}" readonly placeholder="無敘述">
                     </div>
 
-                    <!-- 4. 備註事項 (唯讀文字框) -->
                     <div class="audit-form-group">
                         <label class="audit-form-label">備註事項 <span class="optional">(選填)</span></label>
                         <textarea class="swal2-textarea audit-form-textarea" readonly placeholder="無備註事項">${safeEscape(note)}</textarea>
                     </div>
-
                 </div>`,
             confirmButtonText: '關閉',
             confirmButtonColor: '#34495e',
@@ -1127,18 +1331,182 @@
     };
           
     // ---------------------------------------------------------
-    // 7. 打包 Firebase Storage 照片
+    // 7-1. 水印壓製工具函數 (不加前綴標籤，預設字體 20px)
+    // ---------------------------------------------------------
+    async function getStoragePhotoTime(fileRef, fallbackRecordTime = "") {
+        try {
+            const metadata = await fileRef.getMetadata();
+            const timeStr = metadata.timeCreated || metadata.updated;
+            if (timeStr) {
+                const dateObj = new Date(timeStr);
+                if (!isNaN(dateObj.getTime())) {
+                    return dateObj.toLocaleString('sv', { timeZone: 'Asia/Taipei' });
+                }
+            }
+        } catch (e) {
+            console.warn("無法取得 Storage Metadata 時間，使用紀錄時間替代:", e);
+        }
+        return fallbackRecordTime || "無時間紀錄";
+    }
+
+    async function addWatermarkToImage(imageBlob, options = {}) {
+        const { 
+            showPoint = false, 
+            showTime = false, 
+            pointName = '', 
+            photoTime = '', 
+            position = 'bottom-right',
+            customFontSize = 20 
+        } = options;
+        
+        // 若兩項皆未勾選，直接回傳原圖
+        if (!showPoint && !showTime) return imageBlob;
+
+        return new Promise((resolve) => {
+            const img = new Image();
+            const url = URL.createObjectURL(imageBlob);
+
+            img.onload = () => {
+                URL.revokeObjectURL(url);
+
+                const canvas = document.createElement('canvas');
+                canvas.width = img.width;
+                canvas.height = img.height;
+                const ctx = canvas.getContext('2d');
+
+                // 1. 繪製原圖
+                ctx.drawImage(img, 0, 0);
+
+                // 2. 組立勾選的水印文字陣列 (不加上 "點號:" 與 "時間:" 前綴)
+                const textLines = [];
+                if (showPoint && pointName) {
+                    textLines.push(pointName);
+                }
+                if (showTime && photoTime) {
+                    textLines.push(photoTime);
+                }
+
+                if (textLines.length === 0) {
+                    return canvas.toBlob(blob => resolve(blob || imageBlob), 'image/jpeg', 0.85);
+                }
+
+                // 3. 計算字型大小與邊距 (預設 20px 搭配照片解析度動態縮放)
+                const baseFontSize = parseInt(customFontSize, 10) || 20;
+                const scaleFactor = canvas.width / 1000; 
+                const fontSize = Math.max(baseFontSize, Math.round(baseFontSize * scaleFactor)); 
+                const padding = Math.max(8, Math.round(fontSize * 0.5));
+                const lineHeight = Math.round(fontSize * 1.3);
+                
+                ctx.font = `bold ${fontSize}px sans-serif`;
+
+                let maxTextWidth = 0;
+                textLines.forEach(line => {
+                    const metrics = ctx.measureText(line);
+                    if (metrics.width > maxTextWidth) maxTextWidth = metrics.width;
+                });
+
+                const bgWidth = maxTextWidth + (padding * 2);
+                const bgHeight = (lineHeight * textLines.length) + (padding * 1.2);
+                const margin = Math.max(10, Math.round(canvas.width * 0.015));
+
+                // 4. 計算水印邊框座標 (靠左下或靠右下)
+                let x = (position === 'bottom-left') ? margin : (canvas.width - bgWidth - margin);
+                let y = canvas.height - bgHeight - margin;
+
+                // 5. 繪製黑色半透明底框
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
+                ctx.beginPath();
+                if (ctx.roundRect) {
+                    ctx.roundRect(x, y, bgWidth, bgHeight, 6);
+                } else {
+                    ctx.rect(x, y, bgWidth, bgHeight);
+                }
+                ctx.fill();
+
+                // 6. 繪製白色文字與陰影
+                ctx.fillStyle = '#FFFFFF';
+                ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
+                ctx.shadowBlur = 3;
+                ctx.textBaseline = 'top';
+
+                textLines.forEach((line, index) => {
+                    ctx.fillText(line, x + padding, y + padding + (index * lineHeight));
+                });
+
+                // 7. 匯出 JPEG Blob
+                canvas.toBlob((blob) => {
+                    resolve(blob || imageBlob);
+                }, 'image/jpeg', 0.85);
+            };
+
+            img.onerror = () => {
+                URL.revokeObjectURL(url);
+                resolve(imageBlob);
+            };
+
+            img.src = url;
+        });
+    }
+
+    // ---------------------------------------------------------
+    // 7-2. 打包 Firebase Storage 照片 (預設 20px 與無前綴)
     // ---------------------------------------------------------
     window.downloadAuditPhotosZip = async function(kmlId) {
         if (typeof JSZip === 'undefined' || typeof saveAs === 'undefined') {
             return Swal.fire('套件缺失', '請確保 HTML 已引入 JSZip 與 FileSaver 套件！', 'error');
         }
 
-        if (!['owner', 'editor'].includes(getUserRole())) {
-            return Swal.fire('權限不足', '只有 Editor 或 Owner 角色才能打包下載清查照片！', 'warning');
-        }
-    
         const cleanLayerName = getLayerFolderName(kmlId, kmlId);
+
+        const { value: watermarkSettings } = await Swal.fire({
+            title: '📸 打包照片與水印設定',
+            html: `
+                <div style="text-align: left; font-size: 14px;" class="audit-form-container">
+                    <div style="margin-bottom: 12px;">
+                        <label class="audit-form-label" style="font-weight: bold; display: block; margin-bottom: 6px;">1. 水印內容：</label>
+                        <div style="display: flex; gap: 20px; align-items: center; padding: 2px 0;">
+                            <label style="cursor: pointer; display: flex; align-items: center; gap: 6px;">
+                                <input type="checkbox" id="swal-wm-chk-point" checked style="width: 18px; height: 18px; cursor: pointer;">
+                                <span>點號名稱 (例: NVA015)</span>
+                            </label>
+                            <label style="cursor: pointer; display: flex; align-items: center; gap: 6px;">
+                                <input type="checkbox" id="swal-wm-chk-time" checked style="width: 18px; height: 18px; cursor: pointer;">
+                                <span>拍攝/上傳時間</span>
+                            </label>
+                        </div>
+                    </div>
+                    <div style="margin-bottom: 12px;">
+                        <label class="audit-form-label" style="font-weight: bold; display: block; margin-bottom: 6px;">2. 水印位置：</label>
+                        <select id="swal-wm-pos" class="swal2-input audit-form-select" style="margin-top: 0; width: 100%;">
+                            <option value="bottom-right" selected>↘ 靠右下角</option>
+                            <option value="bottom-left">↙ 靠左下角</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="audit-form-label" style="font-weight: bold; display: block; margin-bottom: 6px;">3. 水印字體大小 (px)：</label>
+                        <input id="swal-wm-size" type="number" class="swal2-input audit-form-input" value="20" min="10" max="100" step="1" style="margin-top: 0; width: 100%; box-sizing: border-box;">
+                    </div>
+                </div>`,
+            showCancelButton: true,
+            confirmButtonText: '開始打包下載',
+            cancelButtonText: '取消',
+            focusConfirm: false,
+            preConfirm: () => {
+                const fontSize = parseInt(document.getElementById('swal-wm-size').value, 10);
+                if (!fontSize || fontSize < 10 || fontSize > 100) {
+                    Swal.showValidationMessage('字體大小請輸入介於 10 到 100 之間的數字！');
+                    return false;
+                }
+                return {
+                    showPoint: document.getElementById('swal-wm-chk-point').checked,
+                    showTime: document.getElementById('swal-wm-chk-time').checked,
+                    position: document.getElementById('swal-wm-pos').value,
+                    fontSize: fontSize
+                };
+            }
+        });
+
+        if (!watermarkSettings) return;
 
         Swal.fire({
             title: '正在搜尋 Storage 照片...',
@@ -1158,10 +1526,16 @@
             }
 
             const items = listResult.items;
-            if (progressEl) progressEl.textContent = `找到 ${items.length} 個檔案，準備下載...`;
+            if (progressEl) progressEl.textContent = `找到 ${items.length} 個檔案，準備下載並處理水印...`;
 
             const zip = new JSZip();
             const rootFolder = zip.folder(cleanLayerName);
+            
+            const targetPhotosCount = getSafeAuditConfig(kmlId).targetPhotos || 2;
+            const csvData = buildCsvContent(kmlId, cleanLayerName, targetPhotosCount);
+            rootFolder.file(`${cleanLayerName}_清查總表.csv`, csvData);
+
+            const records = window.auditLayersState?.[kmlId] || {};
             let completedCount = 0, failCount = 0;
 
             const BATCH_SIZE = 3;
@@ -1173,7 +1547,37 @@
                         const downloadUrl = await fileRef.getDownloadURL();
                         const response = await fetch(downloadUrl);
                         if (!response.ok) throw new Error(`HTTP error ${response.status}`);
-                        rootFolder.file(fileRef.name, await response.blob());
+                        
+                        let imageBlob = await response.blob();
+
+                        if (watermarkSettings.showPoint || watermarkSettings.showTime) {
+                            const fileName = fileRef.name;
+                            const parsedPointKey = fileName.replace(/_\d+\.[^/.]+$/, '').trim();
+                            
+                            const record = records[parsedPointKey] || {};
+                            let fallbackTimeStr = "";
+                            if (record.updatedAt) {
+                                try {
+                                    const dateObj = record.updatedAt.toDate ? record.updatedAt.toDate() : new Date(record.updatedAt);
+                                    if (!isNaN(dateObj.getTime())) {
+                                        fallbackTimeStr = dateObj.toLocaleString('sv', { timeZone: 'Asia/Taipei' });
+                                    }
+                                } catch {}
+                            }
+
+                            const storageTime = await getStoragePhotoTime(fileRef, fallbackTimeStr);
+
+                            imageBlob = await addWatermarkToImage(imageBlob, {
+                                showPoint: watermarkSettings.showPoint,
+                                showTime: watermarkSettings.showTime,
+                                position: watermarkSettings.position,
+                                customFontSize: watermarkSettings.fontSize,
+                                pointName: parsedPointKey,
+                                photoTime: storageTime
+                            });
+                        }
+
+                        rootFolder.file(fileRef.name, imageBlob);
                     } catch (err) {
                         failCount++;
                     } finally {
@@ -1184,14 +1588,173 @@
             }
 
             if (completedCount - failCount === 0) throw new Error('所有檔案下載皆失敗，請確認網路連線或 CORS 設定。');
-            if (progressEl) progressEl.textContent = '檔案下載完成，正在壓縮 ZIP...';
+            if (progressEl) progressEl.textContent = '檔案下載與水印壓製完成，正在壓縮 ZIP...';
 
             saveAs(await zip.generateAsync({ type: 'blob' }), `${cleanLayerName}_Storage照片總集.zip`);
 
             Swal.fire({
                 icon: failCount > 0 ? 'warning' : 'success',
                 title: '打包下載完成！',
-                text: failCount > 0 ? `成功打包 ${completedCount - failCount} 個檔案，失敗 ${failCount} 個` : `已成功下載 ${completedCount} 個檔案與 CSV 清冊`,
+                text: failCount > 0 ? `成功打包 ${completedCount - failCount} 個檔案，失敗 ${failCount} 個` : `已成功壓製水印並下載 ${completedCount} 個照片檔案與 CSV 清冊`,
+                timer: 2500,
+                showConfirmButton: false
+            });
+
+        } catch (error) {
+            Swal.fire({ icon: 'error', title: '打包失敗', text: error.message || '發生未知錯誤' });
+        }
+    };
+
+    // ---------------------------------------------------------
+    // 7-2. 打包 Firebase Storage 照片 (水印預設不勾選版)
+    // ---------------------------------------------------------
+    window.downloadAuditPhotosZip = async function(kmlId) {
+        if (typeof JSZip === 'undefined' || typeof saveAs === 'undefined') {
+            return Swal.fire('套件缺失', '請確保 HTML 已引入 JSZip 與 FileSaver 套件！', 'error');
+        }
+
+        const cleanLayerName = getLayerFolderName(kmlId, kmlId);
+
+        // 💡 點號與時間選項預設不勾選 (未加上 checked)
+        const { value: watermarkSettings } = await Swal.fire({
+            title: '📸 打包照片與水印設定',
+            html: `
+                <div style="text-align: left; font-size: 14px;" class="audit-form-container">
+                    <div style="margin-bottom: 12px;">
+                        <label class="audit-form-label" style="font-weight: bold; display: block; margin-bottom: 6px;">1. 水印內容：</label>
+                        <div style="display: flex; gap: 20px; align-items: center; padding: 2px 0;">
+                            <label style="cursor: pointer; display: flex; align-items: center; gap: 6px;">
+                                <input type="checkbox" id="swal-wm-chk-point" style="width: 18px; height: 18px; cursor: pointer;">
+                                <span>點號名稱 (例: NVA015)</span>
+                            </label>
+                            <label style="cursor: pointer; display: flex; align-items: center; gap: 6px;">
+                                <input type="checkbox" id="swal-wm-chk-time" style="width: 18px; height: 18px; cursor: pointer;">
+                                <span>拍攝/上傳時間</span>
+                            </label>
+                        </div>
+                    </div>
+                    <div style="margin-bottom: 12px;">
+                        <label class="audit-form-label" style="font-weight: bold; display: block; margin-bottom: 6px;">2. 水印位置：</label>
+                        <select id="swal-wm-pos" class="swal2-input audit-form-select" style="margin-top: 0; width: 100%;">
+                            <option value="bottom-right" selected>↘ 靠右下角</option>
+                            <option value="bottom-left">↙ 靠左下角</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="audit-form-label" style="font-weight: bold; display: block; margin-bottom: 6px;">3. 水印字體大小 (px)：</label>
+                        <input id="swal-wm-size" type="number" class="swal2-input audit-form-input" value="20" min="10" max="100" step="1" style="margin-top: 0; width: 100%; box-sizing: border-box;">
+                    </div>
+                </div>`,
+            showCancelButton: true,
+            confirmButtonText: '開始打包下載',
+            cancelButtonText: '取消',
+            focusConfirm: false,
+            preConfirm: () => {
+                const fontSize = parseInt(document.getElementById('swal-wm-size').value, 10);
+                if (!fontSize || fontSize < 10 || fontSize > 100) {
+                    Swal.showValidationMessage('字體大小請輸入介於 10 到 100 之間的數字！');
+                    return false;
+                }
+                return {
+                    showPoint: document.getElementById('swal-wm-chk-point').checked,
+                    showTime: document.getElementById('swal-wm-chk-time').checked,
+                    position: document.getElementById('swal-wm-pos').value,
+                    fontSize: fontSize
+                };
+            }
+        });
+
+        if (!watermarkSettings) return;
+
+        Swal.fire({
+            title: '正在搜尋 Storage 照片...',
+            html: `<div id="zip-progress-text" style="font-size:14px; margin-top:10px;">請稍候...</div>`,
+            allowOutsideClick: false,
+            didOpen: () => Swal.showLoading()
+        });
+
+        const progressEl = document.getElementById('zip-progress-text');
+
+        try {
+            const storageFolderPath = `${STORAGE_ROOT}/${cleanLayerName}`;
+            const listResult = await firebase.storage().ref(storageFolderPath).listAll();
+
+            if (listResult.items.length === 0) {
+                return Swal.fire('提示', `Storage 路徑 [${storageFolderPath}] 下找不到任何檔案。`, 'info');
+            }
+
+            const items = listResult.items;
+            if (progressEl) progressEl.textContent = `找到 ${items.length} 個檔案，準備下載並處理...`;
+
+            const zip = new JSZip();
+            const rootFolder = zip.folder(cleanLayerName);
+            
+            const targetPhotosCount = getSafeAuditConfig(kmlId).targetPhotos || 2;
+            const csvData = buildCsvContent(kmlId, cleanLayerName, targetPhotosCount);
+            rootFolder.file(`${cleanLayerName}_清查總表.csv`, csvData);
+
+            const records = window.auditLayersState?.[kmlId] || {};
+            let completedCount = 0, failCount = 0;
+
+            const BATCH_SIZE = 3;
+            for (let i = 0; i < items.length; i += BATCH_SIZE) {
+                const batch = items.slice(i, i + BATCH_SIZE);
+
+                await Promise.all(batch.map(async (fileRef) => {
+                    try {
+                        const downloadUrl = await fileRef.getDownloadURL();
+                        const response = await fetch(downloadUrl);
+                        if (!response.ok) throw new Error(`HTTP error ${response.status}`);
+                        
+                        let imageBlob = await response.blob();
+
+                        // 至少有勾選一項時才壓製水印，否則直接打包原圖
+                        if (watermarkSettings.showPoint || watermarkSettings.showTime) {
+                            const fileName = fileRef.name;
+                            const parsedPointKey = fileName.replace(/_\d+\.[^/.]+$/, '').trim();
+                            
+                            const record = records[parsedPointKey] || {};
+                            let fallbackTimeStr = "";
+                            if (record.updatedAt) {
+                                try {
+                                    const dateObj = record.updatedAt.toDate ? record.updatedAt.toDate() : new Date(record.updatedAt);
+                                    if (!isNaN(dateObj.getTime())) {
+                                        fallbackTimeStr = dateObj.toLocaleString('sv', { timeZone: 'Asia/Taipei' });
+                                    }
+                                } catch {}
+                            }
+
+                            const storageTime = await getStoragePhotoTime(fileRef, fallbackTimeStr);
+
+                            imageBlob = await addWatermarkToImage(imageBlob, {
+                                showPoint: watermarkSettings.showPoint,
+                                showTime: watermarkSettings.showTime,
+                                position: watermarkSettings.position,
+                                customFontSize: watermarkSettings.fontSize,
+                                pointName: parsedPointKey,
+                                photoTime: storageTime
+                            });
+                        }
+
+                        rootFolder.file(fileRef.name, imageBlob);
+                    } catch (err) {
+                        failCount++;
+                    } finally {
+                        completedCount++;
+                        if (progressEl) progressEl.textContent = `打包進度: (${completedCount}/${items.length})`;
+                    }
+                }));
+            }
+
+            if (completedCount - failCount === 0) throw new Error('所有檔案下載皆失敗，請確認網路連線或 CORS 設定。');
+            if (progressEl) progressEl.textContent = '檔案下載與壓縮完成，正在匯出 ZIP...';
+
+            saveAs(await zip.generateAsync({ type: 'blob' }), `${cleanLayerName}_Storage照片總集.zip`);
+
+            Swal.fire({
+                icon: failCount > 0 ? 'warning' : 'success',
+                title: '打包下載完成！',
+                text: failCount > 0 ? `成功打包 ${completedCount - failCount} 個檔案，失敗 ${failCount} 個` : `已成功下載 ${completedCount} 個照片檔案與 CSV 清冊`,
                 timer: 2500,
                 showConfirmButton: false
             });
