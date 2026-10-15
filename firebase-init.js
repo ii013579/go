@@ -19,6 +19,17 @@ const auth = firebase.auth();
 const db = firebase.firestore();
 const storage = firebase.storage();
 
+// 設定 Auth 儲存持久性，以防無痕模式封鎖 sessionStorage 導致初始狀態遺失
+auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL)
+  .catch((error) => {
+    console.warn("無法設定 Auth 持久性為 LOCAL，嘗試降級為 SESSION:", error);
+    return auth.setPersistence(firebase.auth.Auth.Persistence.SESSION)
+      .catch((sessionError) => {
+        console.warn("無法設定 Auth 持久性為 SESSION，改用 MEMORY 記憶體模式:", sessionError);
+        return auth.setPersistence(firebase.auth.Auth.Persistence.MEMORY);
+      });
+  });
+
 // 根據 Canvas 環境提供的 __app_id 或是 Firebase 配置中的 projectId 來確定 appId
 const appId = typeof __app_id !== 'undefined' ? __app_id : firebaseConfig.projectId;
 console.log("Using App ID for Firestore path:", appId);
