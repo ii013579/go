@@ -63,7 +63,7 @@
                 maxZoom: 25,
                 maxNativeZoom: 20
             }),
-            'Google 地形圖': L.tileLayer('https://mt1.google.com/vt/lyrs=p&x={x}&y={y}&z={z}', {
+            'Google 地形圖': L.tileLayer('https://mt1.google.com/vt/lyrs=t&x={x}&y={y}&z={z}', {
                 attribution: 'Google Maps',
                 maxZoom: 25,
                 maxNativeZoom: 20
