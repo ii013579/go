@@ -37,7 +37,6 @@
 
   const currentAppId = (typeof appId !== 'undefined') ? appId : 'kmldata-d22fb';
 
-  // 1. Auth State ºÊÅ¥
   auth.onAuthStateChanged(async (user) => {
     if (user) {
       if (els.loginForm) els.loginForm.style.display = 'none';
@@ -97,7 +96,6 @@
     }
   });
 
-  // 2. Google µn¤J
   if (els.googleSignInBtn) {
     els.googleSignInBtn.addEventListener('click', async () => {
       try {
@@ -145,7 +143,6 @@
     });
   }
 
-  // 3. µn¥X
   if (els.logoutBtn) {
     els.logoutBtn.addEventListener('click', async () => {
       try {
