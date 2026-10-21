@@ -661,9 +661,8 @@
     });
   }
 
-
   // ==========================================
-  // 8. 多檔案選取預覽與自訂圖層名稱彈窗
+  // 8. 多檔案選取預覽與自訂圖層名稱彈窗（含同名覆蓋檢查）
   // ==========================================
   if (els.triggerUploadBtn) {
     els.triggerUploadBtn.addEventListener('click', () => els.hiddenKmlFileInput.click());
@@ -700,9 +699,46 @@
       if (confirmUpload) {
         // 取得使用者輸入的自訂圖層名稱
         const customInput = document.getElementById('modalCustomLayerName');
-        const finalLayerName = customInput && customInput.value.trim() !== '' 
+        let finalLayerName = customInput && customInput.value.trim() !== '' 
           ? customInput.value.trim() 
           : defaultLayerName;
+
+        // 去除 .kml 副檔名以便精準比對
+        finalLayerName = finalLayerName.replace(/\.kml$/i, '').trim();
+
+        // ---------------------------------------------------------
+        // 🔍 檢查下拉選單中是否有同名圖層，若有則跳出覆蓋警告
+        // ---------------------------------------------------------
+        const selectEl = document.getElementById('kmlLayerSelect');
+        if (selectEl) {
+            const existingOption = Array.from(selectEl.options).find(opt => {
+                const baseName = (opt.getAttribute('data-basename') || opt.textContent.split(' (')[0]).replace(/\.kml$/i, '').trim();
+                return baseName.toLowerCase() === finalLayerName.toLowerCase();
+            });
+
+            if (existingOption) {
+                const overwriteRes = await Swal.fire({
+                    title: '⚠️ 發現同名圖層',
+                    text: `圖層「${finalLayerName}」已經存在，請問是否要覆蓋現有圖層與資料？`,
+                    icon: 'warning',
+                    showCancelButton: true,
+                    confirmButtonColor: '#e74c3c',
+                    cancelButtonColor: '#34495e',
+                    confirmButtonText: '確定覆蓋',
+                    cancelButtonText: '取消'
+                });
+
+                // 如果使用者選擇取消，則中斷上傳並清空檔案選擇
+                if (!overwriteRes.isConfirmed) {
+                    els.hiddenKmlFileInput.value = '';
+                    if (els.selectedKmlFileNameDashboard) {
+                        els.selectedKmlFileNameDashboard.textContent = '尚未選擇檔案';
+                    }
+                    return;
+                }
+            }
+        }
+        // ---------------------------------------------------------
 
         // 暫存自訂圖層名稱至 dataset 供上傳按鈕點擊時讀取
         els.hiddenKmlFileInput.dataset.customLayerName = finalLayerName;
