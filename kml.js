@@ -170,7 +170,6 @@
     });
   }
 
-  // 刪除與復原整合互動 (支援動態底色切換)
   if (els.triggerDeleteBtn) {
     els.triggerDeleteBtn.addEventListener('click', async () => {
       let currentMode = 'delete';
