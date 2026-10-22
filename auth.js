@@ -47,7 +47,7 @@
       }
 
       if (!unsubUserRole) {
-        const userDocRef = db.collection('artifacts').doc(currentAppId).collection('public').doc('data').collection('users').doc(user.uid);
+        const userDocRef = db.collection('users').doc(user.uid);
         unsubUserRole = userDocRef.onSnapshot(async (doc) => {
           try {
             if (!doc.exists) {
