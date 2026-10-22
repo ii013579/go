@@ -1,4 +1,4 @@
-// layer.js - ¹Ï¼h¿ï³æ¡B§Ö¨ú»P°v¿ï±±¨î¼Ò²Õ
+ï»¿// layer.js - åœ–å±¤é¸å–®ã€å¿«å–èˆ‡é‡˜é¸æ§åˆ¶æ¨¡çµ„
 (function () {
   'use strict';
 
@@ -114,8 +114,8 @@
         localStorage.setItem('kml_list_cache_data', JSON.stringify(layersToRender));
       }
 
-      select.innerHTML = '<option value="">-- ½Ğ¿ï¾Ü KML ¹Ï¼h --</option>';
-      if (selectDashboard) selectDashboard.innerHTML = '<option value="">-- ½Ğ¿ï¾Ü KML ¹Ï¼h --</option>';
+      select.innerHTML = '<option value="">-- è«‹é¸æ“‡ KML åœ–å±¤ --</option>';
+      if (selectDashboard) selectDashboard.innerHTML = '<option value="">-- è«‹é¸æ“‡ KML åœ–å±¤ --</option>';
       window.currentKmlLayers = []; 
 
       const currentUserEmail = auth.currentUser?.email;
@@ -133,7 +133,7 @@
         if (!canDelete && selectDashboard) {
           opt2.disabled = true;
           opt2.style.color = '#999';
-          opt2.textContent = `${kmlName} (µL§R°£Åv­­)`;
+          opt2.textContent = `${kmlName} (ç„¡åˆªé™¤æ¬Šé™)`;
         }
 
         select.appendChild(opt1);
@@ -144,7 +144,7 @@
       if (window.currentKmlLayers.length > 0 && canEdit && deleteBtn) deleteBtn.disabled = false;
       tryLoadPinnedKmlLayerWhenReady();
     } catch (error) {
-      console.error("§ó·s KML ¹Ï¼h¦Cªí¿ù»~:", error);
+      console.error("æ›´æ–° KML åœ–å±¤åˆ—è¡¨éŒ¯èª¤:", error);
     }
   };
 
@@ -188,7 +188,7 @@
   }
   window.optimizedUpdateKmlLayerSelects = optimizedUpdateKmlLayerSelects;
 
-  // ªì©l¤Æ¿ï³æ¸ü¤J
+  // åˆå§‹åŒ–é¸å–®è¼‰å…¥
   auth.onAuthStateChanged(async () => {
     if (!hasInitialMenuLoaded) {
       hasInitialMenuLoaded = true;

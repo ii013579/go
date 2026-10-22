@@ -1,4 +1,4 @@
-// auth.js - ¨­¤ÀÅçÃÒ»P¨Ï¥ÎªÌÅv­­ºÞ²z¼Ò²Õ
+ï»¿// auth.js - èº«åˆ†é©—è­‰èˆ‡ä½¿ç”¨è€…æ¬Šé™ç®¡ç†æ¨¡çµ„
 (function () {
   'use strict';
 
@@ -27,10 +27,10 @@
 
   const getRoleDisplayName = role => {
     switch (role) {
-      case 'unapproved': return '¥¼¼f®Ö';
-      case 'user': return '¤@¯ë';
-      case 'editor': return '½s¿èªÌ';
-      case 'owner': return '¾Ö¦³ªÌ';
+      case 'unapproved': return 'æœªå¯©æ ¸';
+      case 'user': return 'ä¸€èˆ¬';
+      case 'editor': return 'ç·¨è¼¯è€…';
+      case 'owner': return 'æ“æœ‰è€…';
       default: return role || '';
     }
   };
@@ -42,7 +42,7 @@
       if (els.loginForm) els.loginForm.style.display = 'none';
       if (els.loggedInDashboard) els.loggedInDashboard.style.display = 'block';
       if (els.userEmailDisplay) {
-        els.userEmailDisplay.textContent = `${user.email} (Åv­­ÀË¬d¤¤...)`;
+        els.userEmailDisplay.textContent = `${user.email} (æ¬Šé™æª¢æŸ¥ä¸­...)`;
         els.userEmailDisplay.style.display = 'block';
       }
 
@@ -78,7 +78,7 @@
               await window.optimizedUpdateKmlLayerSelects();
             }
           } catch (err) {
-            console.error("³B²z¥Î¤á§Ö·Ó®É¥X¿ù:", err);
+            console.error("è™•ç†ç”¨æˆ¶å¿«ç…§æ™‚å‡ºéŒ¯:", err);
           }
         });
       }
@@ -112,14 +112,14 @@
             try {
               const regDoc = await db.collection('settings').doc('registration').get();
               if (!regDoc.exists) {
-                window.showMessage?.('µù¥U¥¢±Ñ', 'µù¥U¨t²Î¥¼±Ò¥Î©ÎµL®Äªºµù¥U½X¡C');
+                window.showMessage?.('è¨»å†Šå¤±æ•—', 'è¨»å†Šç³»çµ±æœªå•Ÿç”¨æˆ–ç„¡æ•ˆçš„è¨»å†Šç¢¼ã€‚');
                 return;
               }
 
               const storedCode = regDoc.data()?.oneTimeCode;
               const expiryTime = regDoc.data()?.oneTimeCodeExpiry ? regDoc.data().oneTimeCodeExpiry.toDate() : null;
               if (!storedCode || storedCode !== code || (expiryTime && new Date() > expiryTime)) {
-                window.showMessage?.('µù¥U¥¢±Ñ', 'µL®Ä©Î¹L´Áªºµù¥U½X¡C');
+                window.showMessage?.('è¨»å†Šå¤±æ•—', 'ç„¡æ•ˆæˆ–éŽæœŸçš„è¨»å†Šç¢¼ã€‚');
                 return;
               }
 
@@ -131,14 +131,14 @@
                 createdAt: firebase.firestore.FieldValue.serverTimestamp()
               });
 
-              window.showMessage?.('µù¥U¦¨¥\', `Åwªï ${reAuth.user.email}¡I±b¸¹¤w°e¥X¼f®Ö¡C`);
+              window.showMessage?.('è¨»å†ŠæˆåŠŸ', `æ­¡è¿Ž ${reAuth.user.email}ï¼å¸³è™Ÿå·²é€å‡ºå¯©æ ¸ã€‚`);
             } catch (error) {
-              window.showMessage?.('µù¥U¥¢±Ñ', error.message);
+              window.showMessage?.('è¨»å†Šå¤±æ•—', error.message);
             }
           });
         }
       } catch (error) {
-        if (els.loginMessage) els.loginMessage.textContent = `µn¤J¥¢±Ñ: ${error.message}`;
+        if (els.loginMessage) els.loginMessage.textContent = `ç™»å…¥å¤±æ•—: ${error.message}`;
       }
     });
   }
@@ -150,7 +150,7 @@
         Object.keys(localStorage).forEach(key => { if (key.startsWith('kml_')) localStorage.removeItem(key); });
         setTimeout(() => location.reload(), 1000);
       } catch (error) {
-        window.showMessage?.('µn¥X¥¢±Ñ', error.message);
+        window.showMessage?.('ç™»å‡ºå¤±æ•—', error.message);
       }
     });
   }

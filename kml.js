@@ -1,4 +1,4 @@
-// kml.js - KML ¤W¶Ç¡B¦X¨ÖÂĞ»\ÀË¬d»P§R°£´_­ìºŞ²z¼Ò²Õ
+ï»¿// kml.js - KML ä¸Šå‚³ã€åˆä½µè¦†è“‹æª¢æŸ¥èˆ‡åˆªé™¤å¾©åŸç®¡ç†æ¨¡çµ„
 (function () {
   'use strict';
 
@@ -26,10 +26,10 @@
     els.hiddenKmlFileInput.addEventListener('change', (event) => {
       const files = event.target.files;
       if (files && files.length > 0) {
-        els.selectedKmlFileNameDashboard.textContent = files.length === 1 ? files[0].name : `¤w¿ï¾Ü ${files.length} ­ÓÀÉ®×`;
+        els.selectedKmlFileNameDashboard.textContent = files.length === 1 ? files[0].name : `å·²é¸æ“‡ ${files.length} å€‹æª”æ¡ˆ`;
         if (els.uploadKmlSubmitBtnDashboard) els.uploadKmlSubmitBtnDashboard.disabled = false;
       } else {
-        els.selectedKmlFileNameDashboard.textContent = '©|¥¼¿ï¾ÜÀÉ®×';
+        els.selectedKmlFileNameDashboard.textContent = 'å°šæœªé¸æ“‡æª”æ¡ˆ';
         if (els.uploadKmlSubmitBtnDashboard) els.uploadKmlSubmitBtnDashboard.disabled = true;
       }
     });
@@ -46,7 +46,7 @@
 
       const defaultLayerName = files.length === 1 
         ? files[0].name 
-        : `${files[0].name} µ¥ ${files.length} ­ÓÀÉ®×¦X¨Ö`;
+        : `${files[0].name} ç­‰ ${files.length} å€‹æª”æ¡ˆåˆä½µ`;
 
       const fileNamesHtml = Array.from(files)
         .map(file => `<strong style="color: red;">${file.name}</strong>`)
@@ -54,15 +54,15 @@
 
       const modalContent = `
         <div style="text-align: left; margin-top: 10px;">
-          <p>±z¿ï¾Ü¤F¥H¤U ${files.length} ­ÓÀÉ®×¡G<br>${fileNamesHtml}</p>
+          <p>æ‚¨é¸æ“‡äº†ä»¥ä¸‹ ${files.length} å€‹æª”æ¡ˆï¼š<br>${fileNamesHtml}</p>
           <div style="margin-top: 15px;">
-            <label style="display: block; font-size: 13px; font-weight: bold; margin-bottom: 5px; color: #333;">¦Û­q¹Ï¼h¦WºÙ¡]¯dªÅ«h¨Ï¥Î¹w³]¦WºÙ¡^¡G</label>
+            <label style="display: block; font-size: 13px; font-weight: bold; margin-bottom: 5px; color: #333;">è‡ªè¨‚åœ–å±¤åç¨±ï¼ˆç•™ç©ºå‰‡ä½¿ç”¨é è¨­åç¨±ï¼‰ï¼š</label>
             <input type="text" id="modalCustomLayerName" value="${defaultLayerName}" style="width: 100%; padding: 8px; box-sizing: border-box; border-radius: 4px; border: 1px solid #ccc; font-size: 14px;" />
           </div>
-          <p style="margin-top: 10px; font-size: 13px;">½T©w­n°õ¦æ¤W¶Ç¶Ü¡H</p>
+          <p style="margin-top: 10px; font-size: 13px;">ç¢ºå®šè¦åŸ·è¡Œä¸Šå‚³å—ï¼Ÿ</p>
         </div>`;
 
-      const confirmUpload = await window.showConfirmationModal('½T»{¤W¶Ç', modalContent);
+      const confirmUpload = await window.showConfirmationModal('ç¢ºèªä¸Šå‚³', modalContent);
 
       if (confirmUpload) {
         const customInput = document.getElementById('modalCustomLayerName');
@@ -81,19 +81,19 @@
 
           if (existingOption) {
             const overwriteRes = await Swal.fire({
-              title: '?? µo²{¦P¦W¹Ï¼h',
-              text: `¹Ï¼h¡u${finalLayerName}¡v¤w¸g¦s¦b¡A½Ğ°İ¬O§_­nÂĞ»\²{¦³¹Ï¼h»P¸ê®Æ¡H`,
+              title: '?? ç™¼ç¾åŒååœ–å±¤',
+              text: `åœ–å±¤ã€Œ${finalLayerName}ã€å·²ç¶“å­˜åœ¨ï¼Œè«‹å•æ˜¯å¦è¦è¦†è“‹ç¾æœ‰åœ–å±¤èˆ‡è³‡æ–™ï¼Ÿ`,
               icon: 'warning',
               showCancelButton: true,
               confirmButtonColor: '#e74c3c',
               cancelButtonColor: '#34495e',
-              confirmButtonText: '½T©wÂĞ»\',
-              cancelButtonText: '¨ú®ø'
+              confirmButtonText: 'ç¢ºå®šè¦†è“‹',
+              cancelButtonText: 'å–æ¶ˆ'
             });
 
             if (!overwriteRes.isConfirmed) {
               els.hiddenKmlFileInput.value = '';
-              if (els.selectedKmlFileNameDashboard) els.selectedKmlFileNameDashboard.textContent = '©|¥¼¿ï¾ÜÀÉ®×';
+              if (els.selectedKmlFileNameDashboard) els.selectedKmlFileNameDashboard.textContent = 'å°šæœªé¸æ“‡æª”æ¡ˆ';
               return;
             }
           }
@@ -103,7 +103,7 @@
         els.uploadKmlSubmitBtnDashboard.click();
       } else {
         els.hiddenKmlFileInput.value = '';
-        if (els.selectedKmlFileNameDashboard) els.selectedKmlFileNameDashboard.textContent = '©|¥¼¿ï¾ÜÀÉ®×';
+        if (els.selectedKmlFileNameDashboard) els.selectedKmlFileNameDashboard.textContent = 'å°šæœªé¸æ“‡æª”æ¡ˆ';
       }
     });
   }
@@ -114,12 +114,12 @@
       if (!files || files.length === 0 || !auth.currentUser) return;
 
       if (window.currentUserRole !== 'owner' && window.currentUserRole !== 'editor') {
-        window.showMessage?.('¿ù»~', '±z¨S¦³Åv­­¤W¶Ç KML¡C');
+        window.showMessage?.('éŒ¯èª¤', 'æ‚¨æ²’æœ‰æ¬Šé™ä¸Šå‚³ KMLã€‚');
         return;
       }
 
       const layerName = els.hiddenKmlFileInput.dataset.customLayerName || (
-        files.length === 1 ? files[0].name : `${files[0].name} µ¥ ${files.length} ­ÓÀÉ®×¦X¨Ö`
+        files.length === 1 ? files[0].name : `${files[0].name} ç­‰ ${files.length} å€‹æª”æ¡ˆåˆä½µ`
       );
 
       try {
@@ -160,12 +160,12 @@
         localStorage.removeItem(`kml_data_${kmlLayerDocRef.id}`);
         delete els.hiddenKmlFileInput.dataset.customLayerName;
 
-        window.showMessage?.('¦¨¥\', `¤w¦¨¥\¦X¨Ö¨Ã¤W¶Ç ${files.length} ­ÓÀÉ®×¦Ü¹Ï¼h "${layerName}"¡C`);
+        window.showMessage?.('æˆåŠŸ', `å·²æˆåŠŸåˆä½µä¸¦ä¸Šå‚³ ${files.length} å€‹æª”æ¡ˆè‡³åœ–å±¤ "${layerName}"ã€‚`);
         await window.optimizedUpdateKmlLayerSelects?.();
         window.updatePinButtonState?.();
         els.hiddenKmlFileInput.value = '';
       } catch (error) {
-        window.showMessage?.('¿ù»~', error.message);
+        window.showMessage?.('éŒ¯èª¤', error.message);
       }
     });
   }
@@ -185,11 +185,11 @@
         let headerBgColor = '';
 
         if (currentMode === 'delete') {
-          titleHeader = '§R°£¹Ï¼h';
+          titleHeader = 'åˆªé™¤åœ–å±¤';
           headerBgColor = '#f9ebea';
-          promptText = '½Ğ¿ï¾Ü­n§R°£ªº¹Ï¼h¡G';
-          warningHtml = '<p style="color: #d32f2f; font-size: 12px; margin-top: 10px; font-weight: bold;">Äµ§i¡G§R°£«á¸ê®Æ±N²¾¦Ü¦^¦¬±í¡C</p>';
-          toggleText = '?? ¤Á´«¦Ü´_­ì¹Ï¼h';
+          promptText = 'è«‹é¸æ“‡è¦åˆªé™¤çš„åœ–å±¤ï¼š';
+          warningHtml = '<p style="color: #d32f2f; font-size: 12px; margin-top: 10px; font-weight: bold;">è­¦å‘Šï¼šåˆªé™¤å¾Œè³‡æ–™å°‡ç§»è‡³å›æ”¶æ¡¶ã€‚</p>';
+          toggleText = '?? åˆ‡æ›è‡³å¾©åŸåœ–å±¤';
 
           const layers = window.currentKmlLayers || [];
           optionsHtml = layers
@@ -197,34 +197,34 @@
               const canDelete = isOwner || (window.currentUserRole === 'editor' && layer.uploadedBy === currentUserEmail);
               return canDelete 
                 ? `<option value="${layer.id}">${layer.name}</option>`
-                : `<option value="${layer.id}" disabled style="color: #999; background-color: #f2f2f2;">${layer.name} (µL§R°£Åv­­)</option>`;
+                : `<option value="${layer.id}" disabled style="color: #999; background-color: #f2f2f2;">${layer.name} (ç„¡åˆªé™¤æ¬Šé™)</option>`;
             })
             .join('');
 
-          optionsHtml = optionsHtml ? '<option value="" disabled selected>-- ½Ğ¿ï¾Ü­n§R°£ªº¹Ï¼h --</option>' + optionsHtml 
-                                    : '<option value="" disabled selected>-- ¥Ø«e¨S¦³¥i§R°£ªº¹Ï¼h --</option>';
+          optionsHtml = optionsHtml ? '<option value="" disabled selected>-- è«‹é¸æ“‡è¦åˆªé™¤çš„åœ–å±¤ --</option>' + optionsHtml 
+                                    : '<option value="" disabled selected>-- ç›®å‰æ²’æœ‰å¯åˆªé™¤çš„åœ–å±¤ --</option>';
         } else {
-          titleHeader = '´_­ì¹Ï¼h';
+          titleHeader = 'å¾©åŸåœ–å±¤';
           headerBgColor = '#e8f8f5';
-          promptText = '½Ğ¿ï¾Ü­n´_­ìªº¹Ï¼h¡G';
-          warningHtml = '<p style="color: #27ae60; font-size: 12px; margin-top: 10px; font-weight: bold;">´£¥Ü¡G¿ï¾Ü«á±N±q¦^¦¬±íÁÙ­ì¸Ó¹Ï¼h¡C</p>';
-          toggleText = '??? ¤Á´«¦Ü§R°£¹Ï¼h';
+          promptText = 'è«‹é¸æ“‡è¦å¾©åŸçš„åœ–å±¤ï¼š';
+          warningHtml = '<p style="color: #27ae60; font-size: 12px; margin-top: 10px; font-weight: bold;">æç¤ºï¼šé¸æ“‡å¾Œå°‡å¾å›æ”¶æ¡¶é‚„åŸè©²åœ–å±¤ã€‚</p>';
+          toggleText = '??? åˆ‡æ›è‡³åˆªé™¤åœ–å±¤';
 
           try {
             const trashSnapshot = await db.collection('artifacts').doc(currentAppId)
               .collection('public').doc('data').collection('kmlTrash').get();
 
             if (trashSnapshot.empty) {
-              optionsHtml = '<option value="" disabled selected>-- ¦^¦¬±í¥Ø«e¨S¦³¥i´_­ìªº¹Ï¼h --</option>';
+              optionsHtml = '<option value="" disabled selected>-- å›æ”¶æ¡¶ç›®å‰æ²’æœ‰å¯å¾©åŸçš„åœ–å±¤ --</option>';
             } else {
               trashSnapshot.forEach(doc => {
                 const data = doc.data();
                 optionsHtml += `<option value="${doc.id}">${data.name || doc.id}</option>`;
               });
-              optionsHtml = '<option value="" disabled selected>-- ½Ğ¿ï¾Ü­n´_­ìªº¹Ï¼h --</option>' + optionsHtml;
+              optionsHtml = '<option value="" disabled selected>-- è«‹é¸æ“‡è¦å¾©åŸçš„åœ–å±¤ --</option>' + optionsHtml;
             }
           } catch (e) {
-            optionsHtml = '<option value="" disabled selected>-- ¸ü¤J¦^¦¬±í¥¢±Ñ --</option>';
+            optionsHtml = '<option value="" disabled selected>-- è¼‰å…¥å›æ”¶æ¡¶å¤±æ•— --</option>';
           }
         }
 
@@ -233,7 +233,7 @@
           html: `
             <div style="text-align: left; margin-top: 5px; background-color: ${headerBgColor}; padding: 12px; border-radius: 6px;">
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; border-bottom: 1px solid rgba(0,0,0,0.1); padding-bottom: 6px;">
-                <span style="font-size: 13px; color: #444;">¥Ø«e¼Ò¦¡¡G<strong>${titleHeader}</strong></span>
+                <span style="font-size: 13px; color: #444;">ç›®å‰æ¨¡å¼ï¼š<strong>${titleHeader}</strong></span>
                 <button type="button" id="swalModeToggleBtn" style="background-color: ${currentMode === 'delete' ? '#27ae60' : '#e74c3c'}; color: white; border: none; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: bold;">
                   ${toggleText}
                 </button>
@@ -254,8 +254,8 @@
           title: content.title,
           html: content.html,
           showCancelButton: true,
-          confirmButtonText: '½T©w',
-          cancelButtonText: '¨ú®ø',
+          confirmButtonText: 'ç¢ºå®š',
+          cancelButtonText: 'å–æ¶ˆ',
           confirmButtonColor: currentMode === 'delete' ? '#e74c3c' : '#2ecc71',
           cancelButtonColor: '#707a86',
           focusConfirm: false,
@@ -274,7 +274,7 @@
             const selectedOpt = picker ? picker.options[picker.selectedIndex] : null;
 
             if (!selectedId || (selectedOpt && selectedOpt.disabled)) {
-              Swal.showValidationMessage('½Ğ¿ï¾Ü¦³®Äªº¹Ï¼h¡I');
+              Swal.showValidationMessage('è«‹é¸æ“‡æœ‰æ•ˆçš„åœ–å±¤ï¼');
               return false;
             }
             return selectedId;
@@ -291,7 +291,7 @@
 
           if (currentMode === 'delete') {
             try {
-              Swal.fire({ title: '¥¿¦b§R°£¨Ã³Æ¥÷¹Ï¼h...', didOpen: () => Swal.showLoading(), allowOutsideClick: false });
+              Swal.fire({ title: 'æ­£åœ¨åˆªé™¤ä¸¦å‚™ä»½åœ–å±¤...', didOpen: () => Swal.showLoading(), allowOutsideClick: false });
 
               const docRef = getKmlCollectionRef().doc(selectedId);
               const docSnap = await docRef.get();
@@ -320,23 +320,23 @@
                 localStorage.removeItem('kml_list_cache_data');
                 localStorage.removeItem(`kml_data_${selectedId}`);
 
-                Swal.fire({ icon: 'success', title: '¹Ï¼h¤w§R°£¨Ã²¾¦Ü¦^¦¬±í¡C', timer: 1500, showConfirmButton: false });
+                Swal.fire({ icon: 'success', title: 'åœ–å±¤å·²åˆªé™¤ä¸¦ç§»è‡³å›æ”¶æ¡¶ã€‚', timer: 1500, showConfirmButton: false });
                 await window.optimizedUpdateKmlLayerSelects?.();
                 window.clearAllKmlLayers?.();
                 window.updatePinButtonState?.();
               }
             } catch (error) {
-              Swal.fire('§R°£¥¢±Ñ', error.message, 'error');
+              Swal.fire('åˆªé™¤å¤±æ•—', error.message, 'error');
             }
           } else {
             try {
-              Swal.fire({ title: '¥¿¦bÁÙ­ì¹Ï¼h...', didOpen: () => Swal.showLoading(), allowOutsideClick: false });
+              Swal.fire({ title: 'æ­£åœ¨é‚„åŸåœ–å±¤...', didOpen: () => Swal.showLoading(), allowOutsideClick: false });
 
               const trashRef = db.collection('artifacts').doc(currentAppId)
                 .collection('public').doc('data').collection('kmlTrash').doc(selectedId);
               
               const docSnap = await trashRef.get();
-              if (!docSnap.exists) throw new Error('§ä¤£¨ì¸Óµ§³Æ¥÷¸ê®Æ');
+              if (!docSnap.exists) throw new Error('æ‰¾ä¸åˆ°è©²ç­†å‚™ä»½è³‡æ–™');
 
               const layerData = docSnap.data();
               delete layerData.deletedAt;
@@ -351,10 +351,10 @@
 
               localStorage.removeItem('kml_list_cache_data');
 
-              Swal.fire({ icon: 'success', title: '¹Ï¼h¤w¦¨¥\´_­ì¡I', timer: 1500, showConfirmButton: false });
+              Swal.fire({ icon: 'success', title: 'åœ–å±¤å·²æˆåŠŸå¾©åŸï¼', timer: 1500, showConfirmButton: false });
               await window.optimizedUpdateKmlLayerSelects?.();
             } catch (error) {
-              Swal.fire('´_­ì¥¢±Ñ', error.message, 'error');
+              Swal.fire('å¾©åŸå¤±æ•—', error.message, 'error');
             }
           }
           break;
