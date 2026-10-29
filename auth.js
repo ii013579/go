@@ -37,6 +37,112 @@
 
   const currentAppId = (typeof appId !== 'undefined') ? appId : 'kmldata-d22fb';
 
+  // 渲染使用者卡片
+  const renderUserCards = (data) => {
+    const container = els.userListDiv;
+    if (!container) return;
+
+    container.innerHTML = '';
+    const roleOrder = { 'unapproved': 1, 'user': 2, 'editor': 3, 'owner': 4 };
+    data.sort((a, b) => (roleOrder[a.role] || 99) - (roleOrder[b.role] || 99));
+
+    data.forEach(user => {
+      const card = document.createElement('div');
+      card.className = 'user-card';
+      card.dataset.uid = user.id;
+      card.innerHTML = `
+        <div class="user-email">${user.email?.split('@')[0] || 'N/A'}</div>
+        <div class="user-nickname">${user.name || 'N/A'}</div>
+        <div class="user-role-controls">
+          <select class="user-role-select" data-original-value="${user.role || 'unapproved'}">
+            <option value="unapproved" ${user.role === 'unapproved' ? 'selected' : ''}>未審核</option>
+            <option value="user" ${user.role === 'user' ? 'selected' : ''}>一般</option>
+            <option value="editor" ${user.role === 'editor' ? 'selected' : ''}>編輯者</option>
+            <option value="owner" ${user.role === 'owner' ? 'selected' : ''} ${window.currentUserRole !== 'owner' ? 'disabled' : ''}>擁有者</option>
+          </select>
+        </div>
+        <div class="user-actions">
+          <button class="change-role-btn" disabled>變</button>
+          <button class="delete-user-btn action-buttons delete-btn">刪</button>
+        </div>`;
+      container.appendChild(card);
+    });
+
+    bindUserManagementEvents();
+  };
+
+  // 綁定使用者管理事件
+  const bindUserManagementEvents = () => {
+    const container = els.userListDiv;
+    if (!container) return;
+    const USER_CACHE_KEY = 'owner_user_list_cache';
+
+    container.querySelectorAll('.user-card').forEach(card => {
+      const select = card.querySelector('.user-role-select');
+      const changeBtn = card.querySelector('.change-role-btn');
+      const deleteBtn = card.querySelector('.delete-user-btn');
+      const uid = card.dataset.uid;
+
+      if (select) {
+        select.onchange = () => { changeBtn.disabled = (select.value === select.dataset.originalValue); };
+      }
+
+      if (changeBtn) {
+        changeBtn.onclick = async () => {
+          if (!await window.showConfirmationModal?.('確認', '確定變更角色？')) return;
+          try {
+            await db.collection('users').doc(uid).update({ role: select.value });
+            select.dataset.originalValue = select.value;
+            changeBtn.disabled = true;
+            window.showMessage?.('成功', '角色已更新');
+          } catch (e) { window.showMessage?.('錯誤', e.message); }
+        };
+      }
+
+      if (deleteBtn) {
+        deleteBtn.onclick = async () => {
+          if (!await window.showConfirmationModal?.('警告', '確定刪除用戶？')) return;
+          try {
+            await db.collection('users').doc(uid).delete();
+            card.remove();
+            const list = JSON.parse(sessionStorage.getItem(USER_CACHE_KEY) || '[]');
+            sessionStorage.setItem(USER_CACHE_KEY, JSON.stringify(list.filter(u => u.id !== uid)));
+          } catch (e) { window.showMessage?.('錯誤', e.message); }
+        };
+      }
+    });
+  };
+
+  // 抓取並重新整理使用者列表
+  const refreshUserList = async () => {
+    const container = els.userListDiv;
+    if (!container) return;
+
+    const USER_CACHE_KEY = 'owner_user_list_cache';
+
+    try {
+      const cachedData = sessionStorage.getItem(USER_CACHE_KEY);
+      if (cachedData) {
+        const usersData = JSON.parse(cachedData);
+        renderUserCards(usersData);
+        return;
+      }
+
+      const snapshot = await db.collection('users').get();
+      const usersData = [];
+      snapshot.forEach(doc => {
+        if (auth.currentUser && doc.id === auth.currentUser.uid) return;
+        usersData.push({ id: doc.id, ...doc.data() });
+      });
+
+      sessionStorage.setItem(USER_CACHE_KEY, JSON.stringify(usersData));
+      renderUserCards(usersData);
+
+    } catch (error) {
+      container.innerHTML = `<p style="color: red;">載入失敗: ${error.message}</p>`;
+    }
+  };
+
   auth.onAuthStateChanged(async (user) => {
     if (user) {
       if (els.loginForm) els.loginForm.style.display = 'none';
@@ -72,7 +178,9 @@
             toggleDisplay(els.registrationSettingsSection, isOwner);
             toggleBlock(els.userManagementSection, isOwner); 
             
-            if (els.userListDiv) els.userListDiv.style.display = 'none';
+            if (els.userListDiv && els.userListDiv.style.display !== 'block') {
+              els.userListDiv.style.display = 'none';
+            }
 
             if (roleChanged && typeof window.optimizedUpdateKmlLayerSelects === 'function') {
               await window.optimizedUpdateKmlLayerSelects();
@@ -206,6 +314,28 @@
       } catch (error) {
         console.error("生成註冊碼時出錯:", error);
         window.showMessage?.('錯誤', `生成註冊碼失敗: ${error.message}`);
+      }
+    });
+  }
+
+  // 刷新使用者列表按鈕
+  if (els.refreshUsersBtn) {
+    els.refreshUsersBtn.addEventListener('click', async () => {
+      if (window.currentUserRole !== 'owner') {
+        window.showMessage?.('權限不足', '只有管理員才能查看或編輯使用者列表。');
+        return;
+      }
+      
+      if (!els.userListDiv) return;
+
+      const isVisible = els.userListDiv.style.display !== 'none';
+
+      if (isVisible) {
+        els.userListDiv.style.display = 'none';
+      } else {
+        els.userListDiv.style.display = 'block';
+        sessionStorage.removeItem('owner_user_list_cache'); 
+        await refreshUserList(); 
       }
     });
   }
