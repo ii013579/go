@@ -143,6 +143,73 @@
     });
   }
 
+  // 產生一次性註冊碼函式 (2個英文字母 + 4個數字 = 共6碼)
+  const generateRegistrationAlphanumericCode = () => {
+    const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    const digits = '013456789';
+    let res = '';
+    for (let i = 0; i < 2; i++) res += letters.charAt(Math.floor(Math.random() * letters.length));
+    for (let i = 0; i < 4; i++) res += digits.charAt(Math.floor(Math.random() * digits.length));
+    return res;
+  };
+
+  // 生成註冊碼按鈕事件（僅 owner 可用）
+  if (els.generateRegistrationCodeBtn) {
+    els.generateRegistrationCodeBtn.addEventListener('click', async () => {
+      if (window.currentUserRole !== 'owner') {
+        window.showMessage?.('權限不足', '只有管理員才能生成註冊碼。');
+        return;
+      }
+      if (registrationCodeTimer) { clearInterval(registrationCodeTimer); registrationCodeTimer = null; }
+
+      try {
+        const code = generateRegistrationAlphanumericCode();
+        let countdownSeconds = 60;
+        const expiryDate = new Date();
+        expiryDate.setSeconds(expiryDate.getSeconds() + countdownSeconds);
+
+        await db.collection('settings').doc('registration').set({
+          oneTimeCode: code,
+          oneTimeCodeExpiry: firebase.firestore.Timestamp.fromDate(expiryDate)
+        }, { merge: true });
+
+        if (els.registrationCodeDisplay) els.registrationCodeDisplay.textContent = code;
+        if (els.registrationCodeCountdown) els.registrationCodeCountdown.textContent = ` (剩餘 ${countdownSeconds} 秒)`;
+        if (els.registrationCodeDisplay) els.registrationCodeDisplay.style.display = 'inline-block';
+        if (els.registrationCodeCountdown) els.registrationCodeCountdown.style.display = 'inline-block';
+        if (els.registrationExpiryDisplay) els.registrationExpiryDisplay.style.display = 'none';
+
+        registrationCodeTimer = setInterval(() => {
+          countdownSeconds--;
+          if (countdownSeconds >= 0) {
+            if (els.registrationCodeCountdown) els.registrationCodeCountdown.textContent = ` (剩餘 ${countdownSeconds} 秒)`;
+          } else {
+            clearInterval(registrationCodeTimer);
+            registrationCodeTimer = null;
+            if (els.registrationCodeDisplay) els.registrationCodeDisplay.textContent = '註冊碼已過期';
+            if (els.registrationCodeCountdown) els.registrationCodeCountdown.style.display = 'none';
+          }
+        }, 1000);
+
+        try {
+          await navigator.clipboard.writeText(code);
+        } catch (e) {
+          const tempInput = document.createElement('textarea');
+          tempInput.value = code;
+          document.body.appendChild(tempInput);
+          tempInput.select();
+          document.execCommand('copy');
+          document.body.removeChild(tempInput);
+        }
+
+        window.showMessage?.('成功', `一次性註冊碼已生成並複製到剪貼簿（共6碼），設定為 60 秒後過期！`);
+      } catch (error) {
+        console.error("生成註冊碼時出錯:", error);
+        window.showMessage?.('錯誤', `生成註冊碼失敗: ${error.message}`);
+      }
+    });
+  }
+
   if (els.logoutBtn) {
     els.logoutBtn.addEventListener('click', async () => {
       try {
