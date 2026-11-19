@@ -1655,7 +1655,7 @@
     }
 
     // ---------------------------------------------------------
-    // 7-2. 打包 Firebase Storage 照片 (水印預設不勾選版 - 加速版)
+    // 7-2. 打包 Firebase Storage 照片 (含取消按鈕與加速版)
     // ---------------------------------------------------------
     window.downloadAuditPhotosZip = async function(kmlId) {
         if (typeof JSZip === 'undefined' || typeof saveAs === 'undefined') {
@@ -1715,11 +1715,29 @@
 
         if (!watermarkSettings) return;
 
+        let isCancelled = false;
+
         Swal.fire({
             title: '正在搜尋 Storage 照片...',
             html: `<div id="zip-progress-text" style="font-size:14px; margin-top:10px;">請稍候...</div>`,
             allowOutsideClick: false,
-            didOpen: () => Swal.showLoading()
+            allowEscapeKey: false,
+            showConfirmButton: false,
+            showCancelButton: true,
+            cancelButtonText: '取消打包',
+            cancelButtonColor: '#e74c3c',
+            didOpen: () => {
+                Swal.showLoading();
+                const cancelBtn = Swal.getCancelButton();
+                if (cancelBtn) {
+                    cancelBtn.disabled = false;
+                    cancelBtn.addEventListener('click', () => {
+                        isCancelled = true;
+                        cancelBtn.disabled = true;
+                        cancelBtn.textContent = '正在取消...';
+                    }, { once: true });
+                }
+            }
         });
 
         const progressEl = document.getElementById('zip-progress-text');
@@ -1727,6 +1745,7 @@
         try {
             const storageFolderPath = `${STORAGE_ROOT}/${cleanLayerName}`;
             const listResult = await firebase.storage().ref(storageFolderPath).listAll();
+            if (isCancelled) return;
 
             if (listResult.items.length === 0) {
                 return Swal.fire('提示', `Storage 路徑 [${storageFolderPath}] 下找不到任何檔案。`, 'info');
@@ -1747,11 +1766,16 @@
             let completedCount = 0, failCount = 0;
 
             const processSinglePhoto = async (fileRef) => {
+                if (isCancelled) return;
                 const downloadUrl = await fileRef.getDownloadURL();
+                if (isCancelled) return;
+
                 const response = await fetch(downloadUrl);
                 if (!response.ok) throw new Error(`HTTP error ${response.status}`);
+                if (isCancelled) return;
 
                 let imageBlob = await response.blob();
+                if (isCancelled) return;
 
                 // 至少有勾選一項時才查詢時間與壓製水印，否則直接打包原圖
                 if (needWatermark) {
@@ -1770,6 +1794,7 @@
                     }
 
                     const storageTime = await getStoragePhotoTime(fileRef, fallbackTimeStr);
+                    if (isCancelled) return;
 
                     imageBlob = await addWatermarkToImage(imageBlob, {
                         showPoint: watermarkSettings.showPoint,
@@ -1779,6 +1804,7 @@
                         pointName: parsedPointKey,
                         photoTime: storageTime
                     });
+                    if (isCancelled) return;
                 }
 
                 rootFolder.file(fileRef.name, imageBlob);
@@ -1786,18 +1812,32 @@
 
             const BATCH_SIZE = 6;
             for (let i = 0; i < items.length; i += BATCH_SIZE) {
+                if (isCancelled) break;
                 const batch = items.slice(i, i + BATCH_SIZE);
 
                 await Promise.all(batch.map(async (fileRef) => {
+                    if (isCancelled) return;
                     try {
                         await processSinglePhoto(fileRef);
                     } catch {
-                        failCount++;
+                        if (!isCancelled) failCount++;
                     } finally {
-                        completedCount++;
-                        if (progressEl) progressEl.textContent = `打包進度: (${completedCount}/${items.length})`;
+                        if (!isCancelled) {
+                            completedCount++;
+                            if (progressEl) progressEl.textContent = `打包進度: (${completedCount}/${items.length})`;
+                        }
                     }
                 }));
+            }
+
+            if (isCancelled) {
+                Swal.close();
+                return Swal.fire({
+                    icon: 'info',
+                    title: '已取消打包',
+                    timer: 1200,
+                    showConfirmButton: false
+                });
             }
 
             if (completedCount - failCount === 0) throw new Error('所有檔案下載皆失敗，請確認網路連線或 CORS 設定。');
@@ -1806,15 +1846,15 @@
             const zipBlob = await zip.generateAsync(
                 {
                     type: 'blob',
-                    compression: 'DEFLATE',
-                    compressionOptions: { level: 1 }
+                    compression: 'STORE'
                 },
                 (metadata) => {
-                    if (progressEl && typeof metadata.percent === 'number') {
-                        progressEl.textContent = `正在產生 ZIP... ${Math.round(metadata.percent)}%`;
-                    }
+                    if (isCancelled || !progressEl || typeof metadata.percent !== 'number') return;
+                    progressEl.textContent = `正在產生 ZIP... ${Math.round(metadata.percent)}%`;
                 }
             );
+
+            if (isCancelled) return;
 
             saveAs(zipBlob, `${cleanLayerName}_Storage照片總集.zip`);
 
@@ -1827,6 +1867,7 @@
             });
 
         } catch (error) {
+            if (isCancelled) return;
             Swal.fire({ icon: 'error', title: '打包失敗', text: error.message || '發生未知錯誤' });
         }
     };
