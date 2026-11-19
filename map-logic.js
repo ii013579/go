@@ -63,7 +63,7 @@
                 maxZoom: 25,
                 maxNativeZoom: 20
             }),
-            'Google 地形圖': L.tileLayer('https://mt1.google.com/vt/lyrs=t&x={x}&y={y}&z={z}', {
+            'Google 地形圖': L.tileLayer('https://mt1.google.com/vt/lyrs=p&x={x}&y={y}&z={z}', {
                 attribution: 'Google Maps',
                 maxZoom: 25,
                 maxNativeZoom: 20
@@ -130,14 +130,16 @@
         // 縮放控制（右上）
         L.control.zoom({ position: 'topright' }).addTo(ns.map);
 
-        // 自定義定位控制（包含顯示使用者位置的功能）
+        // 自定義定位控制（包含顯示使用者位置與平滑移動功能）
         const LocateMeControl = L.Control.extend({
             _userLocationMarker: null,
             _userLocationCircle: null,
             _watchId: null,
             _firstViewCentered: false,
             _button: null,
-
+            _currentLatLng: null, // 紀錄目前畫面上的平滑座標（用於動畫補間）
+            _animFrameId: null,   // 紀錄動畫 ID，避免衝突
+        
             onAdd: function (map) {
                 const container = L.DomUtil.create('div', 'leaflet-bar leaflet-control leaflet-control-locate-me');
                 const button = L.DomUtil.create('a', '', container);
@@ -146,16 +148,16 @@
                 button.setAttribute("role", "button");
                 button.setAttribute("aria-label", "顯示我的位置");
                 button.innerHTML = `<span class="material-symbols-outlined" style="font-size: 24px; line-height: 30px;">my_location</span>`;
-
+        
                 this._button = button;
                 L.DomEvent.on(button, 'click', this._toggleLocate.bind(this));
                 return container;
             },
-
+        
             onRemove: function () {
                 this._stopTracking();
             },
-
+        
             _toggleLocate: function (e) {
                 L.DomEvent.stopPropagation(e);
                 L.DomEvent.preventDefault(e);
@@ -165,15 +167,15 @@
                     this._startTracking();
                 }
             },
-
+        
             _startTracking: function () {
                 if (!navigator.geolocation) {
                     alert("您的裝置不支援定位功能");
                     return;
                 }
-
+        
                 this._firstViewCentered = false;
-
+        
                 // 顯示「定位中」訊息（可被其他程式關閉）
                 window.showMessageCustom({
                     title: '定位中',
@@ -182,21 +184,21 @@
                     autoClose: false,
                     onConfirm: () => this._stopTracking()
                 });
-
-                // 開始 watchPosition（高精度）
+        
+                // 開始 watchPosition
                 this._watchId = navigator.geolocation.watchPosition(
                     (pos) => {
                         const latlng = [pos.coords.latitude, pos.coords.longitude];
                         const accuracy = pos.coords.accuracy || 0;
-
+        
                         // 第一次定位時移動地圖視角，並關閉「定位中」訊息
                         if (!this._firstViewCentered) {
                             ns.map.setView(latlng, 16);
                             this._firstViewCentered = true;
                             window.closeMessageCustom?.();
                         }
-
-                        // 更新藍點（不會干擾其他地圖操作）
+        
+                        // 更新藍點（使用平滑動畫補間）
                         this._updateLocation(latlng, accuracy);
                     },
                     (err) => {
@@ -209,15 +211,16 @@
                         });
                     },
                     {
-                        enableHighAccuracy: true,
-                        maximumAge: 0,
-                        timeout: 10000
+                        // 測量需要用到高精度座標，先維持不動，之後再調整
+                        enableHighAccuracy: true,    // 改為 false 可透過 Wi-Fi/基地台定位（大幅省電）
+                        maximumAge: 0,               // 允許 0 秒內的快取位置
+                        timeout: 10000               // 逾時容忍度
                     }
                 );
-
+        
                 this._setButtonActive(true);
             },
-
+        
             _stopTracking: function () {
                 if (this._watchId !== null) {
                     navigator.geolocation.clearWatch(this._watchId);
@@ -234,27 +237,76 @@
                     autoCloseDelay: 2000
                 });
             },
-
+        
             _updateLocation: function (latlng, accuracy) {
-                this._clearLocationMarkers();
-
-                this._userLocationMarker = L.marker(latlng, {
-                    icon: L.divIcon({
-                        className: 'user-location-dot',
-                        iconSize: [16, 16],
-                        iconAnchor: [8, 8]
-                    })
-                }).addTo(ns.map);
-
-                this._userLocationCircle = L.circle(latlng, Math.max(accuracy / 2, 10), {
-                    color: '#1a73e8',
-                    fillColor: '#1a73e8',
-                    fillOpacity: 0.15,
-                    weight: 2
-                }).addTo(ns.map);
+                // 如果是第一次定位（沒有舊點），直接建立
+                if (!this._userLocationMarker || !this._currentLatLng) {
+                    this._currentLatLng = latlng;
+        
+                    this._userLocationMarker = L.marker(latlng, {
+                        icon: L.divIcon({
+                            className: 'user-location-dot',
+                            iconSize: [16, 16],
+                            iconAnchor: [8, 8]
+                        })
+                    }).addTo(ns.map);
+        
+                    this._userLocationCircle = L.circle(latlng, Math.max(accuracy / 2, 10), {
+                        color: '#1a73e8',
+                        fillColor: '#1a73e8',
+                        fillOpacity: 0.15,
+                        weight: 2
+                    }).addTo(ns.map);
+                    return;
+                }
+        
+                // 如果已經有舊點，啟動動畫補間（Lerp + requestAnimationFrame）
+                const startLatLng = this._currentLatLng;
+                const targetLatLng = latlng;
+                const startTime = performance.now();
+                const duration = 800; // 動畫持續 800 毫秒
+        
+                // 如果上一個動畫還沒跑完就被打斷，先取消它
+                if (this._animFrameId) {
+                    cancelAnimationFrame(this._animFrameId);
+                }
+        
+                const animateMarker = (currentTime) => {
+                    const elapsed = currentTime - startTime;
+                    const progress = Math.min(elapsed / duration, 1);
+        
+                    // 使用 Ease-out 緩動公式，讓移動前半段快、快到目的地時減速平穩停止
+                    const easeProgress = 1 - Math.pow(1 - progress, 3);
+        
+                    // 計算當前要顯示的過渡座標
+                    const currentLat = startLatLng[0] + (targetLatLng[0] - startLatLng[0]) * easeProgress;
+                    const currentLng = startLatLng[1] + (targetLatLng[1] - startLatLng[1]) * easeProgress;
+                    const interpolatedLatLng = [currentLat, currentLng];
+        
+                    // 直接更新 Leaflet 標記與圓圈位置（高效能、不重建 DOM）
+                    this._userLocationMarker.setLatLng(interpolatedLatLng);
+                    if (this._userLocationCircle) {
+                        this._userLocationCircle.setLatLng(interpolatedLatLng);
+                        this._userLocationCircle.setRadius(Math.max(accuracy / 2, 10));
+                    }
+        
+                    // 暫存當前座標
+                    this._currentLatLng = interpolatedLatLng;
+        
+                    // 如果動畫還沒結束，繼續下一幀
+                    if (progress < 1) {
+                        this._animFrameId = requestAnimationFrame(animateMarker);
+                    }
+                };
+        
+                this._animFrameId = requestAnimationFrame(animateMarker);
             },
-
+        
             _clearLocationMarkers: function () {
+                if (this._animFrameId) {
+                    cancelAnimationFrame(this._animFrameId);
+                    this._animFrameId = null;
+                }
                 if (this._userLocationMarker) {
                     ns.map.removeLayer(this._userLocationMarker);
                     this._userLocationMarker = null;
@@ -263,8 +315,9 @@
                     ns.map.removeLayer(this._userLocationCircle);
                     this._userLocationCircle = null;
                 }
+                this._currentLatLng = null;
             },
-
+        
             _setButtonActive: function (active) {
                 if (this._button) {
                     this._button.style.backgroundColor = active ? 'red' : '';
