@@ -1654,8 +1654,8 @@
         });
     }
 
-    // ---------------------------------------------------------
-    // 7-2. 打包 Firebase Storage 照片 (含取消按鈕與加速版)
+// ---------------------------------------------------------
+    // 7-2. 打包 Firebase Storage 照片 (水印開關展開 + 即時預覽版)
     // ---------------------------------------------------------
     window.downloadAuditPhotosZip = async function(kmlId) {
         if (typeof JSZip === 'undefined' || typeof saveAs === 'undefined') {
@@ -1663,52 +1663,223 @@
         }
 
         const cleanLayerName = getLayerFolderName(kmlId, kmlId);
+        const storageFolderPath = `${STORAGE_ROOT}/${cleanLayerName}`;
 
-        // 點號與時間選項預設不勾選 (未加上 checked)
+        // 嘗試先抓一張該資料夾的照片做預覽底圖（失敗則改用模擬底圖，不卡住彈窗）
+        let previewSampleImg = null;
+        let previewSamplePoint = 'NVA015';
+        let previewSampleTime = new Date().toLocaleString('sv', { timeZone: 'Asia/Taipei' });
+
+        try {
+            const listResult = await firebase.storage().ref(storageFolderPath).listAll();
+            const firstItem = listResult.items?.[0];
+            if (firstItem) {
+                previewSamplePoint = firstItem.name.replace(/_\d+\.[^/.]+$/, '').trim() || 'NVA015';
+                const url = await firstItem.getDownloadURL();
+                const res = await fetch(url);
+                if (res.ok) {
+                    const blob = await res.blob();
+                    const objUrl = URL.createObjectURL(blob);
+                    previewSampleImg = await new Promise((resolve) => {
+                        const img = new Image();
+                        img.onload = () => {
+                            URL.revokeObjectURL(objUrl);
+                            resolve(img);
+                        };
+                        img.onerror = () => {
+                            URL.revokeObjectURL(objUrl);
+                            resolve(null);
+                        };
+                        img.src = objUrl;
+                    });
+                }
+            }
+        } catch {
+            // 預覽底圖抓取失敗時安靜退回模擬圖
+        }
+
+        const renderWatermarkPreview = () => {
+            const canvas = document.getElementById('swal-wm-preview-canvas');
+            if (!canvas) return;
+
+            const enabled = document.getElementById('swal-wm-enable')?.checked;
+            const showPoint = document.getElementById('swal-wm-chk-point')?.checked;
+            const showTime = document.getElementById('swal-wm-chk-time')?.checked;
+            const position = document.getElementById('swal-wm-pos')?.value || 'bottom-right';
+            const fontSize = parseInt(document.getElementById('swal-wm-size')?.value, 10) || 20;
+
+            const ctx = canvas.getContext('2d');
+            const w = canvas.width;
+            const h = canvas.height;
+            ctx.clearRect(0, 0, w, h);
+
+            if (!enabled) return;
+
+            // 繪製底圖（實拍照片或模擬現場背景）
+            if (previewSampleImg) {
+                const scale = Math.max(w / previewSampleImg.width, h / previewSampleImg.height);
+                const dw = previewSampleImg.width * scale;
+                const dh = previewSampleImg.height * scale;
+                const dx = (w - dw) / 2;
+                const dy = (h - dh) / 2;
+                ctx.drawImage(previewSampleImg, dx, dy, dw, dh);
+            } else {
+                const grad = ctx.createLinearGradient(0, 0, w, h);
+                grad.addColorStop(0, '#334155');
+                grad.addColorStop(1, '#1e293b');
+                ctx.fillStyle = grad;
+                ctx.fillRect(0, 0, w, h);
+
+                ctx.strokeStyle = 'rgba(148, 163, 184, 0.25)';
+                ctx.lineWidth = 1;
+                for (let x = 0; x < w; x += 24) {
+                    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
+                }
+                for (let y = 0; y < h; y += 24) {
+                    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+                }
+
+                ctx.fillStyle = 'rgba(226, 232, 240, 0.45)';
+                ctx.font = 'bold 13px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText('預覽範例畫面（未取得實拍底圖）', w / 2, h * 0.36);
+            }
+
+            const lines = [];
+            if (showPoint) lines.push(`點號: ${previewSamplePoint}`);
+            if (showTime) lines.push(`時間: ${previewSampleTime}`);
+            if (lines.length === 0) return;
+
+            // 依預覽框寬度做等比縮放，讓使用者感受字體大小變化
+            const previewFontSize = Math.max(10, Math.min(42, Math.round(fontSize * 0.75)));
+            const lineHeight = Math.round(previewFontSize * 1.35);
+            const padX = 10;
+            const padY = 6;
+            const margin = 10;
+
+            ctx.font = `bold ${previewFontSize}px sans-serif`;
+            const maxTextWidth = Math.max(...lines.map(t => ctx.measureText(t).width));
+            const boxW = Math.min(w - margin * 2, maxTextWidth + padX * 2);
+            const boxH = lines.length * lineHeight + padY * 2;
+
+            const boxX = position === 'bottom-left'
+                ? margin
+                : (w - boxW - margin);
+            const boxY = h - boxH - margin;
+
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.65)';
+            ctx.fillRect(boxX, boxY, boxW, boxH);
+
+            ctx.fillStyle = '#ffffff';
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'top';
+            lines.forEach((line, idx) => {
+                ctx.fillText(line, boxX + padX, boxY + padY + idx * lineHeight, boxW - padX * 2);
+            });
+        };
+
         const { value: watermarkSettings } = await Swal.fire({
             title: '📸 打包照片與水印設定',
             html: `
                 <div style="text-align: left; font-size: 14px;" class="audit-form-container">
-                    <div style="margin-bottom: 12px;">
-                        <label class="audit-form-label" style="font-weight: bold; display: block; margin-bottom: 6px;">1. 水印內容：</label>
-                        <div style="display: flex; gap: 20px; align-items: center; padding: 2px 0;">
-                            <label style="cursor: pointer; display: flex; align-items: center; gap: 6px;">
-                                <input type="checkbox" id="swal-wm-chk-point" style="width: 18px; height: 18px; cursor: pointer;">
-                                <span>點號名稱 (例: NVA015)</span>
-                            </label>
-                            <label style="cursor: pointer; display: flex; align-items: center; gap: 6px;">
-                                <input type="checkbox" id="swal-wm-chk-time" style="width: 18px; height: 18px; cursor: pointer;">
-                                <span>拍攝/上傳時間</span>
-                            </label>
+                    <div style="margin-bottom: 10px; padding: 8px 10px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px;">
+                        <label style="cursor: pointer; display: flex; align-items: center; gap: 8px; font-weight: 600; margin: 0;">
+                            <input type="checkbox" id="swal-wm-enable" style="width: 18px; height: 18px; cursor: pointer;">
+                            <span>加上浮水印</span>
+                        </label>
+                    </div>
+
+                    <div id="swal-wm-options-panel" style="display: none;">
+                        <div style="margin-bottom: 12px;">
+                            <label class="audit-form-label" style="font-weight: bold; display: block; margin-bottom: 6px;">1. 水印內容：</label>
+                            <div style="display: flex; gap: 20px; align-items: center; padding: 2px 0; flex-wrap: wrap;">
+                                <label style="cursor: pointer; display: flex; align-items: center; gap: 6px;">
+                                    <input type="checkbox" id="swal-wm-chk-point" checked style="width: 18px; height: 18px; cursor: pointer;">
+                                    <span>點號名稱 (例: NVA015)</span>
+                                </label>
+                                <label style="cursor: pointer; display: flex; align-items: center; gap: 6px;">
+                                    <input type="checkbox" id="swal-wm-chk-time" checked style="width: 18px; height: 18px; cursor: pointer;">
+                                    <span>拍攝/上傳時間</span>
+                                </label>
+                            </div>
                         </div>
-                    </div>
-                    <div style="margin-bottom: 12px;">
-                        <label class="audit-form-label" style="font-weight: bold; display: block; margin-bottom: 6px;">2. 水印位置：</label>
-                        <select id="swal-wm-pos" class="swal2-input audit-form-select" style="margin-top: 0; width: 100%;">
-                            <option value="bottom-right" selected>↘ 靠右下角</option>
-                            <option value="bottom-left">↙ 靠左下角</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label class="audit-form-label" style="font-weight: bold; display: block; margin-bottom: 6px;">3. 水印字體大小 (px)：</label>
-                        <input id="swal-wm-size" type="number" class="swal2-input audit-form-input" value="20" min="10" max="100" step="1" style="margin-top: 0; width: 100%; box-sizing: border-box;">
+
+                        <div style="margin-bottom: 12px;">
+                            <label class="audit-form-label" style="font-weight: bold; display: block; margin-bottom: 6px;">2. 水印位置：</label>
+                            <select id="swal-wm-pos" class="swal2-input audit-form-select" style="margin-top: 0; width: 100%;">
+                                <option value="bottom-right" selected>↘ 靠右下角</option>
+                                <option value="bottom-left">↙ 靠左下角</option>
+                            </select>
+                        </div>
+
+                        <div style="margin-bottom: 12px;">
+                            <label class="audit-form-label" style="font-weight: bold; display: block; margin-bottom: 6px;">3. 水印字體大小 (px)：</label>
+                            <input id="swal-wm-size" type="number" class="swal2-input audit-form-input" value="20" min="10" max="100" step="1" style="margin-top: 0; width: 100%; box-sizing: border-box;">
+                        </div>
+
+                        <div>
+                            <label class="audit-form-label" style="font-weight: bold; display: block; margin-bottom: 6px;">水印即時預覽：</label>
+                            <div style="border: 1px solid #cbd5e1; border-radius: 6px; overflow: hidden; background: #0f172a;">
+                                <canvas id="swal-wm-preview-canvas" width="320" height="200" style="display: block; width: 100%; height: auto;"></canvas>
+                            </div>
+                        </div>
                     </div>
                 </div>`,
             showCancelButton: true,
             confirmButtonText: '開始打包下載',
             cancelButtonText: '取消',
             focusConfirm: false,
+            didOpen: () => {
+                const enableChk = document.getElementById('swal-wm-enable');
+                const panelEl = document.getElementById('swal-wm-options-panel');
+                const pointChk = document.getElementById('swal-wm-chk-point');
+                const timeChk = document.getElementById('swal-wm-chk-time');
+                const posSelect = document.getElementById('swal-wm-pos');
+                const sizeInput = document.getElementById('swal-wm-size');
+
+                const togglePanel = () => {
+                    const isChecked = !!enableChk?.checked;
+                    if (panelEl) panelEl.style.display = isChecked ? 'block' : 'none';
+                    if (isChecked) renderWatermarkPreview();
+                };
+
+                enableChk?.addEventListener('change', togglePanel);
+                pointChk?.addEventListener('change', renderWatermarkPreview);
+                timeChk?.addEventListener('change', renderWatermarkPreview);
+                posSelect?.addEventListener('change', renderWatermarkPreview);
+                sizeInput?.addEventListener('input', renderWatermarkPreview);
+            },
             preConfirm: () => {
+                const enabled = document.getElementById('swal-wm-enable').checked;
+                if (!enabled) {
+                    return {
+                        enabled: false,
+                        showPoint: false,
+                        showTime: false,
+                        position: 'bottom-right',
+                        fontSize: 20
+                    };
+                }
+
+                const showPoint = document.getElementById('swal-wm-chk-point').checked;
+                const showTime = document.getElementById('swal-wm-chk-time').checked;
                 const fontSize = parseInt(document.getElementById('swal-wm-size').value, 10);
+
+                if (!showPoint && !showTime) {
+                    Swal.showValidationMessage('已勾選加上浮水印，請至少勾選一項水印內容！');
+                    return false;
+                }
                 if (!fontSize || fontSize < 10 || fontSize > 100) {
                     Swal.showValidationMessage('字體大小請輸入介於 10 到 100 之間的數字！');
                     return false;
                 }
+
                 return {
-                    showPoint: document.getElementById('swal-wm-chk-point').checked,
-                    showTime: document.getElementById('swal-wm-chk-time').checked,
+                    enabled: true,
+                    showPoint,
+                    showTime,
                     position: document.getElementById('swal-wm-pos').value,
-                    fontSize: fontSize
+                    fontSize
                 };
             }
         });
@@ -1743,7 +1914,6 @@
         const progressEl = document.getElementById('zip-progress-text');
 
         try {
-            const storageFolderPath = `${STORAGE_ROOT}/${cleanLayerName}`;
             const listResult = await firebase.storage().ref(storageFolderPath).listAll();
             if (isCancelled) return;
 
@@ -1761,7 +1931,7 @@
             const csvData = buildCsvContent(kmlId, cleanLayerName, targetPhotosCount);
             rootFolder.file(`${cleanLayerName}_清查總表.csv`, csvData);
 
-            const needWatermark = !!(watermarkSettings.showPoint || watermarkSettings.showTime);
+            const needWatermark = !!(watermarkSettings.enabled && (watermarkSettings.showPoint || watermarkSettings.showTime));
             const records = needWatermark ? (window.auditLayersState?.[kmlId] || {}) : {};
             let completedCount = 0, failCount = 0;
 
@@ -1777,7 +1947,6 @@
                 let imageBlob = await response.blob();
                 if (isCancelled) return;
 
-                // 至少有勾選一項時才查詢時間與壓製水印，否則直接打包原圖
                 if (needWatermark) {
                     const fileName = fileRef.name;
                     const parsedPointKey = fileName.replace(/_\d+\.[^/.]+$/, '').trim();
