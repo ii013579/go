@@ -1525,8 +1525,8 @@
         });
     };
           
-// ---------------------------------------------------------
-    // 7-1. 水印壓製工具函數 (支援前綴/自訂色票/上下緣對稱/等比縮放)
+    // ---------------------------------------------------------
+    // 7-1. 水印壓製工具函數 (預覽與匯出共用同一渲染核心)
     // ---------------------------------------------------------
     async function getStoragePhotoTime(fileRef, fallbackRecordTime = "") {
         try {
@@ -1568,6 +1568,7 @@
         return lines;
     }
 
+    // 單一核心繪製函式：預覽與實際匯出皆呼叫此函式
     function renderWatermarkOnContext(ctx, canvasWidth, canvasHeight, options = {}) {
         const {
             showPoint = false,
@@ -1579,6 +1580,7 @@
             customFontSize = 20,
             fontColor = '#FFFFFF',
             bgColor = '#000000',
+            transparentBg = false,
             bgAlpha = 0.65
         } = options;
 
@@ -1591,16 +1593,15 @@
         });
         if (textLines.length === 0) return;
 
-        // 統一以寬度 1000px 為基準等比計算，讓預覽框與實際 JPG 的視覺大小一致
-        const baseFontSize = parseFloat(customFontSize);
-        const safeBaseSize = (!Number.isNaN(baseFontSize) && baseFontSize > 0) ? baseFontSize : 20;
+        const parsedSize = parseFloat(customFontSize);
+        const safeBaseSize = (!Number.isNaN(parsedSize) && parsedSize > 0) ? parsedSize : 20;
         const ratio = canvasWidth / 1000;
-        const fontSize = Math.max(8, safeBaseSize * ratio);
-        const padX = Math.max(4, fontSize * 0.5);
-        const padY = Math.max(4, fontSize * 0.45); // 底框上下緣內距相同
+        const fontSize = Math.max(1, safeBaseSize * ratio);
+        const padX = Math.max(2, fontSize * 0.5);
+        const padY = Math.max(2, fontSize * 0.45); // 上緣與下緣內距完全一致
         const lineHeight = fontSize * 1.3;
-        const margin = Math.max(6, canvasWidth * 0.015);
-        const radius = Math.max(3, 6 * ratio);
+        const margin = Math.max(3, canvasWidth * 0.015);
+        const radius = Math.max(1, 6 * ratio);
 
         ctx.save();
         ctx.font = `bold ${fontSize}px sans-serif`;
@@ -1619,19 +1620,22 @@
             : (canvasWidth - bgWidth - margin);
         const y = canvasHeight - bgHeight - margin;
 
-        const rgb = parseHexColorToRgb(bgColor, { r: 0, g: 0, b: 0 });
-        ctx.fillStyle = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${bgAlpha})`;
-        ctx.beginPath();
-        if (typeof ctx.roundRect === 'function') {
-            ctx.roundRect(x, y, bgWidth, bgHeight, radius);
-        } else {
-            ctx.rect(x, y, bgWidth, bgHeight);
+        const effectiveAlpha = transparentBg ? 0 : bgAlpha;
+        if (effectiveAlpha > 0) {
+            const rgb = parseHexColorToRgb(bgColor, { r: 0, g: 0, b: 0 });
+            ctx.fillStyle = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${effectiveAlpha})`;
+            ctx.beginPath();
+            if (typeof ctx.roundRect === 'function') {
+                ctx.roundRect(x, y, bgWidth, bgHeight, radius);
+            } else {
+                ctx.rect(x, y, bgWidth, bgHeight);
+            }
+            ctx.fill();
         }
-        ctx.fill();
 
         ctx.fillStyle = fontColor || '#FFFFFF';
-        ctx.shadowColor = 'rgba(0, 0, 0, 0.75)';
-        ctx.shadowBlur = Math.max(1, 3 * ratio);
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.85)';
+        ctx.shadowBlur = Math.max(0.5, 3 * ratio);
         ctx.textAlign = 'left';
         ctx.textBaseline = 'middle';
 
@@ -1641,6 +1645,40 @@
         });
 
         ctx.restore();
+    }
+
+    // 將底圖與水印合成到一張 Canvas（回傳合成後 Canvas，供匯出與預覽共用）
+    function renderCompositeCanvas(sourceImg, fallbackWidth, fallbackHeight, options = {}) {
+        const srcW = sourceImg ? sourceImg.naturalWidth || sourceImg.width : fallbackWidth;
+        const srcH = sourceImg ? sourceImg.naturalHeight || sourceImg.height : fallbackHeight;
+
+        const canvas = document.createElement('canvas');
+        canvas.width = srcW;
+        canvas.height = srcH;
+        const ctx = canvas.getContext('2d');
+
+        if (sourceImg) {
+            ctx.drawImage(sourceImg, 0, 0, srcW, srcH);
+        } else {
+            const grad = ctx.createLinearGradient(0, 0, srcW, srcH);
+            grad.addColorStop(0, '#334155');
+            grad.addColorStop(1, '#1e293b');
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, srcW, srcH);
+
+            ctx.strokeStyle = 'rgba(148, 163, 184, 0.25)';
+            ctx.lineWidth = Math.max(1, srcW / 320);
+            const step = Math.max(24, Math.round(srcW / 14));
+            for (let x = 0; x < srcW; x += step) {
+                ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, srcH); ctx.stroke();
+            }
+            for (let y = 0; y < srcH; y += step) {
+                ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(srcW, y); ctx.stroke();
+            }
+        }
+
+        renderWatermarkOnContext(ctx, srcW, srcH, options);
+        return canvas;
     }
 
     async function addWatermarkToImage(imageBlob, options = {}) {
@@ -1654,31 +1692,17 @@
             img.onload = () => {
                 URL.revokeObjectURL(url);
 
-                const canvas = document.createElement('canvas');
-                canvas.width = img.width;
-                canvas.height = img.height;
-                const ctx = canvas.getContext('2d');
+                const lines = buildWatermarkLines(options);
+                if (lines.length === 0) {
+                    img.src = '';
+                    return resolve(imageBlob);
+                }
 
-                const releaseCanvas = () => {
+                const canvas = renderCompositeCanvas(img, img.width, img.height, options);
+                canvas.toBlob((blob) => {
                     canvas.width = 0;
                     canvas.height = 0;
                     img.src = '';
-                };
-
-                ctx.drawImage(img, 0, 0);
-
-                const lines = buildWatermarkLines(options);
-                if (lines.length === 0) {
-                    return canvas.toBlob((blob) => {
-                        releaseCanvas();
-                        resolve(blob || imageBlob);
-                    }, 'image/jpeg', 0.85);
-                }
-
-                renderWatermarkOnContext(ctx, canvas.width, canvas.height, options);
-
-                canvas.toBlob((blob) => {
-                    releaseCanvas();
                     resolve(blob || imageBlob);
                 }, 'image/jpeg', 0.85);
             };
@@ -1694,7 +1718,7 @@
     }
 
     // ---------------------------------------------------------
-    // 7-2. 打包 Firebase Storage 照片 (秒開彈窗 + 四欄並排 + 即時預覽 + 取消)
+    // 7-2. 打包 Firebase Storage 照片 (預覽 = 完整合成圖等比縮放)
     // ---------------------------------------------------------
     window.downloadAuditPhotosZip = async function(kmlId) {
         if (typeof JSZip === 'undefined' || typeof saveAs === 'undefined') {
@@ -1719,15 +1743,18 @@
             const showPoint = !!document.getElementById('swal-wm-chk-point')?.checked;
             const showTime = !!document.getElementById('swal-wm-chk-time')?.checked;
             const showPrefix = !!document.getElementById('swal-wm-chk-prefix')?.checked;
+            const transparentBg = !!document.getElementById('swal-wm-chk-transparent')?.checked;
             const position = document.getElementById('swal-wm-pos')?.value || 'bottom-right';
-            const fontSize = parseFloat(document.getElementById('swal-wm-size')?.value) || 20;
+            const fontSize = parseFloat(document.getElementById('swal-wm-size')?.value);
+            const validFontSize = (!Number.isNaN(fontSize) && fontSize > 0) ? fontSize : 20;
             const fontColor = document.getElementById('swal-wm-font-color')?.value || '#ffffff';
             const bgColor = document.getElementById('swal-wm-bg-color')?.value || '#000000';
 
             const ctx = canvas.getContext('2d');
             const w = canvas.width;
             const h = canvas.height;
-            ctx.clearRect(0, 0, w, h);
+            ctx.fillStyle = '#0f172a';
+            ctx.fillRect(0, 0, w, h);
 
             if (!enabled) return;
 
@@ -1737,47 +1764,38 @@
                     : (previewSampleImg ? '已套用資料夾實拍底圖' : '目前使用模擬底圖預覽');
             }
 
-            if (previewSampleImg) {
-                const scale = Math.max(w / previewSampleImg.width, h / previewSampleImg.height);
-                const dw = previewSampleImg.width * scale;
-                const dh = previewSampleImg.height * scale;
-                const dx = (w - dw) / 2;
-                const dy = (h - dh) / 2;
-                ctx.drawImage(previewSampleImg, dx, dy, dw, dh);
-            } else {
-                const grad = ctx.createLinearGradient(0, 0, w, h);
-                grad.addColorStop(0, '#334155');
-                grad.addColorStop(1, '#1e293b');
-                ctx.fillStyle = grad;
-                ctx.fillRect(0, 0, w, h);
-
-                ctx.strokeStyle = 'rgba(148, 163, 184, 0.25)';
-                ctx.lineWidth = 1;
-                for (let x = 0; x < w; x += 24) {
-                    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
-                }
-                for (let y = 0; y < h; y += 24) {
-                    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
-                }
-
-                ctx.fillStyle = 'rgba(226, 232, 240, 0.5)';
-                ctx.font = 'bold 13px sans-serif';
-                ctx.textAlign = 'center';
-                ctx.fillText(isPreviewLoading ? '載入實拍底圖中...' : '預覽範例畫面', w / 2, h * 0.36);
-            }
-
-            renderWatermarkOnContext(ctx, w, h, {
+            // 1. 先用完整原圖解析度產生實際合成圖（與匯出完全一致）
+            const fullComposite = renderCompositeCanvas(previewSampleImg, 1000, 625, {
                 showPoint,
                 showTime,
                 showPrefix,
                 pointName: previewSamplePoint,
                 photoTime: previewSampleTime,
                 position,
-                customFontSize: fontSize,
+                customFontSize: validFontSize,
                 fontColor,
                 bgColor,
+                transparentBg,
                 bgAlpha: 0.65
             });
+
+            // 2. 將整張合成圖等比放入預覽框（contain），不裁切、不另改字體比例
+            const scale = Math.min(w / fullComposite.width, h / fullComposite.height);
+            const dw = fullComposite.width * scale;
+            const dh = fullComposite.height * scale;
+            const dx = (w - dw) / 2;
+            const dy = (h - dh) / 2;
+            ctx.drawImage(fullComposite, dx, dy, dw, dh);
+
+            if (!previewSampleImg && isPreviewLoading) {
+                ctx.fillStyle = 'rgba(226, 232, 240, 0.75)';
+                ctx.font = 'bold 13px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText('載入實拍底圖中...', w / 2, h * 0.35);
+            }
+
+            fullComposite.width = 0;
+            fullComposite.height = 0;
         };
 
         const loadPreviewInBackground = async () => {
@@ -1828,12 +1846,13 @@
 
         const fontSwatches = ['#ffffff', '#fde047', '#38bdf8', '#f87171'];
         const bgSwatches = ['#000000', '#1e293b', '#7f1d1d', '#14532d'];
+        const boxStyle = 'border: 1.5px solid #cbd5e1; border-radius: 6px; padding: 6px; background: #ffffff;';
 
         const { value: watermarkSettings } = await Swal.fire({
             title: '📸 打包照片與水印設定',
             html: `
                 <div style="text-align: left; font-size: 13px;" class="audit-form-container">
-                    <div style="margin-bottom: 10px; padding: 8px 10px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px;">
+                    <div style="margin-bottom: 10px; padding: 8px 10px; background: #f8fafc; border: 1.5px solid #cbd5e1; border-radius: 6px;">
                         <label style="cursor: pointer; display: flex; align-items: center; gap: 8px; font-weight: 600; margin: 0; font-size: 14px;">
                             <input type="checkbox" id="swal-wm-enable" style="width: 18px; height: 18px; cursor: pointer;">
                             <span>加上浮水印</span>
@@ -1841,7 +1860,7 @@
                     </div>
 
                     <div id="swal-wm-options-panel" style="display: none;">
-                        <div style="margin-bottom: 10px;">
+                        <div style="margin-bottom: 10px; ${boxStyle}">
                             <label class="audit-form-label" style="font-weight: bold; display: block; margin-bottom: 6px;">1. 水印內容：</label>
                             <div style="display: flex; gap: 18px; align-items: center; padding: 2px 0; flex-wrap: wrap;">
                                 <label style="cursor: pointer; display: flex; align-items: center; gap: 6px;">
@@ -1855,8 +1874,8 @@
                             </div>
                         </div>
 
-                        <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin-bottom: 12px; align-items: start;">
-                            <div>
+                        <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin-bottom: 12px; align-items: stretch;">
+                            <div style="${boxStyle}">
                                 <label class="audit-form-label" style="font-weight: bold; display: block; margin-bottom: 6px; font-size: 12px;">2. 水印位置</label>
                                 <select id="swal-wm-pos" class="swal2-input audit-form-select" style="margin: 0; width: 100%; height: 32px; padding: 2px 4px; font-size: 11px;">
                                     <option value="bottom-right" selected>↘ 右下角</option>
@@ -1864,10 +1883,10 @@
                                 </select>
                             </div>
 
-                            <div>
+                            <div style="${boxStyle}">
                                 <label class="audit-form-label" style="font-weight: bold; display: block; margin-bottom: 6px; font-size: 12px;">3. 水印字體</label>
                                 <div style="display: flex; align-items: center; gap: 3px;">
-                                    <input id="swal-wm-size" type="number" class="swal2-input audit-form-input" value="20" min="10" max="100" step="1" style="margin: 0; width: 100%; height: 32px; padding: 2px 4px; font-size: 11px; box-sizing: border-box;">
+                                    <input id="swal-wm-size" type="number" class="swal2-input audit-form-input" value="20" min="1" max="100" step="1" style="margin: 0; width: 100%; height: 32px; padding: 2px 4px; font-size: 11px; box-sizing: border-box;">
                                     <input id="swal-wm-font-color" type="color" value="#ffffff" title="字體顏色" style="width: 28px; height: 32px; padding: 0; border: 1px solid #cbd5e1; border-radius: 4px; cursor: pointer; flex-shrink: 0;">
                                 </div>
                                 <div style="display: flex; gap: 3px; margin-top: 4px; flex-wrap: wrap;">
@@ -1875,15 +1894,19 @@
                                 </div>
                             </div>
 
-                            <div>
+                            <div style="${boxStyle}">
                                 <label class="audit-form-label" style="font-weight: bold; display: block; margin-bottom: 6px; font-size: 12px;">4. 水印底色</label>
                                 <input id="swal-wm-bg-color" type="color" value="#000000" title="水印底色" style="width: 100%; height: 32px; padding: 0; border: 1px solid #cbd5e1; border-radius: 4px; cursor: pointer; box-sizing: border-box;">
-                                <div style="display: flex; gap: 3px; margin-top: 4px; flex-wrap: wrap;">
+                                <div style="display: flex; gap: 3px; margin-top: 4px; align-items: center; flex-wrap: wrap;">
                                     ${bgSwatches.map(c => `<button type="button" class="swal-bg-swatch" data-color="${c}" title="${c}" style="width: 14px; height: 14px; border-radius: 3px; border: 1px solid #94a3b8; background: ${c}; cursor: pointer; padding: 0;"></button>`).join('')}
+                                    <label style="cursor: pointer; display: inline-flex; align-items: center; gap: 2px; font-size: 11px; margin-left: 2px;">
+                                        <input type="checkbox" id="swal-wm-chk-transparent" style="width: 13px; height: 13px; cursor: pointer; margin: 0;">
+                                        <span>透明</span>
+                                    </label>
                                 </div>
                             </div>
 
-                            <div>
+                            <div style="${boxStyle}">
                                 <label class="audit-form-label" style="font-weight: bold; display: block; margin-bottom: 6px; font-size: 12px;">5. 前綴</label>
                                 <label style="cursor: pointer; display: flex; align-items: center; gap: 4px; height: 32px; font-size: 12px; margin: 0;">
                                     <input type="checkbox" id="swal-wm-chk-prefix" style="width: 16px; height: 16px; cursor: pointer;">
@@ -1892,7 +1915,7 @@
                             </div>
                         </div>
 
-                        <div>
+                        <div style="${boxStyle}">
                             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
                                 <label class="audit-form-label" style="font-weight: bold; margin: 0;">水印即時預覽：</label>
                                 <span id="swal-wm-preview-status" style="font-size: 12px; color: #64748b;"></span>
@@ -1913,10 +1936,24 @@
                 const pointChk = document.getElementById('swal-wm-chk-point');
                 const timeChk = document.getElementById('swal-wm-chk-time');
                 const prefixChk = document.getElementById('swal-wm-chk-prefix');
+                const transparentChk = document.getElementById('swal-wm-chk-transparent');
                 const posSelect = document.getElementById('swal-wm-pos');
                 const sizeInput = document.getElementById('swal-wm-size');
                 const fontColorInput = document.getElementById('swal-wm-font-color');
                 const bgColorInput = document.getElementById('swal-wm-bg-color');
+
+                const syncTransparentState = () => {
+                    const isTrans = !!transparentChk?.checked;
+                    if (bgColorInput) {
+                        bgColorInput.disabled = isTrans;
+                        bgColorInput.style.opacity = isTrans ? '0.4' : '1';
+                    }
+                    document.querySelectorAll('.swal-bg-swatch').forEach(btn => {
+                        btn.disabled = isTrans;
+                        btn.style.opacity = isTrans ? '0.4' : '1';
+                    });
+                    renderWatermarkPreview();
+                };
 
                 const togglePanel = () => {
                     const isChecked = !!enableChk?.checked;
@@ -1928,6 +1965,7 @@
                 pointChk?.addEventListener('change', renderWatermarkPreview);
                 timeChk?.addEventListener('change', renderWatermarkPreview);
                 prefixChk?.addEventListener('change', renderWatermarkPreview);
+                transparentChk?.addEventListener('change', syncTransparentState);
                 posSelect?.addEventListener('change', renderWatermarkPreview);
                 sizeInput?.addEventListener('input', renderWatermarkPreview);
                 fontColorInput?.addEventListener('input', renderWatermarkPreview);
@@ -1942,6 +1980,10 @@
 
                 document.querySelectorAll('.swal-bg-swatch').forEach(btn => {
                     btn.addEventListener('click', () => {
+                        if (transparentChk?.checked) {
+                            transparentChk.checked = false;
+                            syncTransparentState();
+                        }
                         if (bgColorInput) bgColorInput.value = btn.dataset.color;
                         renderWatermarkPreview();
                     });
@@ -1960,6 +2002,7 @@
                         showPoint: false,
                         showTime: false,
                         showPrefix: false,
+                        transparentBg: false,
                         position: 'bottom-right',
                         fontSize: 20,
                         fontColor: '#ffffff',
@@ -1970,14 +2013,15 @@
                 const showPoint = document.getElementById('swal-wm-chk-point').checked;
                 const showTime = document.getElementById('swal-wm-chk-time').checked;
                 const showPrefix = !!document.getElementById('swal-wm-chk-prefix')?.checked;
+                const transparentBg = !!document.getElementById('swal-wm-chk-transparent')?.checked;
                 const fontSize = parseInt(document.getElementById('swal-wm-size').value, 10);
 
                 if (!showPoint && !showTime) {
                     Swal.showValidationMessage('已勾選加上浮水印，請至少勾選一項水印內容！');
                     return false;
                 }
-                if (!fontSize || fontSize < 10 || fontSize > 100) {
-                    Swal.showValidationMessage('字體大小請輸入介於 10 到 100 之間的數字！');
+                if (!fontSize || fontSize < 1 || fontSize > 100) {
+                    Swal.showValidationMessage('字體大小請輸入介於 1 到 100 之間的數字！');
                     return false;
                 }
 
@@ -1986,6 +2030,7 @@
                     showPoint,
                     showTime,
                     showPrefix,
+                    transparentBg,
                     position: document.getElementById('swal-wm-pos').value,
                     fontSize,
                     fontColor: document.getElementById('swal-wm-font-color')?.value || '#ffffff',
@@ -2024,6 +2069,7 @@
         const progressEl = document.getElementById('zip-progress-text');
 
         try {
+            const storageFolderPath = `${STORAGE_ROOT}/${cleanLayerName}`;
             const listResult = await firebase.storage().ref(storageFolderPath).listAll();
             if (isCancelled) return;
 
@@ -2083,6 +2129,7 @@
                         customFontSize: watermarkSettings.fontSize,
                         fontColor: watermarkSettings.fontColor,
                         bgColor: watermarkSettings.bgColor,
+                        transparentBg: watermarkSettings.transparentBg,
                         pointName: parsedPointKey,
                         photoTime: storageTime
                     });
