@@ -1568,7 +1568,6 @@
         return lines;
     }
 
-    // 單一核心繪製函式：預覽與實際匯出皆呼叫此函式
     function renderWatermarkOnContext(ctx, canvasWidth, canvasHeight, options = {}) {
         const {
             showPoint = false,
@@ -1598,7 +1597,7 @@
         const ratio = canvasWidth / 1000;
         const fontSize = Math.max(1, safeBaseSize * ratio);
         const padX = Math.max(2, fontSize * 0.5);
-        const padY = Math.max(2, fontSize * 0.45); // 上緣與下緣內距完全一致
+        const padY = Math.max(2, fontSize * 0.45);
         const lineHeight = fontSize * 1.3;
         const margin = Math.max(3, canvasWidth * 0.015);
         const radius = Math.max(1, 6 * ratio);
@@ -1647,10 +1646,9 @@
         ctx.restore();
     }
 
-    // 將底圖與水印合成到一張 Canvas（回傳合成後 Canvas，供匯出與預覽共用）
     function renderCompositeCanvas(sourceImg, fallbackWidth, fallbackHeight, options = {}) {
-        const srcW = sourceImg ? sourceImg.naturalWidth || sourceImg.width : fallbackWidth;
-        const srcH = sourceImg ? sourceImg.naturalHeight || sourceImg.height : fallbackHeight;
+        const srcW = sourceImg ? (sourceImg.naturalWidth || sourceImg.width) : fallbackWidth;
+        const srcH = sourceImg ? (sourceImg.naturalHeight || sourceImg.height) : fallbackHeight;
 
         const canvas = document.createElement('canvas');
         canvas.width = srcW;
@@ -1718,7 +1716,7 @@
     }
 
     // ---------------------------------------------------------
-    // 7-2. 打包 Firebase Storage 照片 (預覽 = 完整合成圖等比縮放)
+    // 7-2. 打包 Firebase Storage 照片 (預覽邊框適應圖片 + 共用邊線 + 取消)
     // ---------------------------------------------------------
     window.downloadAuditPhotosZip = async function(kmlId) {
         if (typeof JSZip === 'undefined' || typeof saveAs === 'undefined') {
@@ -1750,13 +1748,12 @@
             const fontColor = document.getElementById('swal-wm-font-color')?.value || '#ffffff';
             const bgColor = document.getElementById('swal-wm-bg-color')?.value || '#000000';
 
-            const ctx = canvas.getContext('2d');
-            const w = canvas.width;
-            const h = canvas.height;
-            ctx.fillStyle = '#0f172a';
-            ctx.fillRect(0, 0, w, h);
-
-            if (!enabled) return;
+            if (!enabled) {
+                canvas.height = 180;
+                const ctx = canvas.getContext('2d');
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                return;
+            }
 
             if (statusEl) {
                 statusEl.textContent = isPreviewLoading
@@ -1764,8 +1761,9 @@
                     : (previewSampleImg ? '已套用資料夾實拍底圖' : '目前使用模擬底圖預覽');
             }
 
-            // 1. 先用完整原圖解析度產生實際合成圖（與匯出完全一致）
-            const fullComposite = renderCompositeCanvas(previewSampleImg, 1000, 625, {
+            const fallbackW = 1000;
+            const fallbackH = 625;
+            const fullComposite = renderCompositeCanvas(previewSampleImg, fallbackW, fallbackH, {
                 showPoint,
                 showTime,
                 showPrefix,
@@ -1779,19 +1777,22 @@
                 bgAlpha: 0.65
             });
 
-            // 2. 將整張合成圖等比放入預覽框（contain），不裁切、不另改字體比例
-            const scale = Math.min(w / fullComposite.width, h / fullComposite.height);
-            const dw = fullComposite.width * scale;
-            const dh = fullComposite.height * scale;
-            const dx = (w - dw) / 2;
-            const dy = (h - dh) / 2;
-            ctx.drawImage(fullComposite, dx, dy, dw, dh);
+            // 讓預覽畫布長寬比跟隨實際合成圖，避免黑邊與比例不一致
+            const aspectRatio = fullComposite.height / Math.max(1, fullComposite.width);
+            const targetH = Math.max(80, Math.round(canvas.width * aspectRatio));
+            if (canvas.height !== targetH) {
+                canvas.height = targetH;
+            }
+
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(fullComposite, 0, 0, canvas.width, canvas.height);
 
             if (!previewSampleImg && isPreviewLoading) {
                 ctx.fillStyle = 'rgba(226, 232, 240, 0.75)';
                 ctx.font = 'bold 13px sans-serif';
                 ctx.textAlign = 'center';
-                ctx.fillText('載入實拍底圖中...', w / 2, h * 0.35);
+                ctx.fillText('載入實拍底圖中...', canvas.width / 2, canvas.height * 0.35);
             }
 
             fullComposite.width = 0;
@@ -1846,13 +1847,15 @@
 
         const fontSwatches = ['#ffffff', '#fde047', '#38bdf8', '#f87171'];
         const bgSwatches = ['#000000', '#1e293b', '#7f1d1d', '#14532d'];
-        const boxStyle = 'border: 1.5px solid #cbd5e1; border-radius: 6px; padding: 6px; background: #ffffff;';
+        const cardStyle = 'border: 1.5px solid #cbd5e1; border-radius: 6px; padding: 6px; background: #ffffff;';
+        const cellStyle = 'padding: 5px 4px; border-right: 1.5px solid #cbd5e1; min-width: 0;';
+        const lastCellStyle = 'padding: 5px 4px; min-width: 0;';
 
         const { value: watermarkSettings } = await Swal.fire({
             title: '📸 打包照片與水印設定',
             html: `
-                <div style="text-align: left; font-size: 13px;" class="audit-form-container">
-                    <div style="margin-bottom: 10px; padding: 8px 10px; background: #f8fafc; border: 1.5px solid #cbd5e1; border-radius: 6px;">
+                <div style="text-align: left; font-size: 12px;" class="audit-form-container">
+                    <div style="margin-bottom: 8px; padding: 7px 10px; background: #f8fafc; border: 1.5px solid #cbd5e1; border-radius: 6px;">
                         <label style="cursor: pointer; display: flex; align-items: center; gap: 8px; font-weight: 600; margin: 0; font-size: 14px;">
                             <input type="checkbox" id="swal-wm-enable" style="width: 18px; height: 18px; cursor: pointer;">
                             <span>加上浮水印</span>
@@ -1860,68 +1863,68 @@
                     </div>
 
                     <div id="swal-wm-options-panel" style="display: none;">
-                        <div style="margin-bottom: 10px; ${boxStyle}">
-                            <label class="audit-form-label" style="font-weight: bold; display: block; margin-bottom: 6px;">1. 水印內容：</label>
-                            <div style="display: flex; gap: 18px; align-items: center; padding: 2px 0; flex-wrap: wrap;">
-                                <label style="cursor: pointer; display: flex; align-items: center; gap: 6px;">
-                                    <input type="checkbox" id="swal-wm-chk-point" checked style="width: 17px; height: 17px; cursor: pointer;">
+                        <div style="margin-bottom: 8px; ${cardStyle}">
+                            <label class="audit-form-label" style="font-weight: bold; display: block; margin-bottom: 5px;">水印內容：</label>
+                            <div style="display: flex; gap: 14px; align-items: center; padding: 2px 0; flex-wrap: wrap;">
+                                <label style="cursor: pointer; display: flex; align-items: center; gap: 5px;">
+                                    <input type="checkbox" id="swal-wm-chk-point" checked style="width: 16px; height: 16px; cursor: pointer;">
                                     <span>點號名稱 (例: NVA015)</span>
                                 </label>
-                                <label style="cursor: pointer; display: flex; align-items: center; gap: 6px;">
-                                    <input type="checkbox" id="swal-wm-chk-time" checked style="width: 17px; height: 17px; cursor: pointer;">
+                                <label style="cursor: pointer; display: flex; align-items: center; gap: 5px;">
+                                    <input type="checkbox" id="swal-wm-chk-time" checked style="width: 16px; height: 16px; cursor: pointer;">
                                     <span>拍攝/上傳時間</span>
                                 </label>
                             </div>
                         </div>
 
-                        <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin-bottom: 12px; align-items: stretch;">
-                            <div style="${boxStyle}">
-                                <label class="audit-form-label" style="font-weight: bold; display: block; margin-bottom: 6px; font-size: 12px;">2. 水印位置</label>
-                                <select id="swal-wm-pos" class="swal2-input audit-form-select" style="margin: 0; width: 100%; height: 32px; padding: 2px 4px; font-size: 11px;">
+                        <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; margin-bottom: 8px; border: 1.5px solid #cbd5e1; border-radius: 6px; overflow: hidden; background: #ffffff; align-items: stretch;">
+                            <div style="${cellStyle}">
+                                <label class="audit-form-label" style="font-weight: bold; display: block; margin-bottom: 5px; font-size: 11px; white-space: nowrap;">水印位置</label>
+                                <select id="swal-wm-pos" class="swal2-input audit-form-select" style="margin: 0; width: 100%; height: 30px; padding: 2px; font-size: 11px;">
                                     <option value="bottom-right" selected>↘ 右下角</option>
                                     <option value="bottom-left">↙ 左下角</option>
                                 </select>
                             </div>
 
-                            <div style="${boxStyle}">
-                                <label class="audit-form-label" style="font-weight: bold; display: block; margin-bottom: 6px; font-size: 12px;">3. 水印字體</label>
-                                <div style="display: flex; align-items: center; gap: 3px;">
-                                    <input id="swal-wm-size" type="number" class="swal2-input audit-form-input" value="20" min="1" max="100" step="1" style="margin: 0; width: 100%; height: 32px; padding: 2px 4px; font-size: 11px; box-sizing: border-box;">
-                                    <input id="swal-wm-font-color" type="color" value="#ffffff" title="字體顏色" style="width: 28px; height: 32px; padding: 0; border: 1px solid #cbd5e1; border-radius: 4px; cursor: pointer; flex-shrink: 0;">
+                            <div style="${cellStyle}">
+                                <label class="audit-form-label" style="font-weight: bold; display: block; margin-bottom: 5px; font-size: 11px; white-space: nowrap;">水印字體</label>
+                                <div style="display: flex; align-items: center; gap: 2px;">
+                                    <input id="swal-wm-size" type="number" class="swal2-input audit-form-input" value="20" min="1" max="100" step="1" style="margin: 0; width: 100%; height: 30px; padding: 2px 3px; font-size: 11px; box-sizing: border-box;">
+                                    <input id="swal-wm-font-color" type="color" value="#ffffff" title="字體顏色" style="width: 22px; height: 30px; padding: 0; border: 1px solid #cbd5e1; border-radius: 3px; cursor: pointer; flex-shrink: 0;">
                                 </div>
-                                <div style="display: flex; gap: 3px; margin-top: 4px; flex-wrap: wrap;">
-                                    ${fontSwatches.map(c => `<button type="button" class="swal-font-swatch" data-color="${c}" title="${c}" style="width: 14px; height: 14px; border-radius: 3px; border: 1px solid #94a3b8; background: ${c}; cursor: pointer; padding: 0;"></button>`).join('')}
+                                <div style="display: flex; gap: 2px; margin-top: 4px; flex-wrap: wrap;">
+                                    ${fontSwatches.map(c => `<button type="button" class="swal-font-swatch" data-color="${c}" title="${c}" style="width: 12px; height: 12px; border-radius: 2px; border: 1px solid #94a3b8; background: ${c}; cursor: pointer; padding: 0;"></button>`).join('')}
                                 </div>
                             </div>
 
-                            <div style="${boxStyle}">
-                                <label class="audit-form-label" style="font-weight: bold; display: block; margin-bottom: 6px; font-size: 12px;">4. 水印底色</label>
-                                <input id="swal-wm-bg-color" type="color" value="#000000" title="水印底色" style="width: 100%; height: 32px; padding: 0; border: 1px solid #cbd5e1; border-radius: 4px; cursor: pointer; box-sizing: border-box;">
-                                <div style="display: flex; gap: 3px; margin-top: 4px; align-items: center; flex-wrap: wrap;">
-                                    ${bgSwatches.map(c => `<button type="button" class="swal-bg-swatch" data-color="${c}" title="${c}" style="width: 14px; height: 14px; border-radius: 3px; border: 1px solid #94a3b8; background: ${c}; cursor: pointer; padding: 0;"></button>`).join('')}
-                                    <label style="cursor: pointer; display: inline-flex; align-items: center; gap: 2px; font-size: 11px; margin-left: 2px;">
-                                        <input type="checkbox" id="swal-wm-chk-transparent" style="width: 13px; height: 13px; cursor: pointer; margin: 0;">
+                            <div style="${cellStyle}">
+                                <label class="audit-form-label" style="font-weight: bold; display: block; margin-bottom: 5px; font-size: 11px; white-space: nowrap;">水印底色</label>
+                                <input id="swal-wm-bg-color" type="color" value="#000000" title="水印底色" style="width: 100%; height: 30px; padding: 0; border: 1px solid #cbd5e1; border-radius: 3px; cursor: pointer; box-sizing: border-box;">
+                                <div style="display: flex; gap: 2px; margin-top: 4px; align-items: center; flex-wrap: wrap;">
+                                    ${bgSwatches.map(c => `<button type="button" class="swal-bg-swatch" data-color="${c}" title="${c}" style="width: 12px; height: 12px; border-radius: 2px; border: 1px solid #94a3b8; background: ${c}; cursor: pointer; padding: 0;"></button>`).join('')}
+                                    <label style="cursor: pointer; display: inline-flex; align-items: center; gap: 2px; font-size: 10px; margin-left: 1px; white-space: nowrap;">
+                                        <input type="checkbox" id="swal-wm-chk-transparent" style="width: 12px; height: 12px; cursor: pointer; margin: 0;">
                                         <span>透明</span>
                                     </label>
                                 </div>
                             </div>
 
-                            <div style="${boxStyle}">
-                                <label class="audit-form-label" style="font-weight: bold; display: block; margin-bottom: 6px; font-size: 12px;">5. 前綴</label>
-                                <label style="cursor: pointer; display: flex; align-items: center; gap: 4px; height: 32px; font-size: 12px; margin: 0;">
-                                    <input type="checkbox" id="swal-wm-chk-prefix" style="width: 16px; height: 16px; cursor: pointer;">
+                            <div style="${lastCellStyle}">
+                                <label class="audit-form-label" style="font-weight: bold; display: block; margin-bottom: 5px; font-size: 11px; white-space: nowrap;">前綴</label>
+                                <label style="cursor: pointer; display: flex; align-items: center; gap: 3px; height: 30px; font-size: 11px; margin: 0; white-space: nowrap;">
+                                    <input type="checkbox" id="swal-wm-chk-prefix" style="width: 14px; height: 14px; cursor: pointer; flex-shrink: 0;">
                                     <span>顯示前綴</span>
                                 </label>
                             </div>
                         </div>
 
-                        <div style="${boxStyle}">
-                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                        <div style="${cardStyle}">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
                                 <label class="audit-form-label" style="font-weight: bold; margin: 0;">水印即時預覽：</label>
-                                <span id="swal-wm-preview-status" style="font-size: 12px; color: #64748b;"></span>
+                                <span id="swal-wm-preview-status" style="font-size: 11px; color: #64748b;"></span>
                             </div>
-                            <div style="border: 1px solid #cbd5e1; border-radius: 6px; overflow: hidden; background: #0f172a;">
-                                <canvas id="swal-wm-preview-canvas" width="320" height="200" style="display: block; width: 100%; height: auto;"></canvas>
+                            <div style="border: 1px solid #cbd5e1; border-radius: 4px; overflow: hidden;">
+                                <canvas id="swal-wm-preview-canvas" width="320" height="180" style="display: block; width: 100%; height: auto;"></canvas>
                             </div>
                         </div>
                     </div>
