@@ -994,8 +994,8 @@
   }
 
 
-  // ==========================================
-  // 10. 多檔案批次讀取、解析與合併上傳邏輯
+// ==========================================
+  // 10. 多檔案批次讀取、解析與合併上傳邏輯 & 圖層刪除（含雙重確認）
   // ==========================================
   if (els.uploadKmlSubmitBtnDashboard) {
     els.uploadKmlSubmitBtnDashboard.addEventListener('click', async () => {
@@ -1086,12 +1086,13 @@
     });
   }
 
-  // 圖層刪除執行處理
+  // 圖層刪除執行處理（含雙重確認）
   if (els.deleteSelectedKmlBtn) {
     els.deleteSelectedKmlBtn.addEventListener('click', async () => {
       const kmlIdToDelete = els.kmlLayerSelectDashboard.value;
       const selectedOption = els.kmlLayerSelectDashboard.options[els.kmlLayerSelectDashboard.selectedIndex];
-      const kmlName = selectedOption ? selectedOption.textContent.replace(' (無刪除權限)', '') : null;
+      const rawOptionText = selectedOption ? selectedOption.textContent : '';
+      const kmlName = rawOptionText.replace(' (無刪除權限)', '').trim() || kmlIdToDelete;
 
       if (!kmlIdToDelete) return;
 
@@ -1105,9 +1106,75 @@
         return;
       }
 
+      // 第一重確認：提醒刪除圖層與相關清查資料
+      let firstConfirmed = false;
+      if (typeof Swal !== 'undefined') {
+        const res1 = await Swal.fire({
+          icon: 'warning',
+          title: '確定要刪除圖層嗎？',
+          html: `
+            <div style="text-align: left; font-size: 14px; line-height: 1.6;">
+              <p style="margin: 0 0 8px 0;">即將刪除圖層：<b>${kmlName}</b></p>
+              <p style="margin: 0; color: #dc3545; font-weight: 600;">⚠️ 此操作將一併移除該圖層及相關清查資料，且無法復原。</p>
+            </div>
+          `,
+          showCancelButton: true,
+          confirmButtonText: '下一步，再次確認',
+          cancelButtonText: '取消',
+          confirmButtonColor: '#e67e22',
+          cancelButtonColor: '#6c757d'
+        });
+        firstConfirmed = Boolean(res1.isConfirmed);
+      } else if (typeof window.showConfirmationModal === 'function') {
+        firstConfirmed = Boolean(
+          await window.showConfirmationModal(
+            '確認刪除圖層（1/2）',
+            `即將刪除圖層「<b>${kmlName}</b>」及相關清查資料，是否繼續？`
+          )
+        );
+      } else {
+        firstConfirmed = window.confirm(`確定要刪除圖層「${kmlName}」及相關清查資料嗎？（第 1 次確認）`);
+      }
+
+      if (!firstConfirmed) return;
+
+      // 第二重確認：最終確認執行刪除
+      let secondConfirmed = false;
+      if (typeof Swal !== 'undefined') {
+        const res2 = await Swal.fire({
+          icon: 'error',
+          title: '最終確認：立即刪除？',
+          html: `
+            <div style="text-align: left; font-size: 14px; line-height: 1.6;">
+              <p style="margin: 0 0 6px 0;">請再次確認要永久刪除：</p>
+              <div style="padding: 8px 10px; background: #fff5f5; border: 1px solid #feb2b2; border-radius: 6px; font-weight: 700; color: #c53030;">
+                ${kmlName}
+              </div>
+            </div>
+          `,
+          showCancelButton: true,
+          confirmButtonText: '確定永久刪除',
+          cancelButtonText: '放棄刪除',
+          confirmButtonColor: '#dc3545',
+          cancelButtonColor: '#6c757d'
+        });
+        secondConfirmed = Boolean(res2.isConfirmed);
+      } else if (typeof window.showConfirmationModal === 'function') {
+        secondConfirmed = Boolean(
+          await window.showConfirmationModal(
+            '最終確認刪除（2/2）',
+            `請再次確認永久刪除圖層「<b>${kmlName}</b>」與其清查紀錄。`
+          )
+        );
+      } else {
+        secondConfirmed = window.confirm(`最終確認：真的要永久刪除圖層「${kmlName}」嗎？（第 2 次確認）`);
+      }
+
+      if (!secondConfirmed) return;
+
       try {
         await getKmlCollectionRef().doc(kmlIdToDelete).delete();
-        
+
         if (typeof window.cleanupAuditData === 'function' && kmlName) {
           console.log(`[系統] 觸發清查資料清理: ${kmlName}`);
           await window.cleanupAuditData(kmlName);
@@ -1130,7 +1197,6 @@
       }
     });
   }
-
 
   // ==========================================
   // 11. 清查模組與管理員工具功能
