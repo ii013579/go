@@ -661,8 +661,8 @@
     });
   }
 
-// ==========================================
-  // 8. 多檔案選取預覽、重複點號檢查（加 (1)(2)... 後綴）與自訂圖層名稱彈窗
+  // ==========================================
+  // 8. 多檔案選取預覽、重複點號檢查（含多檔合併跨檔檢查，加 (1)(2)... 後綴）與自訂圖層名稱彈窗
   // ==========================================
 
   // 暫存已套用重複點號後綴的 KML 文字內容（key: `${index}_${file.name}`）
@@ -673,32 +673,47 @@
   };
 
   /**
-   * 檢查單一 KML 文字中的重複點號：
-   * - 若有重複點號，跳出 SweetAlert2 列表警告並確認是否自動加 (1), (2)... 後綴
-   * - 回傳 { cancelled: boolean, kmlText: string, duplicates: Array }
+   * 檢查一批 KML 檔案中的重複點號（支援單檔與多檔合併跨檔統計）：
+   * - 跨所有選取檔案統計每個點號出現次數（count > 1 即視為重複）
+   * - 跳出 SweetAlert2 列表警告並確認是否自動加 (1), (2)... 後綴
+   * - 回傳 { cancelled: boolean, processedByIndex: Map<number, string>, duplicates: Array }
    */
-  const inspectAndSuffixKmlDuplicates = async (rawKmlText, fileName) => {
+  const inspectAndSuffixKmlDuplicatesBatch = async (fileEntries) => {
     const parser = new DOMParser();
-    const xmlDoc = parser.parseFromString(rawKmlText, 'application/xml');
-
-    if (xmlDoc.querySelector('parsererror')) {
-      return { cancelled: false, kmlText: rawKmlText, duplicates: [] };
-    }
-
-    const placemarks = Array.from(xmlDoc.getElementsByTagName('Placemark'));
+    const parsedEntries = [];
     const nameCountMap = new Map();
     const allExistingNames = new Set();
 
-    placemarks.forEach((pm) => {
-      const nameEl = pm.getElementsByTagName('name')[0];
-      if (!nameEl) return;
-      const rawName = (nameEl.textContent || '').trim();
-      if (!rawName) return;
+    // 第一輪：解析各檔案並跨所有檔案累計每個點號出現次數
+    for (let i = 0; i < fileEntries.length; i++) {
+      const { file, rawText } = fileEntries[i];
+      const xmlDoc = parser.parseFromString(rawText, 'application/xml');
+      const isParseError = Boolean(xmlDoc.querySelector('parsererror'));
+      const placemarks = isParseError ? [] : Array.from(xmlDoc.getElementsByTagName('Placemark'));
 
-      allExistingNames.add(rawName);
-      nameCountMap.set(rawName, (nameCountMap.get(rawName) || 0) + 1);
-    });
+      if (!isParseError) {
+        placemarks.forEach((pm) => {
+          const nameEl = pm.getElementsByTagName('name')[0];
+          if (!nameEl) return;
+          const rawName = (nameEl.textContent || '').trim();
+          if (!rawName) return;
 
+          allExistingNames.add(rawName);
+          nameCountMap.set(rawName, (nameCountMap.get(rawName) || 0) + 1);
+        });
+      }
+
+      parsedEntries.push({
+        index: i,
+        file,
+        rawText,
+        xmlDoc,
+        isParseError,
+        placemarks
+      });
+    }
+
+    // 篩選出跨檔案出現超過 1 次的重複點號
     const duplicateSummary = [];
     nameCountMap.forEach((count, name) => {
       if (count > 1) {
@@ -707,8 +722,17 @@
     });
 
     if (duplicateSummary.length === 0) {
-      return { cancelled: false, kmlText: rawKmlText, duplicates: [] };
+      return {
+        cancelled: false,
+        processedByIndex: new Map(),
+        duplicates: []
+      };
     }
+
+    const isMultiFile = fileEntries.length > 1;
+    const scopeText = isMultiFile
+      ? `已跨 ${fileEntries.length} 個合併檔案偵測到 <b>${duplicateSummary.length}</b> 組重複點號`
+      : `檔案 <b>${fileEntries[0].file.name}</b> 偵測到 <b>${duplicateSummary.length}</b> 組重複點號`;
 
     const listHtml = duplicateSummary
       .map(
@@ -720,10 +744,10 @@
     if (typeof Swal !== 'undefined') {
       const result = await Swal.fire({
         icon: 'warning',
-        title: `重複點號警告（${fileName}）`,
+        title: isMultiFile ? '多檔合併重複點號警告' : '重複點號警告',
         html: `
           <div style="text-align: left; font-size: 14px; line-height: 1.5;">
-            <p style="margin-bottom: 8px;">偵測到 <b>${duplicateSummary.length}</b> 組重複點號，將自動加上 <b>(1)、(2)...</b> 後綴：</p>
+            <p style="margin-bottom: 8px;">${scopeText}，將自動加上 <b>(1)、(2)...</b> 後綴：</p>
             <ul style="max-height: 180px; overflow-y: auto; padding-left: 20px; margin: 0 0 10px 0; background: #fff8e6; border: 1px solid #ffe58f; border-radius: 6px; padding-top: 8px; padding-bottom: 8px;">
               ${listHtml}
             </ul>
@@ -738,41 +762,62 @@
       });
 
       if (!result.isConfirmed) {
-        return { cancelled: true, kmlText: rawKmlText, duplicates: duplicateSummary };
+        return {
+          cancelled: true,
+          processedByIndex: new Map(),
+          duplicates: duplicateSummary
+        };
       }
     } else {
       const plainList = duplicateSummary.map((d) => `${d.name} (${d.count}筆)`).join('\n');
       const ok = window.confirm(
-        `[${fileName}] 偵測到重複點號，將自動加上 (1)、(2)... 後綴：\n\n${plainList}\n\n確定繼續上傳？`
+        `${isMultiFile ? '[多檔合併] ' : ''}偵測到重複點號，將自動加上 (1)、(2)... 後綴：\n\n${plainList}\n\n確定繼續上傳？`
       );
       if (!ok) {
-        return { cancelled: true, kmlText: rawKmlText, duplicates: duplicateSummary };
+        return {
+          cancelled: true,
+          processedByIndex: new Map(),
+          duplicates: duplicateSummary
+        };
       }
     }
 
+    // 第二輪：依檔案順序替重複點號加上 (1), (2)... 後綴，並避免與既有名稱碰撞
     const seqMap = new Map();
-    placemarks.forEach((pm) => {
-      const nameEl = pm.getElementsByTagName('name')[0];
-      if (!nameEl) return;
-      const rawName = (nameEl.textContent || '').trim();
-      if (!rawName || (nameCountMap.get(rawName) || 0) <= 1) return;
+    const serializer = new XMLSerializer();
+    const processedByIndex = new Map();
 
-      let nextSeq = (seqMap.get(rawName) || 0) + 1;
-      let candidate = `${rawName}(${nextSeq})`;
-      while (allExistingNames.has(candidate)) {
-        nextSeq += 1;
-        candidate = `${rawName}(${nextSeq})`;
+    parsedEntries.forEach((entry) => {
+      if (entry.isParseError) return;
+
+      let modifiedInThisFile = false;
+      entry.placemarks.forEach((pm) => {
+        const nameEl = pm.getElementsByTagName('name')[0];
+        if (!nameEl) return;
+        const rawName = (nameEl.textContent || '').trim();
+        if (!rawName || (nameCountMap.get(rawName) || 0) <= 1) return;
+
+        let nextSeq = (seqMap.get(rawName) || 0) + 1;
+        let candidate = `${rawName}(${nextSeq})`;
+        while (allExistingNames.has(candidate)) {
+          nextSeq += 1;
+          candidate = `${rawName}(${nextSeq})`;
+        }
+
+        seqMap.set(rawName, nextSeq);
+        allExistingNames.add(candidate);
+        nameEl.textContent = candidate;
+        modifiedInThisFile = true;
+      });
+
+      if (modifiedInThisFile) {
+        processedByIndex.set(entry.index, serializer.serializeToString(entry.xmlDoc));
       }
-
-      seqMap.set(rawName, nextSeq);
-      allExistingNames.add(candidate);
-      nameEl.textContent = candidate;
     });
 
-    const serializer = new XMLSerializer();
     return {
       cancelled: false,
-      kmlText: serializer.serializeToString(xmlDoc),
+      processedByIndex,
       duplicates: duplicateSummary
     };
   };
@@ -861,25 +906,30 @@
         // ---------------------------------------------------------
 
         // ---------------------------------------------------------
-        // 🔎 檢查各 KML 檔案中的重複點號，並為重複者加上 (1), (2)... 後綴
+        // 🔎 跨所有選取 KML 檔案檢查重複點號，並為重複者加上 (1), (2)... 後綴
         // ---------------------------------------------------------
         window.__processedKmlTexts.clear();
         const fileArray = Array.from(files);
+        const fileEntries = [];
 
         for (let i = 0; i < fileArray.length; i++) {
           const file = fileArray[i];
           const rawText = await file.text();
-          const checkRes = await inspectAndSuffixKmlDuplicates(rawText, file.name);
-
-          if (checkRes.cancelled) {
-            resetUploadSelection();
-            return;
-          }
-
-          if (checkRes.duplicates.length > 0) {
-            window.__processedKmlTexts.set(`${i}_${file.name}`, checkRes.kmlText);
-          }
+          fileEntries.push({ file, rawText });
         }
+
+        const batchRes = await inspectAndSuffixKmlDuplicatesBatch(fileEntries);
+        if (batchRes.cancelled) {
+          resetUploadSelection();
+          return;
+        }
+
+        batchRes.processedByIndex.forEach((updatedXml, idx) => {
+          const targetFile = fileArray[idx];
+          if (targetFile) {
+            window.__processedKmlTexts.set(`${idx}_${targetFile.name}`, updatedXml);
+          }
+        });
         // ---------------------------------------------------------
 
         // 暫存自訂圖層名稱至 dataset 供上傳按鈕點擊時讀取
@@ -891,7 +941,6 @@
       }
     });
   }
-
 
   // ==========================================
   // 9. 圖層刪除互動與權限雙重檢查
@@ -969,14 +1018,18 @@
         // 迴圈非同步讀取並解析每一個選取的 KML 檔案
         for (let i = 0; i < files.length; i++) {
           const file = files[i];
-          
-          // 將 FileReader 封裝成 Promise 以進行順序讀取
-          const fileText = await new Promise((resolve, reject) => {
+
+          // 優先使用第 8 節已套用重複點號後綴 (1)(2)... 的 KML 內容，否則讀取原檔
+          const processedText = typeof window.getProcessedKmlText === 'function'
+            ? window.getProcessedKmlText(file, i)
+            : null;
+
+          const fileText = processedText ?? (await new Promise((resolve, reject) => {
             const reader = new FileReader();
             reader.onload = (e) => resolve(e.target.result);
             reader.onerror = (err) => reject(err);
             reader.readAsText(file);
-          });
+          }));
 
           // 解析 XML 並轉換為 GeoJSON
           const dom = new DOMParser().parseFromString(fileText, 'text/xml');
@@ -1012,9 +1065,12 @@
         await db.collection('artifacts').doc(appId).collection('public').doc('data')
           .collection('metadata').doc('sync').set({ lastUpdate: now, lastUpdateTime: new Date(now).toLocaleString('zh-TW') }, { merge: true });
 
-        // 清理本地快取
+        // 清理本地快取與已處理 KML 暫存
         localStorage.removeItem('kml_list_cache_data');
         localStorage.removeItem(`kml_data_${kmlLayerDocRef.id}`);
+        if (window.__processedKmlTexts instanceof Map) {
+          window.__processedKmlTexts.clear();
+        }
         delete els.hiddenKmlFileInput.dataset.customLayerName;
 
         window.showMessage?.('成功', `已成功合併並上傳 ${files.length} 個檔案至圖層 "${layerName}"。`);
@@ -1022,6 +1078,9 @@
         updatePinButtonState();
         els.hiddenKmlFileInput.value = '';
       } catch (error) {
+        if (window.__processedKmlTexts instanceof Map) {
+          window.__processedKmlTexts.clear();
+        }
         window.showMessage?.('錯誤', error.message);
       }
     });
