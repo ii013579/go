@@ -22,16 +22,17 @@ body {
   height: 100% !important;
 }
 
-/* ---------- 標題區域（頂部條：保留底色、去標題、左 Logo、縮高） ---------- */
+/* ---------- 第一行：標題列（藍底：Logo + 資料庫下拉 + 圖釘 + 窄編輯鈕） ---------- */
 #title {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 4px 8px;
-  min-height: 34px;
-  height: 34px;
-  font-size: 15px;
-  font-weight: 700;
+  gap: 6px;
+  padding: 5px 8px;
+  min-height: 42px;
+  height: 42px;
+  font-size: 14px;
+  font-weight: 600;
   background: linear-gradient(135deg, #6dd5ed, #2193b0);
   color: #fff;
   box-shadow: 0 3px 6px rgba(0,0,0,0.14);
@@ -42,20 +43,22 @@ body {
   z-index: 1001;
 }
 
-/* 隱藏原本標題文字節點（若文字直接寫在 #title 內，搭配 JS 清掉文字節點更乾淨） */
-#title .title-text,
-#title h1 {
-  display: none;
-}
-
-/* 第一行左側 Logo */
 #title .header-logo {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   flex-shrink: 0;
+}
+
+/* 藍底中間區塊：資料庫下拉 + 圖釘 */
+#headerDbGroup {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 /* ---------- 編輯按鈕（左右寬度縮小） ---------- */
@@ -67,11 +70,11 @@ body {
   padding: 2px 8px;
   min-width: auto;
   width: auto;
-  height: 22px;
+  height: 28px;
   line-height: 1;
   border: none;
   border-radius: 6px;
-  font-size: 12px;
+  font-size: 12.5px;
   font-weight: 600;
   cursor: pointer;
   flex-shrink: 0;
@@ -79,6 +82,7 @@ body {
   box-shadow: 0 2px 4px rgba(0,0,0,0.18);
   z-index: 1003;
 }
+
 #editButton:hover {
   background-color: #e0e0e0;
   transform: scale(1.03);
@@ -88,8 +92,8 @@ body {
 /* ---------- 圖釘（Pin）按鈕 ---------- */
 .pin-button-icon,
 #pinButton.pin-button-icon {
-  width: 30px;
-  height: 30px;
+  width: 32px;
+  height: 32px;
   padding: 0;
   border: none;
   border-radius: 6px;
@@ -105,8 +109,8 @@ body {
 }
 
 #pinButton .pin-icon {
-  width: 16px;
-  height: 16px;
+  width: 17px;
+  height: 17px;
   filter: brightness(0);
   pointer-events: none;
   user-select: none;
@@ -242,33 +246,17 @@ body {
   flex-shrink: 0;
 }
 
-/* ---------- 控制面板（Controls：資料庫選單 + 圖釘 + 搜尋地點 真正併排為單行） ---------- */
+/* ---------- 第二行：控制面板（搜尋地點緊湊列） ---------- */
 #controls {
-  padding: 4px 6px;
+  padding: 5px 8px;
   background: #fff;
   box-shadow: 0 3px 8px rgba(0,0,0,0.08);
   display: flex;
-  flex-direction: row;
-  align-items: center;
-  flex-wrap: nowrap;
+  flex-direction: column;
   gap: 5px;
-  position: relative; /* 為了 searchResults 的絕對定位 */
+  position: relative;
   z-index: 1000;
   box-sizing: border-box;
-}
-
-/* 左側：下拉選單 + 圖釘 */
-#controls > div:first-child {
-  display: flex;
-  align-items: center;
-  flex-wrap: nowrap !important;
-  gap: 4px !important;
-  flex: 1 1 54%;
-  min-width: 0;
-}
-
-#controls label[for="kmlLayerSelect"] {
-  display: none;
 }
 
 /* KML 控制項（預設由 JS 控制顯示） */
@@ -281,7 +269,7 @@ body {
 /* ---------- 統一輸入框樣式 ---------- */
 #kmlInput, #searchBox, #kmlLayerSelect, #kmlLayerSelectDashboard,
 #registrationCodeInput, #nicknameInput {
-  padding: 6px 10px;
+  padding: 4px 8px;
   font-size: 13px;
   border-radius: 6px;
   border: 1px solid #dcdcdc;
@@ -289,14 +277,21 @@ body {
   width: 100%;
   box-sizing: border-box;
 }
-#kmlLayerSelect {
+
+/* 藍底內的資料庫下拉選單 */
+#title #kmlLayerSelect {
   flex: 1 1 auto;
-  min-width: 0 !important;
-  width: 100% !important;
-  height: 30px;
-  padding: 2px 6px;
-  font-size: 12.5px;
+  min-width: 0;
+  width: 100%;
+  height: 32px;
+  padding: 2px 8px;
+  font-size: 13px;
+  color: #222;
+  background-color: #fff;
+  border-radius: 6px;
+  border: 1px solid rgba(255,255,255,0.6);
 }
+
 #kmlInput:focus, #searchBox:focus, #kmlLayerSelect:focus, #kmlLayerSelectDashboard:focus,
 #registrationCodeInput:focus, #nicknameInput:focus {
   border-color: #4a90e2;
@@ -308,16 +303,13 @@ body {
 #searchContainer {
   display: flex;
   align-items: center;
-  gap: 4px;
-  flex: 1 1 46%;
-  min-width: 0;
-  height: 30px;
+  gap: 6px;
   border: 1px solid #dcdcdc;
   border-radius: 6px;
-  padding: 0 6px;
+  padding: 0 8px;
   background-color: #fff;
   box-shadow: inset 0 1px 3px rgba(0,0,0,0.05);
-  position: static; /* 讓 #searchResults 相對於整個 #controls 展開 */
+  position: relative; /* 父容器用作絕對定位基準 */
   z-index: 1000;
   box-sizing: border-box;
   transition: border-radius 0.2s ease-in-out, border-bottom-color 0.2s ease-in-out;
@@ -340,16 +332,14 @@ body {
 
 /* 搜尋框本體（無邊） */
 #searchBox {
-  flex: 1 1 auto !important;
-  min-width: 0 !important;
-  width: auto !important;
-  height: 28px !important;
-  padding: 0 !important;
-  border: none !important;
-  outline: none !important;
-  background: transparent !important;
+  flex-grow: 1;
+  padding: 4px 0;
+  border: none;
+  outline: none;
+  background: transparent;
   box-sizing: border-box;
-  font-size: 12.5px !important;
+  height: 36px;
+  font-size: 14px;
 }
 
 /* 搜尋結果彈出框：grid 佈局（預設三欄） */
@@ -513,7 +503,6 @@ body {
   color: #333;
   white-space: nowrap;
   pointer-events: none;
-  z-index: 100;
   position: relative;
   background: none;
   text-shadow: -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff, 1px 1px 0 #fff;
