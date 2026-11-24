@@ -198,13 +198,53 @@
     };
 
     // ---------------------------------------------------------
-    // 🟡 已清查黃點顯示開關
+    // 🟡 已清查黃點顯示開關 (含點位文字標籤一併隱藏)
     // ---------------------------------------------------------
     window.toggleAuditedPointsVisibility = function() {
         window.showAuditedPoints = !window.showAuditedPoints;
+
         forceMapRefresh();
         updateBottomBtnState();
+
+        const ns = window.mapNamespace;
+        const map = ns?.map;
+        const kmlId = ns?.currentKmlLayerId || window.currentActiveKmlId;
+        const activeAudit = typeof isAuditActiveForLayer === 'function' ? isAuditActiveForLayer(kmlId) : true;
+        const isAuditedVisible = window.showAuditedPoints !== false;
+
+        if (activeAudit && Array.isArray(ns?.allKmlFeatures)) {
+            const records = window.auditLayersState?.[kmlId] || {};
+            ns.allKmlFeatures.forEach((f) => {
+                if (f?.geometry?.type !== 'Point') return;
+                const coords = f.geometry.coordinates;
+                if (!Array.isArray(coords) || coords.length < 2) return;
+
+                const pointKey = typeof getPointKey === 'function' ? getPointKey(f.properties, f.id) : (f.properties?.name || f.properties?.title || f.id);
+                const isAudited = Boolean(records?.[pointKey] || f.properties?.isAudited);
+                if (!isAudited) return;
+
+                const labelId = `label-${String(coords[1])}-${String(coords[0])}`.replace(/\./g, '_');
+                const spanEl = document.getElementById(labelId);
+                const markerWrapEl = spanEl?.closest('.marker-label');
+                const targetEl = markerWrapEl || spanEl;
+                if (targetEl) {
+                    targetEl.style.display = isAuditedVisible ? '' : 'none';
+                }
+            });
+        }
+
+        if (map && typeof map.eachLayer === 'function') {
+            map.eachLayer((layer) => {
+                const props = layer?.feature?.properties || layer?.options?.properties;
+                if (!props?.isAudited) return;
+                const iconEl = typeof layer.getElement === 'function' ? layer.getElement() : null;
+                if (iconEl) {
+                    iconEl.style.display = isAuditedVisible ? '' : 'none';
+                }
+            });
+        }
     };
+
 
     // ---------------------------------------------------------
     // 1. 樣式攔截與重繪
