@@ -1187,6 +1187,12 @@
                 await firebase.firestore().collection(APP_PATH).doc(kmlId).collection('auditRecords').doc(oldPointKey).delete();
             }
 
+            const currentUid = firebase.auth?.()?.currentUser?.uid || '';
+            const existingRecord = window.auditLayersState?.[kmlId]?.[trimmedPointKey] || {};
+            const ownerUid = isEditMode
+                ? (existingRecord.createdByUid || existingRecord.uid || currentUid)
+                : currentUid;
+
             const nowTime = new Date();
             const structuredData = {
                 pointName: trimmedPointKey,
@@ -1200,6 +1206,8 @@
                 lat: numLat,
                 lng: numLng,
                 isCustomPoint: true,
+                createdByUid: ownerUid,
+                uid: ownerUid,
                 updatedAt: nowTime
             };
 
@@ -1214,7 +1222,9 @@
                     name: trimmedPointKey, title: trimmedPointKey, kmlId, auditPointKey: trimmedPointKey,
                     isCustomPoint: true, isAudited: true, deviceStatus: deviceStatus || "新增", auditStatus: deviceStatus || "新增",
                     description: finalDesc, desc: finalDesc,
-                    auditNote: remark || "", photos: photoUrls, fillColor: "#FCD770", color: "#ffffff", radius: 8, fillOpacity: 0.85
+                    auditNote: remark || "", photos: photoUrls,
+                    createdByUid: ownerUid, uid: ownerUid,
+                    fillColor: "#FCD770", color: "#ffffff", radius: 8, fillOpacity: 0.85
                 }
             };
 
@@ -1476,8 +1486,32 @@
     // ---------------------------------------------------------
     // 點位刪除區段
     // ---------------------------------------------------------
+    function canDeleteAuditPoint(kmlId, pointKey, featureProps = {}) {
+        const role = typeof getUserRole === 'function' ? getUserRole() : 'none';
+        if (role === 'owner' || role === 'editor') return true;
+        if (role !== 'user') return false;
+
+        const currentUid = firebase.auth?.()?.currentUser?.uid;
+        if (!currentUid) return false;
+
+        const record = window.auditLayersState?.[kmlId]?.[pointKey] || {};
+        const matchedFeature = window.mapNamespace?.allKmlFeatures?.find(
+            (f) => getPointKey(f.properties) === pointKey
+        );
+        const props = { ...(matchedFeature?.properties || {}), ...(featureProps || {}) };
+
+        const isCustom = Boolean(record.isCustomPoint || props.isCustomPoint);
+        const ownerUid = record.createdByUid || record.uid || props.createdByUid || props.uid;
+
+        return isCustom && ownerUid === currentUid;
+    }
+
     window.deleteCustomPoint = async function(kmlId, pointKey, kmlLayerName) {
         if (!kmlId || !pointKey || !isAuditActiveForLayer(kmlId)) return;
+
+        if (!canDeleteAuditPoint(kmlId, pointKey)) {
+            return Swal.fire('權限不足', '您只能刪除自己新增的點位！', 'warning');
+        }
 
         const confirmRes = await Swal.fire({
             title: '確定要刪除此點位？', text: `將刪除點位「${pointKey}」及其照片！`, icon: 'warning',
