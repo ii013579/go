@@ -29,8 +29,8 @@ body {
   justify-content: space-between;
   gap: 6px;
   padding: 5px 8px;
-  min-height: 42px;
-  height: 42px;
+  min-height: 44px;
+  height: 44px;
   font-size: 14px;
   font-weight: 600;
   background: linear-gradient(135deg, #6dd5ed, #2193b0);
@@ -70,11 +70,11 @@ body {
   padding: 2px 8px;
   min-width: auto;
   width: auto;
-  height: 28px;
+  height: 30px;
   line-height: 1;
   border: none;
   border-radius: 6px;
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 600;
   cursor: pointer;
   flex-shrink: 0;
@@ -92,8 +92,8 @@ body {
 /* ---------- 圖釘（Pin）按鈕 ---------- */
 .pin-button-icon,
 #pinButton.pin-button-icon {
-  width: 32px;
-  height: 32px;
+  width: 34px;
+  height: 34px;
   padding: 0;
   border: none;
   border-radius: 6px;
@@ -109,8 +109,8 @@ body {
 }
 
 #pinButton .pin-icon {
-  width: 17px;
-  height: 17px;
+  width: 18px;
+  height: 18px;
   filter: brightness(0);
   pointer-events: none;
   user-select: none;
@@ -283,9 +283,9 @@ body {
   flex: 1 1 auto;
   min-width: 0;
   width: 100%;
-  height: 32px;
+  height: 34px;
   padding: 2px 8px;
-  font-size: 13px;
+  font-size: 14px;
   color: #222;
   background-color: #fff;
   border-radius: 6px;
@@ -330,7 +330,7 @@ body {
   vertical-align: middle;
 }
 
-/* 搜尋框本體（無邊） */
+/* 搜尋框本體 */
 #searchBox {
   flex-grow: 1;
   padding: 4px 0;
@@ -338,8 +338,8 @@ body {
   outline: none;
   background: transparent;
   box-sizing: border-box;
-  height: 36px;
-  font-size: 14px;
+  height: 38px;
+  font-size: 15px;
 }
 
 /* 搜尋結果彈出框：grid 佈局（預設三欄） */
