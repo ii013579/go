@@ -1181,7 +1181,59 @@
         try {
             const photoUrls = await window.uploadPhotosToStorage(photos, kmlId, trimmedPointKey, kmlLayerName);
 
-            if (isEditMode && oldPointKey &&
+            if (isEditMode && oldPointKey && oldPointKey !== trimmedPointKey) {
+                delete window.auditLayersState?.[kmlId]?.[oldPointKey];
+                if (ns?.allKmlFeatures) ns.allKmlFeatures = ns.allKmlFeatures.filter(f => getPointKey(f.properties) !== oldPointKey);
+                await firebase.firestore().collection(APP_PATH).doc(kmlId).collection('auditRecords').doc(oldPointKey).delete();
+            }
+
+            const nowTime = new Date();
+            const structuredData = {
+                pointName: trimmedPointKey,
+                status: "已完成",
+                deviceStatus: deviceStatus || "新增",
+                auditStatus: deviceStatus || "新增",
+                description: finalDesc,
+                desc: finalDesc,
+                note: remark || "",
+                photos: photoUrls,
+                lat: numLat,
+                lng: numLng,
+                isCustomPoint: true,
+                updatedAt: nowTime
+            };
+
+            window.auditLayersState ||= {};
+            window.auditLayersState[kmlId] ||= {};
+            window.auditLayersState[kmlId][trimmedPointKey] = structuredData;
+
+            const newGeoJsonFeature = {
+                type: "Feature",
+                geometry: { type: "Point", coordinates: [numLng, numLat] },
+                properties: {
+                    name: trimmedPointKey, title: trimmedPointKey, kmlId, auditPointKey: trimmedPointKey,
+                    isCustomPoint: true, isAudited: true, deviceStatus: deviceStatus || "新增", auditStatus: deviceStatus || "新增",
+                    description: finalDesc, desc: finalDesc,
+                    auditNote: remark || "", photos: photoUrls, fillColor: "#FCD770", color: "#ffffff", radius: 8, fillOpacity: 0.85
+                }
+            };
+
+            if (ns) {
+                ns.allKmlFeatures ||= [];
+                const idx = ns.allKmlFeatures.findIndex(f => getPointKey(f.properties) === trimmedPointKey);
+                if (idx >= 0) ns.allKmlFeatures[idx] = newGeoJsonFeature;
+                else ns.allKmlFeatures.push(newGeoJsonFeature);
+            }
+
+            await firebase.firestore().collection(APP_PATH).doc(kmlId).collection('auditRecords').doc(trimmedPointKey).set(structuredData, { merge: true });
+            await generateLayerCsvReport(kmlId, kmlLayerName || kmlId || 'default_layer', getSafeAuditConfig(kmlId).targetPhotos || 2);
+
+            await Swal.fire({ icon: 'success', title: isEditMode ? '修改點位成功' : '新增清查點位成功', timer: 800, showConfirmButton: false });
+            forceMapRefresh();
+        } catch (e) {
+            Swal.fire('錯誤', e.message || '儲存失敗', 'error');
+        }
+    };
     
     // ---------------------------------------------------------
     // 記憶體釋放工具區段 (集中管理 Canvas / Image / ObjectURL / 暫存相片)
