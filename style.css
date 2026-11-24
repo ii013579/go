@@ -22,71 +22,77 @@ body {
   height: 100% !important;
 }
 
-/* ---------- 標題區域（頂部條） ---------- */
-/* #title：標題列，包含漸層背景、陰影與圓角 */
+/* ---------- 標題區域（頂部條：保留底色、去標題、左 Logo、縮高） ---------- */
 #title {
-  text-align: center;
-  padding: 12px;
-  font-size: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 8px;
+  min-height: 34px;
+  height: 34px;
+  font-size: 15px;
   font-weight: 700;
   background: linear-gradient(135deg, #6dd5ed, #2193b0);
   color: #fff;
-  box-shadow: 0 4px 8px rgba(0,0,0,0.15);
-  border-bottom-left-radius: 12px;
-  border-bottom-right-radius: 12px;
+  box-shadow: 0 3px 6px rgba(0,0,0,0.14);
+  border-bottom-left-radius: 10px;
+  border-bottom-right-radius: 10px;
   position: relative;
-  z-index: 1001; /* 確保在其他內容之上 */
+  box-sizing: border-box;
+  z-index: 1001;
 }
 
-/* ---------- 編輯按鈕 ---------- */
+/* 隱藏原本標題文字節點（若文字直接寫在 #title 內，搭配 JS 清掉文字節點更乾淨） */
+#title .title-text,
+#title h1 {
+  display: none;
+}
+
+/* 第一行左側 Logo */
+#title .header-logo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+}
+
+/* ---------- 編輯按鈕（左右寬度縮小） ---------- */
 #editButton {
-  position: absolute;
-  top: 50%;
-  right: 15px;
-  transform: translateY(-50%);
+  position: static;
+  transform: none;
   background-color: #f0f0f0;
   color: #333;
-  padding: 8px 15px;
+  padding: 2px 8px;
+  min-width: auto;
+  width: auto;
+  height: 22px;
+  line-height: 1;
   border: none;
-  border-radius: 8px;
-  font-size: 16px;
+  border-radius: 6px;
+  font-size: 12px;
   font-weight: 600;
   cursor: pointer;
-  transition: background-color 0.3s, transform 0.2s, box-shadow 0.2s;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-  z-index: 1003; /* 確保在標題之上 */
+  flex-shrink: 0;
+  transition: background-color 0.25s, transform 0.2s, box-shadow 0.2s;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.18);
+  z-index: 1003;
 }
 #editButton:hover {
   background-color: #e0e0e0;
-  transform: translateY(-50%) scale(1.03);
-  box-shadow: 0 4px 8px rgba(0,0,0,0.25);
+  transform: scale(1.03);
+  box-shadow: 0 3px 6px rgba(0,0,0,0.22);
 }
 
 /* ---------- 圖釘（Pin）按鈕 ---------- */
-/* .pin-button-icon：通用圖釘按鈕樣式（白底、圓角、陰影） */
-.pin-button-icon {
-  width: 90px;
-  height: 40px;
-  padding: 0;
-  border: none;
-  border-radius: 8px;
-  background-color: #ffffff;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  cursor: pointer;
-  transition: background-color 0.3s, transform 0.2s, box-shadow 0.2s;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-  box-sizing: border-box;
-}
-
-/* #pinButton.pin-button-icon：若 #pinButton 使用 .pin-button-icon 時的固定大小與保護 */
+.pin-button-icon,
 #pinButton.pin-button-icon {
   width: 30px;
-  height: 40px;
+  height: 30px;
   padding: 0;
   border: none;
-  border-radius: 8px;
+  border-radius: 6px;
   background-color: #ffffff;
   display: flex;
   justify-content: center;
@@ -94,33 +100,29 @@ body {
   cursor: pointer;
   transition: background-color 0.3s, transform 0.2s, box-shadow 0.2s;
   box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-  flex-shrink: 0; /* 避免被 flex 容器壓縮 */
   box-sizing: border-box;
+  flex-shrink: 0;
 }
 
-/* 圖示樣式（子元素） */
 #pinButton .pin-icon {
-  width: 20px;
-  height: 20px;
-  filter: brightness(0); /* 黑色圖示 */
+  width: 16px;
+  height: 16px;
+  filter: brightness(0);
   pointer-events: none;
   user-select: none;
 }
 
-/* 點擊（釘選）後：紅底 */
 #pinButton.clicked {
   background-color: #e53935;
   color: #fff;
 }
 
-/* 禁用時：灰底 + 不可點 */
 #pinButton:disabled {
   background-color: #9e9e9e;
   cursor: not-allowed;
   box-shadow: none;
 }
 
-/* hover 效果，排除 disabled */
 #pinButton:hover:not(:disabled) {
   transform: scale(1.03);
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.25);
@@ -240,35 +242,41 @@ body {
   flex-shrink: 0;
 }
 
-/* ---------- 控制面板（Controls） ---------- */
+/* ---------- 控制面板（Controls：緊湊間距） ---------- */
 #controls {
-  padding: 15px;
+  padding: 4px 6px;
   background: #fff;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  box-shadow: 0 3px 8px rgba(0,0,0,0.08);
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 4px;
   position: relative; /* 為了 searchResults 的絕對定位 */
   z-index: 1000;
+  box-sizing: border-box;
 }
 
 /* KML 控制項（預設由 JS 控制顯示） */
 #kmlControls {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 6px;
 }
 
 /* ---------- 統一輸入框樣式 ---------- */
 #kmlInput, #searchBox, #kmlLayerSelect, #kmlLayerSelectDashboard,
 #registrationCodeInput, #nicknameInput {
-  padding: 10px 12px;
-  font-size: 15px;
-  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 13px;
+  border-radius: 6px;
   border: 1px solid #dcdcdc;
   transition: border-color 0.3s, box-shadow 0.3s;
-  width: calc(100% - 24px);
+  width: 100%;
   box-sizing: border-box;
+}
+#kmlLayerSelect {
+  height: 30px;
+  padding: 2px 6px;
+  min-width: 110px;
 }
 #kmlInput:focus, #searchBox:focus, #kmlLayerSelect:focus, #kmlLayerSelectDashboard:focus,
 #registrationCodeInput:focus, #nicknameInput:focus {
@@ -281,10 +289,10 @@ body {
 #searchContainer {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   border: 1px solid #dcdcdc;
-  border-radius: 8px;
-  padding: 0 12px;
+  border-radius: 6px;
+  padding: 0 8px;
   background-color: #fff;
   box-shadow: inset 0 1px 3px rgba(0,0,0,0.05);
   position: relative; /* 父容器用作絕對定位基準 */
@@ -301,7 +309,7 @@ body {
 /* Material Symbols 圖標設定 */
 .material-symbols-outlined {
   font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
-  font-size: 24px;
+  font-size: 18px;
   color: #777;
   flex-shrink: 0;
   vertical-align: middle;
@@ -310,12 +318,13 @@ body {
 /* 搜尋框本體（無邊） */
 #searchBox {
   flex-grow: 1;
-  padding: 10px 0;
+  padding: 2px 0;
   border: none;
   outline: none;
   background: transparent;
   box-sizing: border-box;
-  height: 44px;
+  height: 30px;
+  font-size: 13px;
 }
 
 /* 搜尋結果彈出框：grid 佈局（預設三欄） */
@@ -479,7 +488,6 @@ body {
   color: #333;
   white-space: nowrap;
   pointer-events: none;
-  z-index: 100;
   position: relative;
   background: none;
   text-shadow: -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff, 1px 1px 0 #fff;
