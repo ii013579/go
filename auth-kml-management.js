@@ -947,22 +947,28 @@
   // ==========================================
   if (els.triggerDeleteBtn) {
     els.triggerDeleteBtn.addEventListener('click', async () => {
+      if (!Array.isArray(currentKmlLayers) || currentKmlLayers.length === 0) {
+        window.showMessage?.('提示', '目前沒有可刪除的 KML 圖層。');
+        return;
+      }
+
       const currentUserEmail = auth.currentUser?.email;
       const isOwner = (window.currentUserRole === 'owner');
+      let hasAnyDeletable = false;
 
       const options = currentKmlLayers
         .map(layer => {
           const canDelete = isOwner || (window.currentUserRole === 'editor' && layer.uploadedBy === currentUserEmail);
           if (canDelete) {
+            hasAnyDeletable = true;
             return `<option value="${layer.id}">${layer.name}</option>`;
-          } else {
-            return `<option value="${layer.id}" disabled style="color: #999; background-color: #f2f2f2;">${layer.name} (無刪除權限)</option>`;
           }
+          return `<option value="${layer.id}" disabled style="color: #999; background-color: #f2f2f2;">${layer.name} (無刪除權限)</option>`;
         })
         .join('');
 
-      if (!options) {
-        window.showMessage?.('提示', '目前沒有可刪除的 KML 圖層。');
+      if (!hasAnyDeletable) {
+        window.showMessage?.('權限不足', '目前沒有您可刪除的 KML 圖層。');
         return;
       }
 
@@ -973,7 +979,7 @@
             <option value="" disabled selected>-- 請選擇要刪除的圖層 --</option>
             ${options}
           </select>
-          <p style="color: #d32f2f; font-size: 12px; margin-top: 10px; font-weight: bold;">警告：刪除後資料將無法復原。</p>
+          <p style="color: #d32f2f; font-size: 12px; margin-top: 10px; font-weight: bold;">警告：刪除後資料將無法復原（後續將進行兩階段確認）。</p>
         </div>`;
 
       const confirmDelete = await window.showConfirmationModal('刪除圖層', modalContent);
@@ -984,15 +990,16 @@
         const selectedOpt = picker ? picker.options[picker.selectedIndex] : null;
 
         if (selectedId && selectedOpt && !selectedOpt.disabled) {
-          els.kmlLayerSelectDashboard.value = selectedId;
-          els.deleteSelectedKmlBtn.click();
+          if (els.kmlLayerSelectDashboard) {
+            els.kmlLayerSelectDashboard.value = selectedId;
+          }
+          els.deleteSelectedKmlBtn?.click();
         } else {
-          window.showMessage?.('提示', '您未選擇有效的可刪除圖層，或無權限刪除該圖層。');
+          window.showMessage?.('提示', '請先選擇有效的可刪除圖層。');
         }
       }
     });
   }
-
 
 // ==========================================
   // 10. 多檔案批次讀取、解析與合併上傳邏輯 & 圖層刪除（含雙重確認）
