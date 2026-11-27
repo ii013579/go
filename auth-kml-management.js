@@ -236,8 +236,8 @@
               window.showMessage?.('取消', '您已取消註冊。');
               return;
             }
-            const code = result.code;
-            const nickname = result.nickname;
+            const code = result.code.trim().toUpperCase();
+            const nickname = result.nickname.trim();
             try {
               const regDoc = await db.collection('settings').doc('registration').get();
               if (!regDoc.exists) {
@@ -245,7 +245,7 @@
                 return;
               }
 
-              const storedCode = regDoc.data()?.oneTimeCode;
+              const storedCode = (regDoc.data()?.oneTimeCode || '').trim().toUpperCase();
               const expiryTime = regDoc.data()?.oneTimeCodeExpiry ? regDoc.data().oneTimeCodeExpiry.toDate() : null;
               const currentTime = new Date();
 
@@ -260,7 +260,7 @@
               await db.collection('users').doc(reAuthUser.uid).set({
                 email: reAuthUser.email,
                 name: nickname,
-                role: 'unapproved',
+                role: 'user',
                 createdAt: firebase.firestore.FieldValue.serverTimestamp(),
                 registeredWithCode: true,
                 registrationCodeUsed: code
@@ -271,9 +271,9 @@
                   oneTimeCode: null,
                   oneTimeCodeExpiry: null
                 }, { merge: true });
-                window.showMessage?.('註冊成功', `歡迎 ${reAuthUser.email} (${nickname})！您的帳號已成功註冊，正在等待審核。`);
+                window.showMessage?.('註冊成功', `歡迎 ${reAuthUser.email} (${nickname})！您的帳號已啟用。`);
               } catch (codeInvalidationError) {
-                window.showMessage?.('註冊待審核', `歡迎 ${reAuthUser.email} (${nickname})！您的帳號已成功註冊，正在等待審核。`);
+                window.showMessage?.('註冊成功', `歡迎 ${reAuthUser.email} (${nickname})！您的帳號已啟用，但註冊碼清除時發生異常，請聯繫管理員。`);
               }
             } catch (error) {
               window.showMessage?.('註冊失敗', `使用註冊碼登入/註冊時發生錯誤: ${error.message}`);
