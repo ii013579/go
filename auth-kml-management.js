@@ -220,7 +220,7 @@
     }
   });
 
-  // --- 2.2 Google 登入、註冊碼驗證與登出流程 ---
+// --- 2.2 Google 登入、註冊碼驗證與登出流程 ---
   if (els.googleSignInBtn) {
     els.googleSignInBtn.addEventListener('click', async () => {
       try {
@@ -266,15 +266,7 @@
                 registrationCodeUsed: code
               });
 
-              try {
-                await db.collection('settings').doc('registration').set({
-                  oneTimeCode: null,
-                  oneTimeCodeExpiry: null
-                }, { merge: true });
-                window.showMessage?.('註冊成功', `歡迎 ${reAuthUser.email} (${nickname})！您的帳號已啟用。`);
-              } catch (codeInvalidationError) {
-                window.showMessage?.('註冊成功', `歡迎 ${reAuthUser.email} (${nickname})！您的帳號已啟用，但註冊碼清除時發生異常，請聯繫管理員。`);
-              }
+              window.showMessage?.('註冊成功', `歡迎 ${reAuthUser.email} (${nickname})！您的帳號已啟用。`);
             } catch (error) {
               window.showMessage?.('註冊失敗', `使用註冊碼登入/註冊時發生錯誤: ${error.message}`);
             }
